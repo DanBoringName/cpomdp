@@ -1,5 +1,6 @@
 import numpy as np
 
+from cpomdp.backends.base import validate_step_inputs
 from cpomdp.types import Belief, LinearGaussianModel
 
 
@@ -77,7 +78,7 @@ class KalmanBackend:
                 ``(p,)``. (All enforced in ``_validate_inputs``.)
         """
         model = self.model
-        observation, action = self._validate_inputs(observation, prior, action)
+        observation, action = validate_step_inputs(model, observation, prior, action)
         control_term = (
             np.zeros(model.n_states)
             if model.control is None
@@ -99,70 +100,6 @@ class KalmanBackend:
         mean_post = mean_pred + gain @ prediction_error
 
         return Belief(mean=mean_post, cov=cov_post)
-
-    def _validate_inputs(
-        self,
-        observation: np.ndarray,
-        prior: Belief,
-        action: np.ndarray | None,
-    ) -> tuple[np.ndarray, np.ndarray | None]:
-        """Coerce and shape-check the per-step inputs at the trust boundary.
-
-        ``LinearGaussianModel`` validates the model once at construction; this
-        gives the runtime data the same care, since that is where library users
-        actually slip. Owning coercion here keeps it in a single place, so the
-        rest of ``infer_states`` can assume clean float arrays.
-
-        The shape checks also close the silent-broadcast trap: a length-1
-        observation would otherwise broadcast against the ``m``-D prediction
-        error and yield a confident *wrong* belief rather than an error.
-
-        Args:
-            observation: Raw sensor reading; any array-like, coerced to float.
-            prior: The incoming belief, checked against the model's state dim.
-            action: Raw action; any array-like or ``None``. Coerced only when the
-                model has a control matrix.
-
-        Returns:
-            The coerced ``(observation, action)``. ``action`` is ``None`` for a
-            control-free model, otherwise a float array of shape ``(p,)``.
-
-        Raises:
-            ValueError: If ``observation`` is not shape ``(m,)``, ``prior`` is not
-                over the ``n``-D state, the model needs an action but got
-                ``None``, or ``action`` is not shape ``(p,)``.
-        """
-        model = self.model
-
-        observation = np.asarray(observation, dtype=float)
-        m = model.n_observations
-        if observation.shape != (m,):
-            raise ValueError(
-                f"observation must be a 1-D vector of length {m} "
-                f"(the observation dimension), got shape {observation.shape}"
-            )
-
-        if prior.ndim != model.n_states:
-            raise ValueError(
-                f"prior must be a belief over the {model.n_states}-D state, "
-                f"got a {prior.ndim}-D belief"
-            )
-
-        if model.control is None:
-            return observation, None
-
-        if action is None:
-            raise ValueError(
-                "this model has a control matrix; infer_states requires an action"
-            )
-        action = np.asarray(action, dtype=float)
-        p = model.n_controls
-        if action.shape != (p,):
-            raise ValueError(
-                f"action must be a 1-D vector of length {p} "
-                f"(the action dimension), got shape {action.shape}"
-            )
-        return observation, action
 
     def _gain_and_posterior_cov(
         self, prior_cov: np.ndarray
