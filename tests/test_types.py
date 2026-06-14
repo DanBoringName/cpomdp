@@ -43,8 +43,8 @@ def _valid_kwargs(**overrides):
     kwargs = dict(
         dynamics=[[1.0, 0.1], [0.0, 1.0]],          # 2x2  (n=2)
         sensor_model=[[1.0, 0.0]],                   # 1x2  (m=1)
-        process_noise=[[0.1, 0.0], [0.0, 0.1]],      # 2x2
-        observation_noise=[[1.0]],                   # 1x1
+        dynamics_noise=[[0.1, 0.0], [0.0, 0.1]],     # 2x2
+        sensor_noise=[[1.0]],                        # 1x1
         prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
     )
     kwargs.update(overrides)
@@ -74,8 +74,8 @@ class TestLinearGaussianModels:
         m = LinearGaussianModel(**_valid_kwargs())
         np.testing.assert_array_equal(m.A, m.dynamics)
         np.testing.assert_array_equal(m.C, m.sensor_model)
-        np.testing.assert_array_equal(m.Q, m.process_noise)
-        np.testing.assert_array_equal(m.R, m.observation_noise)
+        np.testing.assert_array_equal(m.Q, m.dynamics_noise)
+        np.testing.assert_array_equal(m.R, m.sensor_noise)
 
     def test_rejects_non_square_dynamics(self):
         with pytest.raises(ValueError, match="square"):
@@ -86,14 +86,14 @@ class TestLinearGaussianModels:
         with pytest.raises(ValueError, match="columns"):
             LinearGaussianModel(**_valid_kwargs(sensor_model=[[1.0, 0.0, 0.0]]))
 
-    def test_rejects_process_noise_wrong_size(self):
-        with pytest.raises(ValueError, match="process_noise"):
-            LinearGaussianModel(**_valid_kwargs(process_noise=[[1.0]]))
+    def test_rejects_dynamics_noise_wrong_size(self):
+        with pytest.raises(ValueError, match="dynamics_noise"):
+            LinearGaussianModel(**_valid_kwargs(dynamics_noise=[[1.0]]))
 
-    def test_rejects_observation_noise_wrong_size(self):
-        with pytest.raises(ValueError, match="observation_noise"):
+    def test_rejects_sensor_noise_wrong_size(self):
+        with pytest.raises(ValueError, match="sensor_noise"):
             LinearGaussianModel(
-                **_valid_kwargs(observation_noise=[[1.0, 0.0], [0.0, 1.0]])
+                **_valid_kwargs(sensor_noise=[[1.0, 0.0], [0.0, 1.0]])
             )
 
     def test_rejects_control_wrong_rows(self):
