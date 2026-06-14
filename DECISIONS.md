@@ -4,6 +4,92 @@ Decisions are append-only. Each records the choice, the evidence, and the date.
 
 ---
 
+## ADR-003 — v0.1 grows an acting agent: stateful `Agent` + front-loaded LQR
+
+**Date:** 2026-06-14
+**Status:** Accepted
+**Phase:** 2 (abstraction wall) → 3 (agent assembly)
+**Amends:** ADR-002 (reverses its "LQR/control side: deferred" scope guard)
+
+### Decision
+
+v0.1 ships an agent that *acts*, not just one that perceives. Two additions:
+
+1. A stateful `Agent` façade that owns the current belief and exposes
+   `infer_states(obs, action=None)` and `sample_action()` — the continuous answer
+   to pymdp's `Agent`.
+2. Action selection via a **front-loaded steady-state LQR** controller: solve the
+   control Riccati once at construction for `L∞`, then `u = -L∞·(mean − goal)` in
+   the loop.
+
+ADR-002 deferred the whole control side. We're pulling it back because without it
+the library is a Kalman filter with a nice type system, not the "continuous
+sibling of pymdp" the README promises. pymdp's shape is perceive → evaluate → act;
+shipping only the first verb undersells what turns out to be a small amount of
+remaining work.
+
+### Why LQR counts as active inference here (the load-bearing argument)
+
+The objection to adding LQR is that we've quietly swapped active inference for
+plain optimal control. We haven't, and the reason is specific to the
+linear-Gaussian case.
+
+Expected Free Energy has a pragmatic term (reach preferred observations) and an
+epistemic term (act to reduce uncertainty). In `LinearGaussianModel` the
+covariance recursion is **control-independent** — the same property that lets us
+front-load `K∞`. Control shifts the mean only; it never touches the covariance. So
+the epistemic value (expected entropy reduction `½·log(det Σ_pred / det Σ_post)`)
+is identical for every action and falls out of the argmin. EFE-minimising action
+selection *provably* reduces to its pragmatic term, and the pragmatic term under a
+Gaussian preference is a quadratic cost whose optimum is LQR.
+
+So LQR isn't a stand-in for EFE here — it's what EFE *is* when sensing doesn't
+depend on where you are. The epistemic term only re-enters once the observation
+model becomes state- or action-dependent (position-varying sensor precision,
+choosing a modality), which is out of scope for a fixed linear-Gaussian sensor. We
+record that as the seam, not a gap.
+
+### The symmetry we're buying
+
+Filter and controller become duals, both solved once at construction, neither
+dependent on data:
+
+- perception: Kalman/DARE → `K∞`, loop does `mean += K∞·prediction_error`
+- action:     control Riccati → `L∞`, loop does `u = -L∞·(mean − goal)`
+
+Together that's LQG. The front-loading thesis (RESEARCH.md) now covers both halves
+of the agent, not just perception.
+
+### Interface shape
+
+- `Agent` is stateful: it holds `belief` (the analog of pymdp's `qs`) and updates
+  it in place across `infer_states` calls. The backends stay functional/pure
+  underneath — façade for ergonomics, engine for testability.
+- Preferences live on the `Agent`, not the model. The model is the generative
+  story; the goal and the effort trade-off are the agent's. Role-named to avoid
+  the Q/R collision (`dynamics_noise`/`sensor_noise` are already "Q"/"R", and
+  LQR's cost matrices are conventionally Q/R too): `goal`, `effort_penalty`, etc.
+- `sample_action()` reads the current belief mean — one matrix-vector product, no
+  inference of its own.
+
+### Scope (v0.1, updated)
+
+- **Added:** stateful `Agent`, steady-state LQR controller (front-loaded `L∞`),
+  agent-side preferences, 2D point-mass reaching demo that closes the loop (the
+  agent chooses the action).
+- **Still deferred:** epistemic/exploratory EFE (named seam above), receding-
+  horizon and time-varying control, nonlinear control. `CovarianceRep`, BMR — as
+  in ADR-002.
+
+### Validation strategy
+
+Same discipline as the filter. `L∞` is checked against an independent oracle —
+scipy's `solve_discrete_are` (control algebraic Riccati) — so a bug in our own
+solve can't pass silently. The reaching demo is the end-to-end acceptance test:
+the point mass must converge to `goal` under the closed loop.
+
+---
+
 ## ADR-002 — v0.1 inference engine: **native fixed-gain fast path; RxInfer as oracle + general fallback**
 
 **Date:** 2026-06-12
