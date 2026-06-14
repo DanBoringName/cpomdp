@@ -7,7 +7,7 @@ from numpy.typing import ArrayLike
 def _validate_covariance(cov: np.ndarray, name: str) -> None:
     """Square (2-D, n x n) + symmetric check.
 
-    Shared by Belief.cov, process_noise and observation_noise — all three are
+    Shared by Belief.cov, dynamics_noise and sensor_noise — all three are
     covariance matrices with the same invariants. Positive-semi-definiteness is
     deliberately NOT checked here: it's enforced at the trust boundary (user
     input), not on every construction. See DECISIONS.md ADR-002.
@@ -77,27 +77,29 @@ class LinearGaussianModel:
     The agent's assumed story for how a hidden state evolves and produces
     observations, under linear maps and Gaussian noise::
 
-        next_state  = dynamics @ state + control @ action + process noise
-        observation = sensor_model @ state               + observation noise
+        next_state  = dynamics @ state + control @ action + dynamics noise
+        observation = sensor_model @ state               + sensor noise
 
-    The noise terms are zero-mean Gaussians with covariances ``process_noise``
-    and ``observation_noise``; the initial state is drawn from ``prior``.
+    The noise terms are zero-mean Gaussians with covariances ``dynamics_noise``
+    and ``sensor_noise``; the initial state is drawn from ``prior``.
 
     Parameters are *role-named* rather than using the traditional control-theory
     letters, to avoid the letter collision with discrete active inference
-    (pymdp), where the same letters mean different things. The mapping (letters
-    survive as ``.A``/``.B``/``.C``/``.Q``/``.R`` aliases for backend use):
+    (pymdp), where the same letters mean different things. The "also known as"
+    column lists the terms other backgrounds use, so readers can still find the
+    right field. (Letters survive as ``.A``/``.B``/``.C``/``.Q``/``.R`` aliases
+    for backend use.)
 
-    ===================  ======  ===========================  ========
-    role name            letter  meaning                      shape
-    ===================  ======  ===========================  ========
-    ``dynamics``         A       state -> next state          (n, n)
-    ``control``          B       action -> state (optional)   (n, p)
-    ``sensor_model``     C       state -> observation         (m, n)
-    ``process_noise``    Q       dynamics-noise covariance    (n, n)
-    ``observation_noise`` R      sensor-noise covariance      (m, m)
-    ``prior``            --      initial belief over state    n-D Belief
-    ===================  ======  ===========================  ========
+    ================  ======  =========================  =====  ====================
+    role name         letter  meaning                    shape  also known as
+    ================  ======  =========================  =====  ====================
+    ``dynamics``      A       state -> next state        (n,n)  state-transition
+    ``control``       B       action -> state (optional) (n,p)  input/control matrix
+    ``sensor_model``  C       state -> expected reading  (m,n)  observation/emission
+    ``dynamics_noise``  Q     dynamics-noise covariance  (n,n)  process noise
+    ``sensor_noise``  R       sensor-noise covariance    (m,m)  observation noise
+    ``prior``         --      initial belief over state  n-D    Belief / D (pymdp)
+    ================  ======  =========================  =====  ====================
 
     Dimensions: ``n`` = state, ``m`` = observation, ``p`` = action. A model with
     no ``control`` is a pure filtering (tracking) model.
@@ -105,8 +107,8 @@ class LinearGaussianModel:
 
     dynamics: np.ndarray
     sensor_model: np.ndarray
-    process_noise: np.ndarray
-    observation_noise: np.ndarray
+    dynamics_noise: np.ndarray
+    sensor_noise: np.ndarray
     prior: Belief
     control: np.ndarray | None
 
@@ -114,18 +116,18 @@ class LinearGaussianModel:
         self,
         dynamics: ArrayLike,
         sensor_model: ArrayLike,
-        process_noise: ArrayLike,
-        observation_noise: ArrayLike,
+        dynamics_noise: ArrayLike,
+        sensor_noise: ArrayLike,
         prior: Belief,
         control: ArrayLike | None = None,
     ) -> None:
         object.__setattr__(self, "dynamics", np.asarray(dynamics, dtype=float))
         object.__setattr__(self, "sensor_model", np.asarray(sensor_model, dtype=float))
         object.__setattr__(
-            self, "process_noise", np.asarray(process_noise, dtype=float)
+            self, "dynamics_noise", np.asarray(dynamics_noise, dtype=float)
         )
         object.__setattr__(
-            self, "observation_noise", np.asarray(observation_noise, dtype=float)
+            self, "sensor_noise", np.asarray(sensor_noise, dtype=float)
         )
         object.__setattr__(self, "prior", prior)
         object.__setattr__(
@@ -142,7 +144,7 @@ class LinearGaussianModel:
                 f"dynamics must be a square (n x n) matrix, "
                 f"got shape {self.dynamics.shape}"
             )
-        n = self.dynamics.shape[0]
+        n = self.n_states
 
         # sensor_model maps state -> observation: (m, n). Its rows define m.
         if self.sensor_model.ndim != 2 or self.sensor_model.shape[1] != n:
@@ -150,22 +152,22 @@ class LinearGaussianModel:
                 f"sensor_model must have {n} columns to match the {n}-D state, "
                 f"got shape {self.sensor_model.shape}"
             )
-        m = self.sensor_model.shape[0]
+        m = self.n_observations
 
-        # process_noise: covariance of the dynamics noise, (n, n), symmetric.
-        _validate_covariance(self.process_noise, "process_noise")
-        if self.process_noise.shape != (n, n):
+        # dynamics_noise: covariance of the dynamics noise, (n, n), symmetric.
+        _validate_covariance(self.dynamics_noise, "dynamics_noise")
+        if self.dynamics_noise.shape != (n, n):
             raise ValueError(
-                f"process_noise must be {n}x{n} to match the {n}-D state, "
-                f"got shape {self.process_noise.shape}"
+                f"dynamics_noise must be {n}x{n} to match the {n}-D state, "
+                f"got shape {self.dynamics_noise.shape}"
             )
 
-        # observation_noise: covariance of the sensor noise, (m, m), symmetric.
-        _validate_covariance(self.observation_noise, "observation_noise")
-        if self.observation_noise.shape != (m, m):
+        # sensor_noise: covariance of the sensor noise, (m, m), symmetric.
+        _validate_covariance(self.sensor_noise, "sensor_noise")
+        if self.sensor_noise.shape != (m, m):
             raise ValueError(
-                f"observation_noise must be {m}x{m} to match the {m}-D observation, "
-                f"got shape {self.observation_noise.shape}"
+                f"sensor_noise must be {m}x{m} to match the {m}-D observation, "
+                f"got shape {self.sensor_noise.shape}"
             )
 
         # control (optional) maps action -> state: (n, p). Rows must match n.
@@ -218,8 +220,8 @@ class LinearGaussianModel:
 
     @property
     def Q(self) -> np.ndarray:
-        return self.process_noise
+        return self.dynamics_noise
 
     @property
     def R(self) -> np.ndarray:
-        return self.observation_noise
+        return self.sensor_noise
