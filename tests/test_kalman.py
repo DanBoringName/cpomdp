@@ -45,9 +45,9 @@ class TestKalmanBackend:
         post = KalmanBackend(model).infer_states(np.array([1.2]), model.prior)
         # Derive the expected posterior instead of hardcoding a 16-digit literal
         # nobody can verify by eye: predict (prior mean 0), then one update.
-        var_pred = A * PRIOR_VAR * A + Q          # 0.9·10·0.9 + 0.5 = 8.6
-        gain = var_pred / (var_pred + R)          # 8.6 / 9.6
-        expected_mean = gain * 1.2                # mean_pred is 0
+        var_pred = A * PRIOR_VAR * A + Q  # 0.9·10·0.9 + 0.5 = 8.6
+        gain = var_pred / (var_pred + R)  # 8.6 / 9.6
+        expected_mean = gain * 1.2  # mean_pred is 0
         expected_cov = (1 - gain) * var_pred
         np.testing.assert_allclose(post.mean, [expected_mean], rtol=1e-12)
         np.testing.assert_allclose(post.cov, [[expected_cov]], rtol=1e-12)
@@ -57,7 +57,7 @@ class TestKalmanBackend:
         kf = KalmanBackend(model)
         belief = model.prior
         for y, (mean_exp, var_exp) in zip(
-            OBSERVATIONS, _independent_scalar_filter(OBSERVATIONS)
+            OBSERVATIONS, _independent_scalar_filter(OBSERVATIONS), strict=False
         ):
             belief = kf.infer_states(np.array([y]), belief)
             np.testing.assert_allclose(belief.mean, [mean_exp], rtol=1e-12)
@@ -105,8 +105,8 @@ class TestKalmanBackend:
         #   gain          = [[2/3], [1/3]]
         #   posterior mean = [2/3, 1/3];  posterior cov = [[2/3, 1/3], [1/3, 2/3]]
         model = LinearGaussianModel(
-            dynamics=[[1.0, 1.0], [0.0, 1.0]],   # position advances by velocity
-            sensor_model=[[1.0, 0.0]],           # observe position only
+            dynamics=[[1.0, 1.0], [0.0, 1.0]],  # position advances by velocity
+            sensor_model=[[1.0, 0.0]],  # observe position only
             dynamics_noise=[[0.0, 0.0], [0.0, 0.0]],
             sensor_noise=[[1.0]],
             prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
@@ -140,9 +140,7 @@ class TestKalmanControl:
     def test_action_shifts_prediction(self):
         model = _control_model()
         kf = KalmanBackend(model)
-        unpushed = kf.infer_states(
-            np.array([1.0]), model.prior, action=np.array([0.0])
-        )
+        unpushed = kf.infer_states(np.array([1.0]), model.prior, action=np.array([0.0]))
         pushed = kf.infer_states(np.array([1.0]), model.prior, action=np.array([5.0]))
         # A +5 action enters the predicted mean, then the update pulls partly
         # back toward the (unchanged) observation. Direction must be UP (a sign
@@ -150,9 +148,60 @@ class TestKalmanControl:
         assert pushed.mean[0] > unpushed.mean[0]
         # And the surviving shift is exactly the gain-attenuated action:
         # (1 - gain) * 5, with gain from the predicted variance.
-        var_pred = 1.0 * 10.0 * 1.0 + 0.5         # dynamics·var·dynamics + dyn_noise
-        gain = var_pred / (var_pred + 1.0)        # sensor_noise = 1.0
+        var_pred = 1.0 * 10.0 * 1.0 + 0.5  # dynamics·var·dynamics + dyn_noise
+        gain = var_pred / (var_pred + 1.0)  # sensor_noise = 1.0
         expected_shift = (1 - gain) * 5.0
         np.testing.assert_allclose(
             pushed.mean[0] - unpushed.mean[0], expected_shift, rtol=1e-12
         )
+
+
+def _full_filter_converged_belief(model, steps=200):
+    """Run the full per-step filter long enough to reach steady state."""
+    kf = KalmanBackend(model)
+    belief = model.prior
+    for _ in range(steps):
+        belief = kf.infer_states(np.array([0.0]), belief)
+    return belief
+
+
+class TestKalmanSteadyState:
+    def test_frozen_cov_matches_converged_full_filter(self):
+        # The whole point of front-loading: the covariance precomputed at
+        # construction must equal what the full per-step filter converges to.
+        # This is the test that catches a broken convergence loop (e.g. one that
+        # returns after a single iteration) — it would freeze the wrong cov.
+        model = _scalar_model()
+        converged = _full_filter_converged_belief(model).cov
+        steady = KalmanBackend(model, steady_state=True)
+        frozen = steady.infer_states(np.array([0.0]), model.prior).cov
+        np.testing.assert_allclose(frozen, converged, atol=1e-10)
+
+    def test_steady_state_cov_is_constant(self):
+        # In steady-state mode the returned covariance is frozen: the same every
+        # step, regardless of the incoming belief.
+        model = _scalar_model()
+        kf = KalmanBackend(model, steady_state=True)
+        first = kf.infer_states(np.array([1.0]), model.prior)
+        second = kf.infer_states(np.array([5.0]), first)
+        np.testing.assert_array_equal(first.cov, second.cov)
+
+    def test_mean_matches_full_filter_once_converged(self):
+        # Once the full filter has converged its gain equals K∞, so from the same
+        # belief both modes produce the same mean update.
+        model = _scalar_model()
+        converged = _full_filter_converged_belief(model)
+        full = KalmanBackend(model)
+        steady = KalmanBackend(model, steady_state=True)
+        y = np.array([1.3])
+        np.testing.assert_allclose(
+            steady.infer_states(y, converged).mean,
+            full.infer_states(y, converged).mean,
+            atol=1e-10,
+        )
+
+    def test_raises_when_not_converged(self):
+        # max_iter too small to reach the fixed point -> a loud failure, not a
+        # silently-wrong frozen gain.
+        with pytest.raises(RuntimeError, match="converge"):
+            KalmanBackend(_scalar_model(), steady_state=True, max_iter=1)
