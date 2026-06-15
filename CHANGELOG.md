@@ -2,6 +2,16 @@
 
 Everything worth noting lands here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [semantic versioning](https://semver.org). While we're pre-1.0, treat the minor version as the place breaking changes can show up.
 
+## [0.1.1] — 2026-06-15
+
+A metadata-only re-release, functionally identical to 0.1.0. The 0.1.0 release has
+been removed from PyPI, so use 0.1.1.
+
+### Changed
+
+- Trimmed the author entry in the package metadata.
+- README: the DECISIONS.md link is now an absolute URL, so it resolves on PyPI.
+
 ## [0.1.0] — 2026-06-15
 
 The first cut. Linear-Gaussian active inference, end to end: perceive with a Kalman filter, act with LQR, all behind a pymdp-style `Agent`.
