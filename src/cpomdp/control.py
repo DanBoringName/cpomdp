@@ -3,6 +3,8 @@ from numpy.typing import ArrayLike
 
 from cpomdp.types import LinearGaussianModel
 
+__all__ = ["LQRController"]
+
 
 class LQRController:
     """Steady-state LQR action selection — the action-side dual of the filter.
