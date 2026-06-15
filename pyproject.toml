@@ -36,6 +36,7 @@ dev = [
     "ty>=0.0.1a1",
     "pytest>=8.0",
     "pytest-cov>=5.0",
+    "scipy>=1.15.3",
 ]
 
 [build-system]
