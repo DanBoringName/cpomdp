@@ -4,6 +4,8 @@ import numpy as np
 
 from cpomdp.types import Belief, LinearGaussianModel
 
+__all__ = ["InferenceBackend", "validate_step_inputs"]
+
 
 @runtime_checkable
 class InferenceBackend(Protocol):

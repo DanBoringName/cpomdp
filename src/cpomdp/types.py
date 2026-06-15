@@ -3,6 +3,8 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import ArrayLike
 
+__all__ = ["Belief", "LinearGaussianModel"]
+
 
 def _validate_covariance(cov: np.ndarray, name: str) -> None:
     """Square (2-D, n x n) + symmetric check.
@@ -13,9 +15,7 @@ def _validate_covariance(cov: np.ndarray, name: str) -> None:
     input), not on every construction. See DECISIONS.md ADR-002.
     """
     if cov.ndim != 2 or cov.shape[0] != cov.shape[1]:
-        raise ValueError(
-            f"{name} must be a square 2-D matrix, got shape {cov.shape}"
-        )
+        raise ValueError(f"{name} must be a square 2-D matrix, got shape {cov.shape}")
     if not np.allclose(cov, cov.T):
         raise ValueError(f"{name} must be symmetric.")
 
@@ -126,9 +126,7 @@ class LinearGaussianModel:
         object.__setattr__(
             self, "dynamics_noise", np.asarray(dynamics_noise, dtype=float)
         )
-        object.__setattr__(
-            self, "sensor_noise", np.asarray(sensor_noise, dtype=float)
-        )
+        object.__setattr__(self, "sensor_noise", np.asarray(sensor_noise, dtype=float))
         object.__setattr__(self, "prior", prior)
         object.__setattr__(
             self,
@@ -181,13 +179,10 @@ class LinearGaussianModel:
 
         # prior is a Belief over the same n-D state.
         if not isinstance(self.prior, Belief):
-            raise TypeError(
-                f"prior must be a Belief, got {type(self.prior).__name__}"
-            )
+            raise TypeError(f"prior must be a Belief, got {type(self.prior).__name__}")
         if self.prior.ndim != n:
             raise ValueError(
-                f"prior must be over the {n}-D state, "
-                f"got a {self.prior.ndim}-D belief"
+                f"prior must be over the {n}-D state, got a {self.prior.ndim}-D belief"
             )
 
     @property

@@ -18,6 +18,8 @@ import numpy as np
 from cpomdp.backends.base import validate_step_inputs
 from cpomdp.types import Belief, LinearGaussianModel
 
+__all__ = ["RxInferBackend"]
+
 # One filter step as a one-timestep model: prior on the previous state, one
 # transition, one observation; the posterior over x is the Kalman predict+update.
 # With a single observation this is the filter, not the smoother (ADR-001).

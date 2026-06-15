@@ -3,6 +3,8 @@ import numpy as np
 from cpomdp.backends.base import validate_step_inputs
 from cpomdp.types import Belief, LinearGaussianModel
 
+__all__ = ["KalmanBackend"]
+
 
 class KalmanBackend:
     """Exact Kalman-filter inference for a LinearGaussianModel.
