@@ -41,10 +41,10 @@ class TestBeliefs:
 # validation branch.
 def _valid_kwargs(**overrides):
     kwargs = dict(
-        dynamics=[[1.0, 0.1], [0.0, 1.0]],          # 2x2  (n=2)
-        sensor_model=[[1.0, 0.0]],                   # 1x2  (m=1)
-        dynamics_noise=[[0.1, 0.0], [0.0, 0.1]],     # 2x2
-        sensor_noise=[[1.0]],                        # 1x1
+        dynamics=[[1.0, 0.1], [0.0, 1.0]],  # 2x2  (n=2)
+        sensor_model=[[1.0, 0.0]],  # 1x2  (m=1)
+        dynamics_noise=[[0.1, 0.0], [0.0, 0.1]],  # 2x2
+        sensor_noise=[[1.0]],  # 1x1
         prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
     )
     kwargs.update(overrides)
@@ -79,8 +79,9 @@ class TestLinearGaussianModels:
 
     def test_rejects_non_square_dynamics(self):
         with pytest.raises(ValueError, match="square"):
-            LinearGaussianModel(**_valid_kwargs(dynamics=[[1.0, 0.0, 0.0],
-                                                          [0.0, 1.0, 0.0]]))
+            LinearGaussianModel(
+                **_valid_kwargs(dynamics=[[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+            )
 
     def test_rejects_sensor_model_wrong_columns(self):
         with pytest.raises(ValueError, match="columns"):
@@ -92,9 +93,7 @@ class TestLinearGaussianModels:
 
     def test_rejects_sensor_noise_wrong_size(self):
         with pytest.raises(ValueError, match="sensor_noise"):
-            LinearGaussianModel(
-                **_valid_kwargs(sensor_noise=[[1.0, 0.0], [0.0, 1.0]])
-            )
+            LinearGaussianModel(**_valid_kwargs(sensor_noise=[[1.0, 0.0], [0.0, 1.0]]))
 
     def test_rejects_control_wrong_rows(self):
         with pytest.raises(ValueError, match="control"):
