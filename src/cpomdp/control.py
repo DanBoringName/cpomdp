@@ -7,24 +7,24 @@ __all__ = ["LQRController"]
 
 
 def _validate_cost(matrix: np.ndarray, name: str, *, require_definite: bool) -> None:
-    """Symmetry + (semi)definiteness check for an LQR cost matrix.
+    """Symmetry + (semi)definiteness check for a preference cost matrix.
 
-    Cost matrices are user input handed in once at construction — the trust
-    boundary — so unlike a per-step belief covariance they're checked in full
-    here. (``types._validate_covariance`` skips definiteness on purpose because
-    it runs on every filter step; this runs once, so it doesn't have to.) Both
-    failure modes this catches are the silently-wrong-in-a-loop kind that are
-    hardest to trace downstream: a non-symmetric cost (an off-diagonal typo)
-    quietly yields a non-symmetric cost-to-go and a wrong gain, and a singular or
-    indefinite ``control_cost`` — which the gain solve inverts against — blows up
-    or returns garbage.
+    ``goal_precision`` and ``effort_penalty`` are user input handed in once at
+    construction — the trust boundary — so unlike a per-step belief covariance
+    they're checked in full here. (``types._validate_covariance`` skips
+    definiteness on purpose because it runs on every filter step; this runs once,
+    so it doesn't have to.) Both failure modes this catches are the
+    silently-wrong-in-a-loop kind that are hardest to trace downstream: a
+    non-symmetric matrix (an off-diagonal typo) quietly yields a non-symmetric
+    cost-to-go and a wrong gain, and a singular or indefinite ``effort_penalty``
+    — which the gain solve inverts against — blows up or returns garbage.
 
     Args:
         matrix: The already-shape-checked cost matrix.
         name: Field name for error messages.
-        require_definite: ``True`` for ``control_cost`` (must be positive-
+        require_definite: ``True`` for ``effort_penalty`` (must be positive-
             *definite*, since it is inverted against); ``False`` for
-            ``state_cost`` (positive-*semi*-definite is enough).
+            ``goal_precision`` (positive-*semi*-definite is enough).
     """
     if not np.allclose(matrix, matrix.T):
         raise ValueError(f"{name} must be symmetric.")
@@ -64,20 +64,22 @@ class LQRController:
     quadratic cost whose optimum is exactly LQR. The epistemic term only re-enters
     once sensing depends on the state or action — out of scope for v0.1.
 
-    The two cost matrices are named by role, not by LQR's traditional ``Q``/``R``:
-    those letters already mean the noise covariances on the model
-    (``dynamics_noise``/``sensor_noise``), and reusing them here is the exact
-    collision ADR-003 warns about.
+    The two cost matrices are named for the preference they encode, not by LQR's
+    traditional ``Q``/``R`` — those letters already mean the noise covariances on
+    the model (``dynamics_noise``/``sensor_noise``), the exact collision ADR-003
+    warns about. The names are the same across the whole library: an ``Agent``
+    hands these straight through to its controller.
 
     Args:
         model: The linear-Gaussian model to act in. Must carry a ``control``
             matrix — there is nothing to act with otherwise.
-        state_cost: How much deviation from the goal costs, an ``(n, n)`` matrix.
-            Heavier ``state_cost`` buys a more aggressive controller. (LQR's
-            ``Q``; here the precision of the preference over states.)
-        control_cost: How much action costs, a ``(p, p)`` matrix. Heavier
-            ``control_cost`` buys a gentler one. (LQR's ``R``; the agent's effort
-            penalty.)
+        goal_precision: How sharply the agent prefers the goal, an ``(n, n)``
+            matrix. It is exactly the precision of the Gaussian preference centred
+            at the goal — ``exp(−½(state−goal)ᵀ·goal_precision·(state−goal))`` —
+            so heavier ``goal_precision`` buys a more aggressive controller.
+            (LQR's ``Q``.)
+        effort_penalty: How much action costs, a ``(p, p)`` matrix. Heavier
+            ``effort_penalty`` buys a gentler controller. (LQR's ``R``.)
         tol: Absolute tolerance on successive cost-to-go iterates; convergence is
             declared when they stop moving by more than this.
         max_iter: Iteration cap before the Riccati recursion is declared to have
@@ -86,7 +88,8 @@ class LQRController:
     Raises:
         ValueError: If the model has no ``control`` matrix, or a cost matrix does
             not match the state/action dimensions, is not symmetric, or fails its
-            definiteness requirement (``state_cost`` PSD, ``control_cost`` PD).
+            definiteness requirement (``goal_precision`` PSD, ``effort_penalty``
+            PD).
         RuntimeError: If the control Riccati does not converge within ``max_iter``
             — typically because ``(dynamics, control)`` is not stabilisable.
     """
@@ -95,8 +98,8 @@ class LQRController:
         self,
         model: LinearGaussianModel,
         *,
-        state_cost: ArrayLike,
-        control_cost: ArrayLike,
+        goal_precision: ArrayLike,
+        effort_penalty: ArrayLike,
         tol: float = 1e-12,
         max_iter: int = 1000,
     ) -> None:
@@ -106,22 +109,22 @@ class LQRController:
                 "so there is nothing to act with."
             )
         self.model = model
-        self._state_cost = np.asarray(state_cost, dtype=float)
-        self._control_cost = np.asarray(control_cost, dtype=float)
+        self._goal_precision = np.asarray(goal_precision, dtype=float)
+        self._effort_penalty = np.asarray(effort_penalty, dtype=float)
 
         n, p = model.n_states, model.n_controls
-        if self._state_cost.shape != (n, n):
+        if self._goal_precision.shape != (n, n):
             raise ValueError(
-                f"state_cost must be {n}x{n} to match the {n}-D state, "
-                f"got shape {self._state_cost.shape}"
+                f"goal_precision must be {n}x{n} to match the {n}-D state, "
+                f"got shape {self._goal_precision.shape}"
             )
-        if self._control_cost.shape != (p, p):
+        if self._effort_penalty.shape != (p, p):
             raise ValueError(
-                f"control_cost must be {p}x{p} to match the {p}-D action, "
-                f"got shape {self._control_cost.shape}"
+                f"effort_penalty must be {p}x{p} to match the {p}-D action, "
+                f"got shape {self._effort_penalty.shape}"
             )
-        _validate_cost(self._state_cost, "state_cost", require_definite=False)
-        _validate_cost(self._control_cost, "control_cost", require_definite=True)
+        _validate_cost(self._goal_precision, "goal_precision", require_definite=False)
+        _validate_cost(self._effort_penalty, "effort_penalty", require_definite=True)
 
         self._gain = self._converge_to_steady_state(tol, max_iter)
 
@@ -167,9 +170,9 @@ class LQRController:
         iterates a *covariance* forward until it stops moving; this iterates a
         *cost-to-go* — the matrix ``P`` of the quadratic value function
         ``V(state) = stateᵀ·P·state`` — until it stops moving. Starting from
-        ``state_cost``, each step applies Bellman's equation::
+        ``goal_precision``, each step applies Bellman's equation::
 
-            P ← state_cost + Aᵀ P A − (Aᵀ P B)(control_cost + Bᵀ P B)⁻¹(Bᵀ P A)
+            P ← goal_precision + Aᵀ P A − (Aᵀ P B)(effort_penalty + Bᵀ P B)⁻¹(Bᵀ P A)
 
         "the cost from here = what I pay now + the cost from wherever the dynamics
         carry me, minus what acting optimally buys back." For a stabilisable
@@ -177,9 +180,9 @@ class LQRController:
         of the discrete algebraic Riccati equation), from which the steady-state
         gain follows::
 
-            L∞ = (control_cost + Bᵀ P∞ B)⁻¹ (Bᵀ P∞ A)
+            L∞ = (effort_penalty + Bᵀ P∞ B)⁻¹ (Bᵀ P∞ A)
 
-        (A=dynamics, B=control.) The ``(control_cost + Bᵀ P B)`` term is solved
+        (A=dynamics, B=control.) The ``(effort_penalty + Bᵀ P B)`` term is solved
         against with ``np.linalg.solve`` rather than inverted explicitly, for the
         same numerical reason the filter solves against its innovation covariance.
 
@@ -192,16 +195,16 @@ class LQRController:
         dynamics = self.model.dynamics  # A  (n×n)
         assert self.model.control is not None  # guard lives in __init__; narrows type
         control = self.model.control  # B  (n×p)
-        cost_to_go = self._state_cost  # P, starting at the running state cost (n×n)
+        cost_to_go = self._goal_precision  # P, starting at the running state cost (n×n)
 
         for _ in range(max_iter):
             # Bellman's equation, one sweep.
             dyn_cost_ctrl = dynamics.T @ cost_to_go @ control  # Aᵀ P B  (n×p)
             # curvature of the action cost — the dual of the Kalman innovation
             # covariance S, the denominator the gain is solved against (p×p)
-            inner = self._control_cost + control.T @ cost_to_go @ control
+            inner = self._effort_penalty + control.T @ cost_to_go @ control
             next_cost_to_go = (
-                self._state_cost  # pay now
+                self._goal_precision  # pay now
                 + dynamics.T @ cost_to_go @ dynamics  # cost the dynamics carry forward
                 - dyn_cost_ctrl
                 @ np.linalg.solve(
@@ -220,5 +223,5 @@ class LQRController:
                 "gain exists."
             )
 
-        inner = self._control_cost + control.T @ cost_to_go @ control
+        inner = self._effort_penalty + control.T @ cost_to_go @ control
         return np.linalg.solve(inner, control.T @ cost_to_go @ dynamics)  # L∞  (p×n)

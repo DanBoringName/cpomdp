@@ -7,7 +7,7 @@ from cpomdp.types import Belief, LinearGaussianModel
 
 # Inside this module the terse letters a/b/qc/rc are local scalars for the
 # Riccati/gain hand-math below, NOT the role-named public API
-# (dynamics/control/state_cost/control_cost). The library deliberately spells
+# (dynamics/control/goal_precision/effort_penalty). The library deliberately spells
 # those out to avoid the Q/R collision (ADR-003); here, where we're transcribing
 # the textbook DARE formula to check it line-for-line, the letters keep the
 # matrix algebra readable and carry no API meaning.
@@ -19,8 +19,8 @@ from cpomdp.types import Belief, LinearGaussianModel
 DT = 0.1
 DYNAMICS = [[1.0, DT], [0.0, 1.0]]
 CONTROL = [[0.0], [DT]]
-STATE_COST = [[1.0, 0.0], [0.0, 1.0]]
-CONTROL_COST = [[0.1]]
+GOAL_PRECISION = [[1.0, 0.0], [0.0, 1.0]]
+EFFORT_PENALTY = [[0.1]]
 
 
 def _point_mass_model():
@@ -36,7 +36,7 @@ def _point_mass_model():
     )
 
 
-def _scipy_gain(dynamics, control, state_cost, control_cost):
+def _scipy_gain(dynamics, control, goal_precision, effort_penalty):
     """L∞ via scipy's Schur-based DARE solver — the independent oracle.
 
     scipy returns the cost-to-go P, not the gain, so we derive the gain with the
@@ -46,8 +46,8 @@ def _scipy_gain(dynamics, control, state_cost, control_cost):
     """
     a = np.asarray(dynamics, dtype=float)
     b = np.asarray(control, dtype=float)
-    qc = np.asarray(state_cost, dtype=float)
-    rc = np.asarray(control_cost, dtype=float)
+    qc = np.asarray(goal_precision, dtype=float)
+    rc = np.asarray(effort_penalty, dtype=float)
     p = scipy.linalg.solve_discrete_are(a, b, qc, rc)
     return np.linalg.solve(rc + b.T @ p @ b, b.T @ p @ a)
 
@@ -57,14 +57,18 @@ class TestLQRGain:
         # The core oracle: our hand-rolled fixed-point iteration must agree with
         # scipy's independent Schur solve. Disagreement = the bug is ours.
         controller = LQRController(
-            _point_mass_model(), state_cost=STATE_COST, control_cost=CONTROL_COST
+            _point_mass_model(),
+            goal_precision=GOAL_PRECISION,
+            effort_penalty=EFFORT_PENALTY,
         )
-        expected = _scipy_gain(DYNAMICS, CONTROL, STATE_COST, CONTROL_COST)
+        expected = _scipy_gain(DYNAMICS, CONTROL, GOAL_PRECISION, EFFORT_PENALTY)
         np.testing.assert_allclose(controller.gain, expected, atol=1e-8)
 
     def test_gain_has_shape_p_by_n(self):
         controller = LQRController(
-            _point_mass_model(), state_cost=STATE_COST, control_cost=CONTROL_COST
+            _point_mass_model(),
+            goal_precision=GOAL_PRECISION,
+            effort_penalty=EFFORT_PENALTY,
         )
         # one action, two states
         assert controller.gain.shape == (1, 2)
@@ -75,7 +79,9 @@ class TestLQRGain:
         # strictly inside the unit circle. A sign-flipped gain would push the
         # eigenvalues out and this would fail loudly.
         controller = LQRController(
-            _point_mass_model(), state_cost=STATE_COST, control_cost=CONTROL_COST
+            _point_mass_model(),
+            goal_precision=GOAL_PRECISION,
+            effort_penalty=EFFORT_PENALTY,
         )
         a = np.asarray(DYNAMICS)
         b = np.asarray(CONTROL)
@@ -89,7 +95,9 @@ class TestLQRAction:
         # From the origin with a target at position +1, the force must be
         # positive (accelerate toward the goal). A dropped minus sign flips this.
         controller = LQRController(
-            _point_mass_model(), state_cost=STATE_COST, control_cost=CONTROL_COST
+            _point_mass_model(),
+            goal_precision=GOAL_PRECISION,
+            effort_penalty=EFFORT_PENALTY,
         )
         action = controller.action(mean=np.array([0.0, 0.0]), goal=np.array([1.0, 0.0]))
         assert action[0] > 0
@@ -97,14 +105,18 @@ class TestLQRAction:
     def test_zero_error_gives_zero_action(self):
         # Sitting exactly on an equilibrium goal, the controller asks for nothing.
         controller = LQRController(
-            _point_mass_model(), state_cost=STATE_COST, control_cost=CONTROL_COST
+            _point_mass_model(),
+            goal_precision=GOAL_PRECISION,
+            effort_penalty=EFFORT_PENALTY,
         )
         action = controller.action(mean=np.array([1.0, 0.0]), goal=np.array([1.0, 0.0]))
         np.testing.assert_allclose(action, [0.0], atol=1e-12)
 
     def test_rejects_wrong_shape_goal(self):
         controller = LQRController(
-            _point_mass_model(), state_cost=STATE_COST, control_cost=CONTROL_COST
+            _point_mass_model(),
+            goal_precision=GOAL_PRECISION,
+            effort_penalty=EFFORT_PENALTY,
         )
         with pytest.raises(ValueError, match="goal"):
             controller.action(mean=np.array([0.0, 0.0]), goal=np.array([1.0, 0.0, 0.0]))
@@ -120,47 +132,53 @@ class TestLQRValidation:
             prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
         )  # no control matrix
         with pytest.raises(ValueError, match="control matrix"):
-            LQRController(model, state_cost=STATE_COST, control_cost=CONTROL_COST)
-
-    def test_rejects_wrong_state_cost_shape(self):
-        with pytest.raises(ValueError, match="state_cost"):
             LQRController(
-                _point_mass_model(), state_cost=[[1.0]], control_cost=CONTROL_COST
+                model, goal_precision=GOAL_PRECISION, effort_penalty=EFFORT_PENALTY
             )
 
-    def test_rejects_wrong_control_cost_shape(self):
-        with pytest.raises(ValueError, match="control_cost"):
+    def test_rejects_wrong_goal_precision_shape(self):
+        with pytest.raises(ValueError, match="goal_precision"):
             LQRController(
                 _point_mass_model(),
-                state_cost=STATE_COST,
-                control_cost=[[1.0, 0.0], [0.0, 1.0]],
+                goal_precision=[[1.0]],
+                effort_penalty=EFFORT_PENALTY,
             )
 
-    def test_rejects_asymmetric_state_cost(self):
+    def test_rejects_wrong_effort_penalty_shape(self):
+        with pytest.raises(ValueError, match="effort_penalty"):
+            LQRController(
+                _point_mass_model(),
+                goal_precision=GOAL_PRECISION,
+                effort_penalty=[[1.0, 0.0], [0.0, 1.0]],
+            )
+
+    def test_rejects_asymmetric_goal_precision(self):
         # An off-diagonal typo: symmetric on shape, asymmetric in value. Without
         # the check this silently yields a non-symmetric cost-to-go and a wrong
         # gain — the hardest failure to trace in a control loop.
         with pytest.raises(ValueError, match="symmetric"):
             LQRController(
                 _point_mass_model(),
-                state_cost=[[1.0, 0.5], [-0.5, 1.0]],
-                control_cost=CONTROL_COST,
+                goal_precision=[[1.0, 0.5], [-0.5, 1.0]],
+                effort_penalty=EFFORT_PENALTY,
             )
 
-    def test_rejects_indefinite_control_cost(self):
-        # control_cost is inverted against in the gain solve; a zero (singular)
+    def test_rejects_indefinite_effort_penalty(self):
+        # effort_penalty is inverted against in the gain solve; a zero (singular)
         # cost must fail loudly, not blow up mid-recursion.
         with pytest.raises(ValueError, match="positive-definite"):
             LQRController(
-                _point_mass_model(), state_cost=STATE_COST, control_cost=[[0.0]]
+                _point_mass_model(),
+                goal_precision=GOAL_PRECISION,
+                effort_penalty=[[0.0]],
             )
 
-    def test_rejects_negative_semidefinite_state_cost(self):
+    def test_rejects_negative_semidefinite_goal_precision(self):
         with pytest.raises(ValueError, match="positive-semi-definite"):
             LQRController(
                 _point_mass_model(),
-                state_cost=[[-1.0, 0.0], [0.0, 1.0]],
-                control_cost=CONTROL_COST,
+                goal_precision=[[-1.0, 0.0], [0.0, 1.0]],
+                effort_penalty=EFFORT_PENALTY,
             )
 
     def test_raises_when_not_converged(self):
@@ -169,7 +187,7 @@ class TestLQRValidation:
         with pytest.raises(RuntimeError, match="converge"):
             LQRController(
                 _point_mass_model(),
-                state_cost=STATE_COST,
-                control_cost=CONTROL_COST,
+                goal_precision=GOAL_PRECISION,
+                effort_penalty=EFFORT_PENALTY,
                 max_iter=1,
             )
