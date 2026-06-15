@@ -1,3 +1,5 @@
+"""The ``Agent`` façade: a stateful perceive/act loop over a ``LinearGaussianModel``."""
+
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 

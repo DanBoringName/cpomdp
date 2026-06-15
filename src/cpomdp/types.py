@@ -1,3 +1,5 @@
+"""Core data types: the Gaussian ``Belief`` and its ``LinearGaussianModel``."""
+
 from dataclasses import dataclass
 
 import numpy as np
@@ -203,20 +205,25 @@ class LinearGaussianModel:
     # --- control-theory letter aliases (for backend/maths internals) ---
     @property
     def A(self) -> NDArray[np.float64]:
+        """A: the state-transition matrix (alias of ``dynamics``)."""
         return self.dynamics
 
     @property
     def B(self) -> NDArray[np.float64] | None:
+        """B: the control matrix (alias of ``control``); ``None`` if uncontrolled."""
         return self.control
 
     @property
     def C(self) -> NDArray[np.float64]:
+        """C: the observation matrix (alias of ``sensor_model``)."""
         return self.sensor_model
 
     @property
     def Q(self) -> NDArray[np.float64]:
+        """Q: the process-noise covariance (alias of ``dynamics_noise``)."""
         return self.dynamics_noise
 
     @property
     def R(self) -> NDArray[np.float64]:
+        """R: the observation-noise covariance (alias of ``sensor_noise``)."""
         return self.sensor_noise

@@ -39,6 +39,7 @@ dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
     "scipy>=1.15.3",
+    "pre-commit>=4.0",
 ]
 
 [build-system]
@@ -55,14 +56,44 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = [
-    "E",   # pycodestyle errors
-    "F",   # pyflakes
-    "I",   # isort
-    "UP",  # pyupgrade
-    "B",   # flake8-bugbear
-    "SIM", # flake8-simplify
-    "NPY", # numpy-specific rules
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "C4",   # flake8-comprehensions
+    "SIM",  # flake8-simplify
+    "RET",  # flake8-return
+    "PT",   # flake8-pytest-style
+    "PIE",  # flake8-pie
+    "ICN",  # flake8-import-conventions (e.g. `import numpy as np`)
+    "TID",  # flake8-tidy-imports
+    "PERF", # perflint
+    "NPY",  # numpy-specific rules
+    "RUF",  # ruff-specific rules
+    "D",    # pydocstyle — require docstrings on the public API (see per-file-ignores)
 ]
+ignore = [
+    # The docstrings and comments use real mathematical notation (−, ×, ∞, Aᵀ).
+    # These rules flag those glyphs as "ambiguous" unicode; here they're deliberate
+    # and correct, so the warning is just noise.
+    "RUF001",
+    "RUF002",
+    "RUF003",
+    # Constructors are documented at the class level (the Args sections live in the
+    # class docstrings), so an extra __init__ docstring would just duplicate them.
+    "D107",
+]
+# Deliberately not enabled: PL* — magic-value / arg-count / lazy-import warnings all
+# fire on legitimate numerical code and the intentional lazy Julia import.
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+# Tests document themselves by name; don't require docstrings on them.
+"tests/**" = ["D"]
 
 [tool.ty.environment]
 python-version = "3.10"

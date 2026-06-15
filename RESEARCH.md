@@ -2,7 +2,7 @@
 
 ## Problem 1 -> Should I enforce positive semi-definiteness (PSD)
 
-Positive covariance, which is a must as a belief has no negative context, using an eigenvalue evaluation to determine positivity is an O(n^3) operation. This is extremely expensive and I would like to avoid it if possible. 
+Positive covariance, which is a must as a belief has no negative context, using an eigenvalue evaluation to determine positivity is an O(n^3) operation. This is extremely expensive and I would like to avoid it if possible.
 
 **Pymdp** operates in discrete space. No Gaussians. This means vector probabilities fit the **simplex constraint**
 

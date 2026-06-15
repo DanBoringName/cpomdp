@@ -1,0 +1,29 @@
+# One-time setup after cloning (installs both the pre-commit and commit-msg hooks):
+#   uv run pre-commit install --hook-type pre-commit --hook-type commit-msg
+# The ruff hooks mirror the CI `lint` job, so a clean commit here is a green CI.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # Keep this in sync with the `ruff` pin in pyproject's dev group, so local
+    # and CI agree on exactly which ruff is judging the code.
+    rev: v0.15.16
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+
+  # Enforce Conventional Commit messages (feat:, fix:, docs:, ...), matching the
+  # style already used in the git history. Runs at the commit-msg stage.
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.4.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]

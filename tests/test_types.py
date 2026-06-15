@@ -40,13 +40,13 @@ class TestBeliefs:
 # test overrides exactly one field with a bad value, so the test isolates one
 # validation branch.
 def _valid_kwargs(**overrides):
-    kwargs = dict(
-        dynamics=[[1.0, 0.1], [0.0, 1.0]],  # 2x2  (n=2)
-        sensor_model=[[1.0, 0.0]],  # 1x2  (m=1)
-        dynamics_noise=[[0.1, 0.0], [0.0, 0.1]],  # 2x2
-        sensor_noise=[[1.0]],  # 1x1
-        prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
-    )
+    kwargs = {
+        "dynamics": [[1.0, 0.1], [0.0, 1.0]],  # 2x2  (n=2)
+        "sensor_model": [[1.0, 0.0]],  # 1x2  (m=1)
+        "dynamics_noise": [[0.1, 0.0], [0.0, 0.1]],  # 2x2
+        "sensor_noise": [[1.0]],  # 1x1
+        "prior": Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
+    }
     kwargs.update(overrides)
     return kwargs
 

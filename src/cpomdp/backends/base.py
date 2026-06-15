@@ -1,3 +1,5 @@
+"""The ``InferenceBackend`` protocol and the shared per-step input validator."""
+
 from typing import Protocol, runtime_checkable
 
 import numpy as np

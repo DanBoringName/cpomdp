@@ -1,3 +1,5 @@
+"""Exact Kalman-filter inference backend (per-step and steady-state modes)."""
+
 import numpy as np
 from numpy.typing import NDArray
 

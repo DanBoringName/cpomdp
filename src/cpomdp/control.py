@@ -1,3 +1,5 @@
+"""Steady-state LQR action selection: the action-side dual of the Kalman filter."""
+
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
