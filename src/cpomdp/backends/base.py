@@ -24,7 +24,7 @@ class InferenceBackend(Protocol):
     The Protocol is structural: any class with a matching ``infer_states`` is a
     backend, with no shared base class. This is the abstraction wall — the
     native Kalman fast path and the RxInfer oracle are interchangeable behind it,
-    and neither's implementation (NumPy, juliacall, …) leaks into this signature.
+    and neither's implementation (JAX, juliacall, …) leaks into this signature.
     """
 
     def infer_states(
