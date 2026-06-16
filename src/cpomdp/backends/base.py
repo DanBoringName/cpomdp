@@ -2,8 +2,8 @@
 
 from typing import Protocol, runtime_checkable
 
-import numpy as np
-from numpy.typing import NDArray
+import jax.numpy as jnp
+from jaxtyping import Array, Float64
 
 from cpomdp.types import Belief, LinearGaussianModel
 
@@ -28,9 +28,9 @@ class InferenceBackend(Protocol):
 
     def infer_states(
         self,
-        observation: NDArray[np.float64],
+        observation: Float64[Array, "m"],
         prior: Belief,
-        action: NDArray[np.float64] | None = None,
+        action: Float64[Array, "p"] | None = None,
     ) -> Belief:
         """Advance the belief by one filter step: ``prior`` in, posterior out.
 
@@ -43,10 +43,10 @@ class InferenceBackend(Protocol):
 
 def validate_step_inputs(
     model: LinearGaussianModel,
-    observation: NDArray[np.float64],
+    observation: Float64[Array, "m"],
     prior: Belief,
-    action: NDArray[np.float64] | None,
-) -> tuple[NDArray[np.float64], NDArray[np.float64] | None]:
+    action: Float64[Array, "p"] | None,
+) -> tuple[Float64[Array, "m"], Float64[Array, "p"] | None]:
     """Coerce and shape-check one step's inputs at the trust boundary.
 
     ``LinearGaussianModel`` validates the model once at construction; this gives
@@ -75,7 +75,7 @@ def validate_step_inputs(
             over the ``n``-D state, the model needs an action but got ``None``,
             or ``action`` is not shape ``(p,)``.
     """
-    observation = np.asarray(observation, dtype=float)
+    observation = jnp.asarray(observation, dtype=float)
     m = model.n_observations
     if observation.shape != (m,):
         raise ValueError(
@@ -96,7 +96,7 @@ def validate_step_inputs(
         raise ValueError(
             "this model has a control matrix; infer_states requires an action"
         )
-    action = np.asarray(action, dtype=float)
+    action = jnp.asarray(action, dtype=float)
     p = model.n_controls
     if action.shape != (p,):
         raise ValueError(
