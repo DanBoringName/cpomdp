@@ -2,13 +2,15 @@
 
 from dataclasses import dataclass
 
-import numpy as np
-from numpy.typing import ArrayLike, NDArray
+import jax
+import jax.numpy as jnp
+from jax import Array
+from jax.typing import ArrayLike
 
 __all__ = ["Belief", "LinearGaussianModel"]
 
 
-def _validate_covariance(cov: NDArray[np.float64], name: str) -> None:
+def _validate_covariance(cov: Array, name: str) -> None:
     """Square (2-D, n x n) + symmetric check.
 
     Shared by Belief.cov, dynamics_noise and sensor_noise — all three are
@@ -18,10 +20,11 @@ def _validate_covariance(cov: NDArray[np.float64], name: str) -> None:
     """
     if cov.ndim != 2 or cov.shape[0] != cov.shape[1]:
         raise ValueError(f"{name} must be a square 2-D matrix, got shape {cov.shape}")
-    if not np.allclose(cov, cov.T):
+    if not jnp.allclose(cov, cov.T):
         raise ValueError(f"{name} must be symmetric.")
 
 
+@jax.tree_util.register_pytree_node_class
 @dataclass(frozen=True, init=False)
 class Belief:
     """A Gaussian belief over a continuous state.
@@ -38,19 +41,21 @@ class Belief:
 
     Beliefs are immutable values: updating a belief produces a *new* ``Belief``
     rather than mutating an existing one. Inputs are accepted as anything
-    array-like (lists, tuples, arrays) and stored as float ``ndarray``.
+    array-like (lists, tuples, arrays) and stored as float ``jax.Array``.
 
-    Construction validates shape and symmetry of ``cov``; positive-semi-
-    definiteness is enforced at the trust boundary, not here (see DECISIONS.md
-    ADR-002).
+    A ``Belief`` is a registered JAX pytree (its leaves are ``mean`` and ``cov``),
+    so it passes through ``jit``/``vmap``/``grad`` as data. JAX rebuilds it from
+    its leaves without re-running validation; the shape/symmetry checks fire only
+    on direct construction, at the trust boundary. Positive-semi-definiteness is
+    enforced at the trust boundary too, not here (see DECISIONS.md ADR-002).
     """
 
-    mean: NDArray[np.float64]
-    cov: NDArray[np.float64]  # covariance
+    mean: Array
+    cov: Array  # covariance
 
     def __init__(self, mean: ArrayLike, cov: ArrayLike) -> None:
-        object.__setattr__(self, "mean", np.asarray(mean, dtype=float))
-        object.__setattr__(self, "cov", np.asarray(cov, dtype=float))
+        object.__setattr__(self, "mean", jnp.asarray(mean, dtype=float))
+        object.__setattr__(self, "cov", jnp.asarray(cov, dtype=float))
         self._validate()
 
     def _validate(self) -> None:
@@ -71,7 +76,21 @@ class Belief:
         """Dimensionality of the state — the length of the mean vector."""
         return self.mean.shape[0]
 
+    def tree_flatten(self) -> tuple[tuple[Array, Array], None]:
+        """Leaves for JAX: ``(mean, cov)``, no static aux data."""
+        return (self.mean, self.cov), None
 
+    @classmethod
+    def tree_unflatten(cls, aux_data: None, children: tuple[Array, Array]) -> "Belief":
+        """Rebuild from leaves without validating — the leaves may be tracers."""
+        mean, cov = children
+        obj = object.__new__(cls)
+        object.__setattr__(obj, "mean", mean)
+        object.__setattr__(obj, "cov", cov)
+        return obj
+
+
+@jax.tree_util.register_pytree_node_class
 @dataclass(frozen=True, init=False)
 class LinearGaussianModel:
     """A linear-Gaussian state-space model — the agent's generative model.

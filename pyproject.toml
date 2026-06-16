@@ -23,6 +23,7 @@ classifiers = [
 ]
 dependencies = [
     "jax>=0.4",
+    "jaxtyping>=0.3.7",
     "numpy>=1.24",
 ]
 
