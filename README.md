@@ -6,6 +6,14 @@ pymdp is great, but it speaks in discrete states. A lot of the world isn't discr
 
 That's the whole idea: keep the pymdp muscle memory, swap the discrete machinery underneath for continuous.
 
+## Example
+
+A bacillus seeking food — the continuous-state answer to pymdp's mouse-seeking-cheese. The body sits at the **true** hidden state; the orange `+` is where the agent *believes* it is (`belief.mean`); the blue ellipse is its uncertainty (`belief.cov`), wide at first and shrinking as the Kalman filter locks on; the star is the food (the goal the LQR controller steers toward). It perceives, acts, and arrives.
+
+![A bacillus navigating to food via continuous active inference](docs/assets/bacillus.gif)
+
+Reproduce it with [`examples/bacillus_seeking_food.py`](examples/bacillus_seeking_food.py) (`pip install matplotlib pillow`).
+
 ## Install
 
 ```bash
