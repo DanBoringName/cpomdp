@@ -4,6 +4,7 @@ from typing import Protocol, runtime_checkable
 
 import jax.numpy as jnp
 from jaxtyping import Array, Float64
+from numpy.typing import ArrayLike
 
 from cpomdp.types import Belief, LinearGaussianModel
 
@@ -28,9 +29,9 @@ class InferenceBackend(Protocol):
 
     def infer_states(
         self,
-        observation: Float64[Array, "m"],
+        observation: ArrayLike,
         prior: Belief,
-        action: Float64[Array, "p"] | None = None,
+        action: ArrayLike | None = None,
     ) -> Belief:
         """Advance the belief by one filter step: ``prior`` in, posterior out.
 
@@ -43,9 +44,9 @@ class InferenceBackend(Protocol):
 
 def validate_step_inputs(
     model: LinearGaussianModel,
-    observation: Float64[Array, "m"],
+    observation: ArrayLike,
     prior: Belief,
-    action: Float64[Array, "p"] | None,
+    action: ArrayLike | None,
 ) -> tuple[Float64[Array, "m"], Float64[Array, "p"] | None]:
     """Coerce and shape-check one step's inputs at the trust boundary.
 

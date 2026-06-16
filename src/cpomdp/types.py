@@ -4,8 +4,8 @@ from dataclasses import dataclass
 
 import jax
 import jax.numpy as jnp
-from jax.typing import ArrayLike
 from jaxtyping import Array, Float64
+from numpy.typing import ArrayLike
 
 __all__ = ["Belief", "LinearGaussianModel"]
 
