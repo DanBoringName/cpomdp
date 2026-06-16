@@ -94,11 +94,12 @@ ignore = [
     # class docstrings), so an extra __init__ docstring would just duplicate them.
     "D107",
     # jaxtyping shape strings (Float64[Array, "n n"]) read as forward annotations to
-    # pyflakes, which then can't parse the axes (F722) or treats single axes as
-    # undefined names (F821). Both are false positives; ty catches genuine
-    # undefined-name errors regardless.
+    # pyflakes/pyupgrade: they can't parse the axes (F722), read a single axis as an
+    # undefined name (F821), or want to strip the "quotes" (UP037, which would break
+    # the shape). All false positives; ty catches genuine undefined-name errors.
     "F722",
     "F821",
+    "UP037",
 ]
 # Deliberately not enabled: PL* — magic-value / arg-count / lazy-import warnings all
 # fire on legitimate numerical code and the intentional lazy Julia import.
