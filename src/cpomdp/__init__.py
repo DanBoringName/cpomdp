@@ -28,7 +28,7 @@ from cpomdp.types import Belief, LinearGaussianModel
 # Process-global by necessity; see ADR-004.
 jax.config.update("jax_enable_x64", True)
 
-__version__ = "0.1.1"
+__version__ = "0.2.0"
 
 __all__ = [
     "Agent",
