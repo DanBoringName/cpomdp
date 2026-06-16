@@ -4,13 +4,13 @@ from dataclasses import dataclass
 
 import jax
 import jax.numpy as jnp
-from jax import Array
 from jax.typing import ArrayLike
+from jaxtyping import Array, Float64
 
 __all__ = ["Belief", "LinearGaussianModel"]
 
 
-def _validate_covariance(cov: Array, name: str) -> None:
+def _validate_covariance(cov: Float64[Array, "n n"], name: str) -> None:
     """Square (2-D, n x n) + symmetric check.
 
     Shared by Belief.cov, dynamics_noise and sensor_noise — all three are
@@ -50,8 +50,8 @@ class Belief:
     enforced at the trust boundary too, not here (see DECISIONS.md ADR-002).
     """
 
-    mean: Array
-    cov: Array  # covariance
+    mean: Float64[Array, "n"]
+    cov: Float64[Array, "n n"]  # covariance
 
     def __init__(self, mean: ArrayLike, cov: ArrayLike) -> None:
         object.__setattr__(self, "mean", jnp.asarray(mean, dtype=float))
@@ -76,12 +76,18 @@ class Belief:
         """Dimensionality of the state — the length of the mean vector."""
         return self.mean.shape[0]
 
-    def tree_flatten(self) -> tuple[tuple[Array, Array], None]:
+    def tree_flatten(
+        self,
+    ) -> tuple[tuple[Float64[Array, "n"], Float64[Array, "n n"]], None]:
         """Leaves for JAX: ``(mean, cov)``, no static aux data."""
         return (self.mean, self.cov), None
 
     @classmethod
-    def tree_unflatten(cls, aux_data: None, children: tuple[Array, Array]) -> "Belief":
+    def tree_unflatten(
+        cls,
+        aux_data: None,
+        children: tuple[Float64[Array, "n"], Float64[Array, "n n"]],
+    ) -> "Belief":
         """Rebuild from leaves without validating — the leaves may be tracers."""
         mean, cov = children
         obj = object.__new__(cls)
@@ -126,12 +132,12 @@ class LinearGaussianModel:
     no ``control`` is a pure filtering (tracking) model.
     """
 
-    dynamics: NDArray[np.float64]
-    sensor_model: NDArray[np.float64]
-    dynamics_noise: NDArray[np.float64]
-    sensor_noise: NDArray[np.float64]
+    dynamics: Float64[Array, "n n"]
+    sensor_model: Float64[Array, "m n"]
+    dynamics_noise: Float64[Array, "n n"]
+    sensor_noise: Float64[Array, "m m"]
     prior: Belief
-    control: NDArray[np.float64] | None
+    control: Float64[Array, "n p"] | None
 
     def __init__(
         self,
@@ -142,17 +148,17 @@ class LinearGaussianModel:
         prior: Belief,
         control: ArrayLike | None = None,
     ) -> None:
-        object.__setattr__(self, "dynamics", np.asarray(dynamics, dtype=float))
-        object.__setattr__(self, "sensor_model", np.asarray(sensor_model, dtype=float))
+        object.__setattr__(self, "dynamics", jnp.asarray(dynamics, dtype=float))
+        object.__setattr__(self, "sensor_model", jnp.asarray(sensor_model, dtype=float))
         object.__setattr__(
-            self, "dynamics_noise", np.asarray(dynamics_noise, dtype=float)
+            self, "dynamics_noise", jnp.asarray(dynamics_noise, dtype=float)
         )
-        object.__setattr__(self, "sensor_noise", np.asarray(sensor_noise, dtype=float))
+        object.__setattr__(self, "sensor_noise", jnp.asarray(sensor_noise, dtype=float))
         object.__setattr__(self, "prior", prior)
         object.__setattr__(
             self,
             "control",
-            None if control is None else np.asarray(control, dtype=float),
+            None if control is None else jnp.asarray(control, dtype=float),
         )
         self._validate()
 
@@ -223,26 +229,62 @@ class LinearGaussianModel:
 
     # --- control-theory letter aliases (for backend/maths internals) ---
     @property
-    def A(self) -> NDArray[np.float64]:
+    def A(self) -> Float64[Array, "n n"]:
         """A: the state-transition matrix (alias of ``dynamics``)."""
         return self.dynamics
 
     @property
-    def B(self) -> NDArray[np.float64] | None:
+    def B(self) -> Float64[Array, "n p"] | None:
         """B: the control matrix (alias of ``control``); ``None`` if uncontrolled."""
         return self.control
 
     @property
-    def C(self) -> NDArray[np.float64]:
+    def C(self) -> Float64[Array, "m n"]:
         """C: the observation matrix (alias of ``sensor_model``)."""
         return self.sensor_model
 
     @property
-    def Q(self) -> NDArray[np.float64]:
+    def Q(self) -> Float64[Array, "n n"]:
         """Q: the process-noise covariance (alias of ``dynamics_noise``)."""
         return self.dynamics_noise
 
     @property
-    def R(self) -> NDArray[np.float64]:
+    def R(self) -> Float64[Array, "m m"]:
         """R: the observation-noise covariance (alias of ``sensor_noise``)."""
         return self.sensor_noise
+
+    def tree_flatten(
+        self,
+    ) -> tuple[tuple[Array | Belief | None, ...], None]:
+        """Leaves for JAX: every matrix plus the ``prior`` belief, no static aux.
+
+        ``control`` is included as a (possibly ``None``) leaf; an uncontrolled
+        model contributes no control leaf and the ``None`` is restored on rebuild.
+        """
+        children = (
+            self.dynamics,
+            self.sensor_model,
+            self.dynamics_noise,
+            self.sensor_noise,
+            self.prior,
+            self.control,
+        )
+        return children, None
+
+    @classmethod
+    def tree_unflatten(
+        cls, aux_data: None, children: tuple[Array | Belief | None, ...]
+    ) -> "LinearGaussianModel":
+        """Rebuild from leaves without validating — the leaves may be tracers."""
+        obj = object.__new__(cls)
+        fields = (
+            "dynamics",
+            "sensor_model",
+            "dynamics_noise",
+            "sensor_noise",
+            "prior",
+            "control",
+        )
+        for name, value in zip(fields, children, strict=True):
+            object.__setattr__(obj, name, value)
+        return obj

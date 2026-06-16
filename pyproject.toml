@@ -93,6 +93,12 @@ ignore = [
     # Constructors are documented at the class level (the Args sections live in the
     # class docstrings), so an extra __init__ docstring would just duplicate them.
     "D107",
+    # jaxtyping shape strings (Float64[Array, "n n"]) read as forward annotations to
+    # pyflakes, which then can't parse the axes (F722) or treats single axes as
+    # undefined names (F821). Both are false positives; ty catches genuine
+    # undefined-name errors regardless.
+    "F722",
+    "F821",
 ]
 # Deliberately not enabled: PL* — magic-value / arg-count / lazy-import warnings all
 # fire on legitimate numerical code and the intentional lazy Julia import.
