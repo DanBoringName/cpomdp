@@ -53,4 +53,5 @@ site/
 # Project-local
 .remember/
 .claude/
+CLAUDE.md
 rfcs/
