@@ -1,6 +1,8 @@
 """FixedSensor: the constant-(C, R) observation model."""
 
+import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 from cpomdp.observation import FixedSensor, ObservationModel
@@ -44,3 +46,12 @@ def test_fixed_sensor_rejects_mismatched_dims():
     R = jnp.array([[0.5]])  # m=1
     with pytest.raises(ValueError, match="match the 2-D observation"):
         FixedSensor(C, R)
+
+
+def test_FixedSensor_survives_a_flatten_unflatten_round_trip():
+    sensor = FixedSensor(jnp.array([[1.0]]), jnp.array([[1.0]]))
+    leaves, treedef = jax.tree_util.tree_flatten(sensor)
+    restored = jax.tree_util.tree_unflatten(treedef, leaves)
+    assert isinstance(restored, FixedSensor)
+    np.testing.assert_array_equal(restored.sensor_model, sensor.sensor_model)
+    np.testing.assert_array_equal(restored.sensor_noise, sensor.sensor_noise)

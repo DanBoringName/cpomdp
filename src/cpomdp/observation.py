@@ -8,6 +8,7 @@ linear-Gaussian ``(C, R)`` about a state. ``FixedSensor`` is the constant case
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
+import jax
 import jax.numpy as jnp
 from jaxtyping import Array, Float64
 from numpy.typing import ArrayLike
@@ -29,8 +30,6 @@ class ObservationModel(Protocol):
     Linearise is the english spelling, but literature dictates a z.
     """
 
-    sensor_model: Float64[Array, "m n"]  # C
-    sensor_noise: Float64[Array, "m m"]  # R
     is_fixed: bool
 
     def linearize(
@@ -40,6 +39,7 @@ class ObservationModel(Protocol):
         ...
 
 
+@jax.tree_util.register_pytree_node_class
 @dataclass(frozen=True, init=False)
 class FixedSensor:
     """A sensor whose (C, R) never change with state — the v0.2 default.
@@ -64,6 +64,19 @@ class FixedSensor:
     ) -> tuple[Float64[Array, "m n"], Float64[Array, "m m"]]:
         """Return the stored ``(C, R)`` unchanged — the same for every ``x``."""
         return self.sensor_model, self.sensor_noise
+
+    def tree_flatten(self):
+        """Leaves: (sensor_model, sensor_noise); no static aux."""
+        return (self.sensor_model, self.sensor_noise), None
+
+    @classmethod
+    def tree_unflatten(cls, aux_data, children):
+        """Rebuild without re-validating — leaves may be tracers."""
+        sensor_model, sensor_noise = children
+        obj = object.__new__(cls)
+        object.__setattr__(obj, "sensor_model", sensor_model)
+        object.__setattr__(obj, "sensor_noise", sensor_noise)
+        return obj
 
     def _validate(self) -> None:
         if self.sensor_model.ndim != 2:

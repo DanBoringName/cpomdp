@@ -7,6 +7,7 @@ from numpy.typing import ArrayLike
 from cpomdp.backends.base import InferenceBackend
 from cpomdp.backends.kalman import KalmanBackend
 from cpomdp.control import LQRController
+from cpomdp.selection import ActionSelector, LQRSelector, Preference
 from cpomdp.types import Belief, LinearGaussianModel
 
 __all__ = ["Agent"]
@@ -15,8 +16,9 @@ __all__ = ["Agent"]
 class Agent:
     """A continuous active-inference agent — the continuous sibling of pymdp's Agent.
 
-    The backend and controller underneath are pure: belief in, belief out; mean
-    in, action out. The ``Agent`` is the one *stateful* piece — it owns the
+    The backend and action selector underneath are pure: belief in, belief out;
+    belief + preference in, action out. The ``Agent`` is the one *stateful* piece
+    — it owns the
     current ``belief`` (the continuous analog of pymdp's ``qs``) and carries it
     forward across calls, so you drive it in the same perceive → act loop pymdp
     users already know::
@@ -98,6 +100,8 @@ class Agent:
             self._controller: LQRController | None = None
             self._goal: Float64[Array, "n"] | None = None
             self._last_action: Float64[Array, "p"] | None = None
+            self._selector: ActionSelector | None = None
+            self._preference: Preference | None = None
         else:
             # acting agent — build the front-loaded controller now.
             n, p = model.n_states, model.n_controls
@@ -112,6 +116,13 @@ class Agent:
             self._controller = LQRController(
                 model, goal_precision=goal_precision, effort_penalty=effort_penalty
             )
+            # Wrap the controller in the ActionSelector seam the loop talks to,
+            # and capture the goal as a Preference. Under a fixed sensor this is
+            # LQR; the same seam is where EFESelector and a richer Preference plug
+            # in (v0.3).
+            self._preference = Preference(self._goal, goal_precision)
+            self._selector = LQRSelector(self._controller)
+
             # No action applied yet — the first predict step coasts on zero
             # control, then sample_action overwrites this each step.
             self._last_action = jnp.zeros(p)
@@ -149,11 +160,13 @@ class Agent:
     def sample_action(self) -> Float64[Array, "p"]:
         """The action that best drives the current belief toward the goal.
 
-        Reads the current belief mean and returns the LQR-optimal action,
-        ``-L∞·(mean − goal)`` — one matrix-vector product, since the controller
-        was front-loaded at construction. Deterministic, not a sample (see the
-        class docstring). The chosen action is remembered so the next
-        ``infer_states`` predicts with it.
+        Delegates to the agent's ``ActionSelector`` (an ``LQRSelector`` here),
+        handing it the current belief and the goal ``Preference``. Under a fixed
+        linear-Gaussian sensor that selection is exactly the LQR optimum,
+        ``-L∞·(mean − goal)`` — one matrix-vector product, front-loaded at
+        construction (ADR-003). Deterministic, not a sample (see the class
+        docstring). The chosen action is remembered so the next ``infer_states``
+        predicts with it.
 
         Returns:
             The action, shape ``(p,)``.
@@ -162,11 +175,11 @@ class Agent:
             ValueError: If this is a perceive-only agent (built without a
                 ``goal``) — there is nothing to act toward.
         """
-        if self._controller is None:
+        if self._selector is None:
             raise ValueError(
                 "this Agent has no goal, so it can only perceive; pass goal=... to "
                 "Agent(...) to enable sample_action()."
             )
-        assert self._goal is not None  # set together with _controller; narrows the type
-        self._last_action = self._controller.action(self.belief.mean, self._goal)
+        assert self._preference is not None  # set with _selector; narrows the type
+        self._last_action = self._selector.select(self.belief, self._preference)
         return self._last_action

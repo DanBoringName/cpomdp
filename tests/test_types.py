@@ -3,6 +3,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from cpomdp.observation import FixedSensor
 from cpomdp.types import Belief, LinearGaussianModel
 
 
@@ -110,6 +111,20 @@ class TestLinearGaussianModels:
         with pytest.raises(TypeError, match="Belief"):
             LinearGaussianModel(**_valid_kwargs(prior=[0.0, 0.0]))
 
+    def test_observation_defaults_to_none(self):
+        # No observation given -> fixed sensor defined by sensor_model/sensor_noise
+        # (the v0.2 semantics). None is the canonical "fixed" case.
+        assert LinearGaussianModel(**_valid_kwargs()).observation is None
+
+    def test_accepts_an_observation_model(self):
+        sensor = FixedSensor([[1.0, 0.0]], [[1.0]])
+        m = LinearGaussianModel(**_valid_kwargs(observation=sensor))
+        assert m.observation is sensor
+
+    def test_rejects_observation_not_an_observation_model(self):
+        with pytest.raises(TypeError, match="ObservationModel"):
+            LinearGaussianModel(**_valid_kwargs(observation="not a sensor"))
+
 
 class TestPytreeRegistration:
     def test_belief_flattens_to_its_two_arrays(self):
@@ -158,3 +173,15 @@ class TestPytreeRegistration:
         leaves, treedef = jax.tree_util.tree_flatten(m)
         restored = jax.tree_util.tree_unflatten(treedef, leaves)
         np.testing.assert_array_equal(restored.control, m.control)
+
+    def test_model_round_trips_with_an_observation(self):
+        # observation is a nullable child like control: a FixedSensor recurses
+        # into its own array leaves and is rebuilt on unflatten.
+        sensor = FixedSensor([[1.0, 0.0]], [[0.5]])
+        m = LinearGaussianModel(**_valid_kwargs(observation=sensor))
+        leaves, treedef = jax.tree_util.tree_flatten(m)
+        restored = jax.tree_util.tree_unflatten(treedef, leaves)
+        assert isinstance(restored.observation, FixedSensor)
+        c_out, r_out = restored.observation.linearize(jnp.zeros(2))
+        np.testing.assert_array_equal(c_out, sensor.sensor_model)
+        np.testing.assert_array_equal(r_out, sensor.sensor_noise)

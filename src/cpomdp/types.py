@@ -8,6 +8,7 @@ from jaxtyping import Array, Float64
 from numpy.typing import ArrayLike
 
 from cpomdp._validation import validate_covariance
+from cpomdp.observation import ObservationModel
 
 __all__ = ["Belief", "LinearGaussianModel"]
 
@@ -126,6 +127,7 @@ class LinearGaussianModel:
     sensor_noise: Float64[Array, "m m"]
     prior: Belief
     control: Float64[Array, "n p"] | None
+    observation: ObservationModel | None
 
     def __init__(
         self,
@@ -135,6 +137,7 @@ class LinearGaussianModel:
         sensor_noise: ArrayLike,
         prior: Belief,
         control: ArrayLike | None = None,
+        observation: ObservationModel | None = None,
     ) -> None:
         object.__setattr__(self, "dynamics", jnp.asarray(dynamics, dtype=float))
         object.__setattr__(self, "sensor_model", jnp.asarray(sensor_model, dtype=float))
@@ -148,6 +151,8 @@ class LinearGaussianModel:
             "control",
             None if control is None else jnp.asarray(control, dtype=float),
         )
+        object.__setattr__(self, "observation", observation)
+
         self._validate()
 
     def _validate(self) -> None:
@@ -190,6 +195,13 @@ class LinearGaussianModel:
             raise ValueError(
                 f"control must have {n} rows to match the {n}-D state, "
                 f"got shape {self.control.shape}"
+            )
+        if self.observation is not None and not isinstance(
+            self.observation, ObservationModel
+        ):
+            raise TypeError(
+                f"observation must be an ObservationModel, "
+                f"got {type(self.observation).__name__}"
             )
 
         # prior is a Belief over the same n-D state.
@@ -243,11 +255,13 @@ class LinearGaussianModel:
 
     def tree_flatten(
         self,
-    ) -> tuple[tuple[Array | Belief | None, ...], None]:
+    ) -> tuple[tuple[Array | Belief | ObservationModel | None, ...], None]:
         """Leaves for JAX: every matrix plus the ``prior`` belief, no static aux.
 
-        ``control`` is included as a (possibly ``None``) leaf; an uncontrolled
-        model contributes no control leaf and the ``None`` is restored on rebuild.
+        ``control`` and ``observation`` are included as (possibly ``None``)
+        children; an uncontrolled or fixed-sensor model contributes no leaf there
+        and the ``None`` is restored on rebuild. A non-``None`` ``observation`` is
+        itself a pytree and recurses into its own leaves.
         """
         children = (
             self.dynamics,
@@ -256,12 +270,15 @@ class LinearGaussianModel:
             self.sensor_noise,
             self.prior,
             self.control,
+            self.observation,
         )
         return children, None
 
     @classmethod
     def tree_unflatten(
-        cls, aux_data: None, children: tuple[Array | Belief | None, ...]
+        cls,
+        aux_data: None,
+        children: tuple[Array | Belief | ObservationModel | None, ...],
     ) -> "LinearGaussianModel":
         """Rebuild from leaves without validating — the leaves may be tracers."""
         obj = object.__new__(cls)
@@ -272,6 +289,7 @@ class LinearGaussianModel:
             "sensor_noise",
             "prior",
             "control",
+            "observation",
         )
         for name, value in zip(fields, children, strict=True):
             object.__setattr__(obj, name, value)
