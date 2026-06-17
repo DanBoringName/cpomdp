@@ -7,21 +7,9 @@ import jax.numpy as jnp
 from jaxtyping import Array, Float64
 from numpy.typing import ArrayLike
 
+from cpomdp._validation import validate_covariance
+
 __all__ = ["Belief", "LinearGaussianModel"]
-
-
-def _validate_covariance(cov: Float64[Array, "n n"], name: str) -> None:
-    """Square (2-D, n x n) + symmetric check.
-
-    Shared by Belief.cov, dynamics_noise and sensor_noise — all three are
-    covariance matrices with the same invariants. Positive-semi-definiteness is
-    deliberately NOT checked here: it's enforced at the trust boundary (user
-    input), not on every construction. See DECISIONS.md ADR-002.
-    """
-    if cov.ndim != 2 or cov.shape[0] != cov.shape[1]:
-        raise ValueError(f"{name} must be a square 2-D matrix, got shape {cov.shape}")
-    if not jnp.allclose(cov, cov.T):
-        raise ValueError(f"{name} must be symmetric.")
 
 
 @jax.tree_util.register_pytree_node_class
@@ -63,7 +51,7 @@ class Belief:
             raise ValueError(
                 f"belief mean must be a 1-D vector, got shape {self.mean.shape}"
             )
-        _validate_covariance(self.cov, "belief covariance")
+        validate_covariance(self.cov, "belief covariance")
         n = self.mean.shape[0]
         if self.cov.shape != (n, n):
             raise ValueError(
@@ -180,7 +168,7 @@ class LinearGaussianModel:
         m = self.n_observations
 
         # dynamics_noise: covariance of the dynamics noise, (n, n), symmetric.
-        _validate_covariance(self.dynamics_noise, "dynamics_noise")
+        validate_covariance(self.dynamics_noise, "dynamics_noise")
         if self.dynamics_noise.shape != (n, n):
             raise ValueError(
                 f"dynamics_noise must be {n}x{n} to match the {n}-D state, "
@@ -188,7 +176,7 @@ class LinearGaussianModel:
             )
 
         # sensor_noise: covariance of the sensor noise, (m, m), symmetric.
-        _validate_covariance(self.sensor_noise, "sensor_noise")
+        validate_covariance(self.sensor_noise, "sensor_noise")
         if self.sensor_noise.shape != (m, m):
             raise ValueError(
                 f"sensor_noise must be {m}x{m} to match the {m}-D observation, "

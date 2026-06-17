@@ -12,7 +12,7 @@ import jax.numpy as jnp
 from jaxtyping import Array, Float64
 from numpy.typing import ArrayLike
 
-from cpomdp.types import _validate_covariance
+from cpomdp._validation import validate_covariance
 
 __all__ = ["FixedSensor", "ObservationModel"]
 
@@ -54,7 +54,7 @@ class FixedSensor:
     sensor_noise: Float64[Array, "m m"]  # R
     is_fixed = True
 
-    def __init__(self, sensor_model: ArrayLike, sensor_noise: ArrayLike):
+    def __init__(self, sensor_model: ArrayLike, sensor_noise: ArrayLike) -> None:
         object.__setattr__(self, "sensor_model", jnp.asarray(sensor_model, dtype=float))
         object.__setattr__(self, "sensor_noise", jnp.asarray(sensor_noise, dtype=float))
         self._validate()
@@ -65,13 +65,13 @@ class FixedSensor:
         """Return the stored ``(C, R)`` unchanged — the same for every ``x``."""
         return self.sensor_model, self.sensor_noise
 
-    def _validate(self):
+    def _validate(self) -> None:
         if self.sensor_model.ndim != 2:
             raise ValueError(
                 f"sensor_model must be a 2-D (m x n) matrix, "
                 f"got shape {self.sensor_model.shape}"
             )
-        _validate_covariance(self.sensor_noise, "sensor_noise")
+        validate_covariance(self.sensor_noise, "sensor_noise")
         m = self.sensor_model.shape[0]
         if self.sensor_noise.shape != (m, m):
             raise ValueError(
