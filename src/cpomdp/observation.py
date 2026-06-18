@@ -153,19 +153,19 @@ class CallableSensor:
     """
 
     sensor_model: Float64[Array, "m n"]  # C (constant) — leaf
-    params: PyTree  # grad-able sensor parameters — leaf
     noise_fn: Callable[[Float64[Array, "n"], PyTree], Float64[Array, "m m"]]  # aux
+    noise_params: PyTree  # grad-able sensor parameters — leaf
     is_fixed = False
 
     def __init__(
         self,
         sensor_model: ArrayLike,
         noise_fn: Callable[[Float64[Array, "n"], PyTree], Float64[Array, "m m"]],
-        params: PyTree,
+        noise_params: PyTree,
     ) -> None:
         object.__setattr__(self, "sensor_model", jnp.asarray(sensor_model, dtype=float))
         object.__setattr__(self, "noise_fn", noise_fn)
-        object.__setattr__(self, "params", params)
+        object.__setattr__(self, "noise_params", noise_params)
         self._validate()
 
     def linearize(
@@ -173,30 +173,30 @@ class CallableSensor:
     ) -> tuple[Float64[Array, "m n"], Float64[Array, "m m"]]:
         """Local ``(C, R(x))`` — constant ``C``, state-dependent noise."""
         x = jnp.asarray(x, dtype=float)
-        return self.sensor_model, self.noise_fn(x, self.params)
+        return self.sensor_model, self.noise_fn(x, self.noise_params)
 
     def gaussianize(
         self, x: ArrayLike, sigma: Float64[Array, "n n"]
     ) -> tuple[Float64[Array, "m"], Float64[Array, "m m"], Float64[Array, "m m"]]:
         """Linear ingredients ``(C·x, C·Σ·Cᵀ + R(x), R(x))`` (mean-exact, R plug-in)."""
         x = jnp.asarray(x, dtype=float)
-        r = self.noise_fn(x, self.params)
+        r = self.noise_fn(x, self.noise_params)
         o_pred, pred_obs_cov = _linear_gaussianize(self.sensor_model, r, x, sigma)
         return o_pred, pred_obs_cov, r
 
     def tree_flatten(
         self,
     ) -> tuple[tuple[Float64[Array, "m n"], PyTree], Callable]:
-        """Children (traced): ``(sensor_model, params)``; aux (static): ``noise_fn``."""
-        return (self.sensor_model, self.params), self.noise_fn
+        """Children (traced): ``(sensor_model, noise_params)``; aux: ``noise_fn``."""
+        return (self.sensor_model, self.noise_params), self.noise_fn
 
     @classmethod
     def tree_unflatten(cls, aux_data: Callable, children: tuple) -> "CallableSensor":
         """Rebuild without re-validating — leaves may be tracers."""
-        sensor_model, params = children
+        sensor_model, noise_params = children
         obj = object.__new__(cls)
         object.__setattr__(obj, "sensor_model", sensor_model)
-        object.__setattr__(obj, "params", params)
+        object.__setattr__(obj, "noise_params", noise_params)
         object.__setattr__(obj, "noise_fn", aux_data)
         return obj
 
@@ -208,7 +208,7 @@ class CallableSensor:
             )
         m, n = self.sensor_model.shape
         # Probe noise_fn once, at the trust boundary, to catch shape bugs early.
-        r0 = jnp.asarray(self.noise_fn(jnp.zeros(n), self.params))
+        r0 = jnp.asarray(self.noise_fn(jnp.zeros(n), self.noise_params))
         if r0.shape != (m, m):
             raise ValueError(
                 f"noise_fn(x, params) must return an (m, m)=({m}, {m}) covariance, "

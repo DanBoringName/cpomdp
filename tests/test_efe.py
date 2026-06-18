@@ -15,6 +15,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from cpomdp.dynamics import CallableProcessNoise
 from cpomdp.efe import expected_free_energy
 from cpomdp.observation import CallableSensor, FixedSensor
 from cpomdp.selection import Preference
@@ -181,7 +182,7 @@ def _callable_model():
     sensor = CallableSensor(
         sensor_model=[[1.0, 0.0]],
         noise_fn=_state_noise,
-        params={"base": jnp.array(0.2), "slope": jnp.array(0.5)},
+        noise_params={"base": jnp.array(0.2), "slope": jnp.array(0.5)},
     )
     return _model(observation=sensor)
 
@@ -251,7 +252,7 @@ def _ramp_model():
     sensor = CallableSensor(
         sensor_model=[[1.0]],
         noise_fn=_ramp_noise,
-        params={"base": jnp.array(0.5), "rate": jnp.array(0.4)},
+        noise_params={"base": jnp.array(0.5), "rate": jnp.array(0.4)},
     )
     return LinearGaussianModel(
         dynamics=[[1.0]],
@@ -352,3 +353,166 @@ class TestFormProof:
             c["h_qo"],
             atol=1e-9,  # gap == H[Q(o)]
         )
+
+
+# --- Phase 2d: internal process noise Q(μ⁺) breaks the collapse FROM THE INSIDE,
+# with the observation noise R held FIXED (RFC-001 Section 8: the binding constraint
+# lives in internal processing, not the sensor). process_noise REPLACES the fixed
+# dynamics_noise matrix when set (mirrors observation). Q is evaluated at μ⁺.
+def _q_well(x, params):
+    """Internal process noise Q(x), low near 0, growing with position². Module-level."""
+    return jnp.array([[params["base"] + params["slope"] * x[0] ** 2]])
+
+
+def _internal_q_model():
+    pn = CallableProcessNoise(
+        q_fn=_q_well, q_params={"base": jnp.array(0.05), "slope": jnp.array(0.4)}
+    )
+    return LinearGaussianModel(
+        dynamics=[[1.0]],
+        sensor_model=[[1.0]],
+        dynamics_noise=[[0.1]],
+        sensor_noise=[[0.3]],  # R is FIXED (observation=None)
+        prior=Belief(mean=[0.0], cov=[[0.2]]),
+        control=[[1.0]],
+        process_noise=pn,
+    )
+
+
+_INTERNAL_BELIEF = Belief(mean=[0.0], cov=[[0.2]])
+_INTERNAL_PREF = Preference(goal=[0.0], precision=[[1.0]])
+
+
+class TestInternalProcessNoise:
+    def test_epistemic_reenters_via_internal_Q_with_R_fixed(self):
+        # The internal dual of 2a: R is constant, yet epistemic varies across actions
+        # because Q(μ⁺) — and so Σ⁺ and S — depend on the action.
+        model = _internal_q_model()
+        actions = jnp.array([[-1.0], [0.0], [0.5], [2.0]])
+        epis = jnp.array(
+            [
+                expected_free_energy(model, _INTERNAL_BELIEF, a, _INTERNAL_PREF)[1][
+                    "epistemic"
+                ]
+                for a in actions
+            ]
+        )
+        assert float(jnp.max(epis) - jnp.min(epis)) > 1e-6
+
+    def test_Q_evaluated_at_mu_pred_not_mu(self):
+        # REQUIRED guard: Q must be evaluated at μ⁺ = Aμ + Ba (action-dependent), not
+        # at μ. Cross-check the kernel epistemic against BOTH numpy conventions.
+        model = _internal_q_model()
+        action = jnp.array([1.3])
+        epi = float(
+            expected_free_energy(model, _INTERNAL_BELIEF, action, _INTERNAL_PREF)[1][
+                "epistemic"
+            ]
+        )
+        a_mat, b_mat = np.array([[1.0]]), np.array([[1.0]])
+        c_mat, r_mat = np.array([[1.0]]), np.array([[0.3]])
+        mu, sigma, a = np.array([0.0]), np.array([[0.2]]), np.array([1.3])
+        mu_pred = a_mat @ mu + b_mat @ a
+        params = {"base": 0.05, "slope": 0.4}
+
+        def epi_with(q):
+            sp = a_mat @ sigma @ a_mat.T + np.asarray(q)
+            s = c_mat @ sp @ c_mat.T + r_mat
+            return 0.5 * (np.linalg.slogdet(s)[1] - np.linalg.slogdet(r_mat)[1])
+
+        np.testing.assert_allclose(epi, epi_with(_q_well(mu_pred, params)), atol=1e-9)
+        assert abs(epi - epi_with(_q_well(mu, params))) > 1e-3  # NOT Q(μ)
+
+    def test_fixed_path_unchanged_when_process_noise_none(self):
+        # process_noise=None must give a byte-identical Σ⁺/G to the matrix path.
+        base = LinearGaussianModel(
+            dynamics=[[1.0]],
+            sensor_model=[[1.0]],
+            dynamics_noise=[[0.1]],
+            sensor_noise=[[0.3]],
+            prior=Belief(mean=[0.0], cov=[[0.2]]),
+            control=[[1.0]],
+        )
+        action = jnp.array([0.7])
+        g_ref = _numpy_efe(
+            base,
+            _INTERNAL_BELIEF,
+            action,
+            _INTERNAL_PREF.goal,
+            _INTERNAL_PREF.precision,
+        )[0]
+        g_kernel = expected_free_energy(base, _INTERNAL_BELIEF, action, _INTERNAL_PREF)[
+            0
+        ]
+        np.testing.assert_allclose(g_kernel, g_ref, atol=1e-10)
+
+    def test_grad_wrt_Q_params(self):
+        action = jnp.array([0.6])
+
+        def efe_of_params(params):
+            pn = CallableProcessNoise(_q_well, params)
+            model = LinearGaussianModel(
+                dynamics=[[1.0]],
+                sensor_model=[[1.0]],
+                dynamics_noise=[[0.1]],
+                sensor_noise=[[0.3]],
+                prior=Belief(mean=[0.0], cov=[[0.2]]),
+                control=[[1.0]],
+                process_noise=pn,
+            )
+            return expected_free_energy(
+                model, _INTERNAL_BELIEF, action, _INTERNAL_PREF
+            )[0]
+
+        grads = jax.tree_util.tree_leaves(
+            jax.grad(efe_of_params)({"base": jnp.array(0.05), "slope": jnp.array(0.4)})
+        )
+        assert all(bool(jnp.all(jnp.isfinite(g))) for g in grads)
+
+
+# The clean straddled-S flip — R FIXED, S varied via Q(μ⁺), so the full form picks
+# S=1/Λ while the forbidden mix picks S=2/Λ (opposite argmins). This is the regime
+# where the flip's math is honest (R does not co-vary); see the 2b deviation note.
+def _q_ramp(x, params):
+    """Asymmetric Q(x) = base + slope·x[0] so S straddles 1/Λ and 2/Λ across ±a."""
+    return jnp.array([[params["base"] + params["slope"] * x[0]]])
+
+
+def _flip_model():
+    pn = CallableProcessNoise(
+        _q_ramp, {"base": jnp.array(1.2), "slope": jnp.array(-0.5)}
+    )
+    return LinearGaussianModel(
+        dynamics=[[1.0]],
+        sensor_model=[[1.0]],
+        dynamics_noise=[[0.1]],
+        sensor_noise=[[0.2]],
+        prior=Belief(mean=[0.0], cov=[[0.1]]),
+        control=[[1.0]],
+        process_noise=pn,
+    )
+
+
+class TestStraddledSFlip:
+    def test_full_picks_low_S_forbidden_picks_high_S(self):
+        model = _flip_model()
+        belief = Belief(mean=[0.0], cov=[[0.1]])
+        pref = Preference(goal=[0.0], precision=[[1.0]])
+        a_low, a_high = jnp.array([1.0]), jnp.array([-1.0])  # S≈1/Λ, S≈2/Λ; tied mean
+
+        def s_of(action):
+            a = np.asarray(action, dtype=float)
+            mu_pred = np.array([[1.0]]) @ np.array([0.0]) + np.array([[1.0]]) @ a
+            q = np.asarray(model.process_noise.noise_at(mu_pred))
+            sp = np.array([[1.0]]) @ np.array([[0.1]]) @ np.array([[1.0]]).T + q
+            s = np.array([[1.0]]) @ sp @ np.array([[1.0]]).T + np.array([[0.2]])
+            return float(s[0, 0])
+
+        def forbidden_g(action):
+            gf = float(expected_free_energy(model, belief, action, pref)[0])
+            return gf - 0.5 * np.log(2 * np.pi * np.e * s_of(action))  # gf − H[Q(o)]
+
+        g_low = float(expected_free_energy(model, belief, a_low, pref)[0])
+        g_high = float(expected_free_energy(model, belief, a_high, pref)[0])
+        assert g_low < g_high  # full (kernel) prefers S=1/Λ
+        assert forbidden_g(a_high) < forbidden_g(a_low)  # forbidden flips to S=2/Λ

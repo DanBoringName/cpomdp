@@ -146,7 +146,13 @@ def expected_free_energy(
     # NB the action moves only the mean — Σ⁺ is action-independent, which is the
     # whole reason the epistemic term collapses under a fixed sensor (ADR-003).
     mu_pred = model.A @ mu + control @ action
-    sigma_pred = model.A @ sigma @ model.A.T + model.Q
+    process_q = (
+        model.Q
+        if model.process_noise is None
+        else model.process_noise.noise_at(mu_pred)
+    )
+
+    sigma_pred = model.A @ sigma @ model.A.T + process_q  # Σ⁺ = AΣAᵀ + process_q
 
     # --- sense: predicted-observation moments (o⁺, S) + conditional noise R at μ⁺ ---
     # The sensor owns its moment-matching (D1): the kernel never reconstructs o⁺/S.

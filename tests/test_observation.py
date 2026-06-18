@@ -81,7 +81,7 @@ def _well_params():
 
 def _callable_sensor():
     return CallableSensor(
-        sensor_model=[[1.0]], noise_fn=_well_noise, params=_well_params()
+        sensor_model=[[1.0]], noise_fn=_well_noise, noise_params=_well_params()
     )
 
 
@@ -119,7 +119,7 @@ class TestCallableSensor:
         # params is a pytree LEAF, so grad of R(x) w.r.t. params is finite.
         def scalar(params):
             s = CallableSensor(
-                sensor_model=[[1.0]], noise_fn=_well_noise, params=params
+                sensor_model=[[1.0]], noise_fn=_well_noise, noise_params=params
             )
             _, r = s.linearize(jnp.array([0.7]))
             return jnp.trace(r)
@@ -133,4 +133,4 @@ class TestCallableSensor:
             return jnp.array([1.0])  # 1-D, not (m, m)
 
         with pytest.raises(ValueError, match="noise_fn"):
-            CallableSensor(sensor_model=[[1.0]], noise_fn=bad_noise, params={})
+            CallableSensor(sensor_model=[[1.0]], noise_fn=bad_noise, noise_params={})

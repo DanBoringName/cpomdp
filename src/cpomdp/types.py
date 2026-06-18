@@ -8,6 +8,7 @@ from jaxtyping import Array, Float64
 from numpy.typing import ArrayLike
 
 from cpomdp._validation import validate_covariance
+from cpomdp.dynamics import DynamicsNoise
 from cpomdp.observation import ObservationModel
 
 __all__ = ["Belief", "LinearGaussianModel"]
@@ -128,6 +129,7 @@ class LinearGaussianModel:
     prior: Belief
     control: Float64[Array, "n p"] | None
     observation: ObservationModel | None
+    process_noise: DynamicsNoise | None
 
     def __init__(
         self,
@@ -138,6 +140,7 @@ class LinearGaussianModel:
         prior: Belief,
         control: ArrayLike | None = None,
         observation: ObservationModel | None = None,
+        process_noise: DynamicsNoise | None = None,
     ) -> None:
         object.__setattr__(self, "dynamics", jnp.asarray(dynamics, dtype=float))
         object.__setattr__(self, "sensor_model", jnp.asarray(sensor_model, dtype=float))
@@ -152,7 +155,7 @@ class LinearGaussianModel:
             None if control is None else jnp.asarray(control, dtype=float),
         )
         object.__setattr__(self, "observation", observation)
-
+        object.__setattr__(self, "process_noise", process_noise)
         self._validate()
 
     def _validate(self) -> None:
@@ -203,6 +206,22 @@ class LinearGaussianModel:
                 f"observation must be an ObservationModel, "
                 f"got {type(self.observation).__name__}"
             )
+
+        # process_noise (optional): state-dependent Q(x). CallableProcessNoise can't
+        # check its own shape (no n), so probe it here, where n is known.
+        if self.process_noise is not None:
+            if not isinstance(self.process_noise, DynamicsNoise):
+                raise TypeError(
+                    f"process_noise must be a DynamicsNoise, "
+                    f"got {type(self.process_noise).__name__}"
+                )
+            q_probe = jnp.asarray(self.process_noise.noise_at(jnp.zeros(n)))
+            validate_covariance(q_probe, "process_noise.noise_at(x)")
+            if q_probe.shape != (n, n):
+                raise ValueError(
+                    f"process_noise.noise_at(x) must return an {n}x{n} covariance "
+                    f"to match the {n}-D state, got shape {q_probe.shape}"
+                )
 
         # prior is a Belief over the same n-D state.
         if not isinstance(self.prior, Belief):
@@ -255,13 +274,16 @@ class LinearGaussianModel:
 
     def tree_flatten(
         self,
-    ) -> tuple[tuple[Array | Belief | ObservationModel | None, ...], None]:
+    ) -> tuple[
+        tuple[Array | Belief | ObservationModel | DynamicsNoise | None, ...], None
+    ]:
         """Leaves for JAX: every matrix plus the ``prior`` belief, no static aux.
 
-        ``control`` and ``observation`` are included as (possibly ``None``)
-        children; an uncontrolled or fixed-sensor model contributes no leaf there
-        and the ``None`` is restored on rebuild. A non-``None`` ``observation`` is
-        itself a pytree and recurses into its own leaves.
+        ``control``, ``observation`` and ``process_noise`` are included as (possibly
+        ``None``) children; an uncontrolled / fixed-sensor / fixed-Q model contributes
+        no leaf there and the ``None`` is restored on rebuild. A non-``None``
+        ``observation``/``process_noise`` is itself a pytree and recurses into its
+        own leaves.
         """
         children = (
             self.dynamics,
@@ -271,6 +293,7 @@ class LinearGaussianModel:
             self.prior,
             self.control,
             self.observation,
+            self.process_noise,
         )
         return children, None
 
@@ -278,7 +301,7 @@ class LinearGaussianModel:
     def tree_unflatten(
         cls,
         aux_data: None,
-        children: tuple[Array | Belief | ObservationModel | None, ...],
+        children: tuple[Array | Belief | ObservationModel | DynamicsNoise | None, ...],
     ) -> "LinearGaussianModel":
         """Rebuild from leaves without validating — the leaves may be tracers."""
         obj = object.__new__(cls)
@@ -290,6 +313,7 @@ class LinearGaussianModel:
             "prior",
             "control",
             "observation",
+            "process_noise",
         )
         for name, value in zip(fields, children, strict=True):
             object.__setattr__(obj, name, value)
