@@ -2,7 +2,7 @@
 
 The internal-noise dual of ``observation``. ``DynamicsNoise`` is the seam the EFE
 predict step asks for the process-noise covariance at a state; ``CallableProcessNoise``
-is the state-dependent case. Per RFC-001 §8 this is where the *binding* precision
+is the state-dependent case. Per RFC-001 chapter 8 this is where the *binding* precision
 constraint lives for the chemotaxis fidelity (internal processing, not the sensor).
 The kernel evaluates it at ``μ⁺`` — the diffusion of the arrived-at state.
 """

@@ -4,6 +4,75 @@ Decisions are append-only. Each records the choice, the evidence, and the date.
 
 ---
 
+## ADR-006 — v0.3 Phase 2: **state-dependent sensing and internal process noise** (the collapse breaks two ways)
+
+**Date:** 2026-06-18
+**Status:** Accepted
+**Phase:** v0.3, Phase 2
+**Extends:** ADR-003 (its fixed-sensor collapse now breaks), ADR-005 (the EFE kernel these seams feed)
+
+### Decision
+
+The EFE epistemic term re-enters action selection. Three resolutions make that
+happen, and the collapse of ADR-003 now breaks from two independent directions.
+
+1. **D0 — noise-first sensor.** `CallableSensor` carries state-dependent observation
+   noise `R(x)` with a *constant* `C`. The mean stays linear, so `o⁺ = C·μ⁺` is
+   exact and the kernel's mean code is untouched; the action-dependence lives in
+   `R(μ⁺)`. The nonlinear-mean case (a curved `g(x)`, needing a 2nd-order moment
+   match) is a separate, riskier class — deferred to Phase 2.5 (see below).
+
+2. **D1 — the `gaussianize` seam.** Each `ObservationModel` owns its
+   predicted-observation moment match: `gaussianize(x, Σ) → (o⁺, S, R)`. The kernel
+   calls that, never reconstructing `o⁺`/`S` itself, so a fixed sensor
+   (`observation is None`) stays a bare matvec on the hot path while a future
+   nonlinear sensor does 2nd-order work without the kernel being reopened
+   (Open-Closed). The return is a *triple*, not `(o⁺, S)`: the epistemic term needs
+   `R` for `½ln det R`, and bundling it is one sensor call instead of two (and
+   avoids recomputing a Jacobian for the nonlinear case).
+
+3. **D2 — internal process noise at `μ⁺`.** An optional `process_noise: DynamicsNoise`
+   on the model supplies `Q(x)`; when present it replaces the fixed `dynamics_noise`
+   matrix and is evaluated at `μ⁺`. The honest reason for `μ⁺` (not `μ`): `Q` is the
+   diffusion of the *arrived-at* state, so end-of-interval discretization evaluates
+   it at the end of the step. Action-dependence falls out of that, it is not the
+   motive. This is the internal-noise route to epistemic value (RFC-001 chapter 8):
+   the binding precision constraint can live in internal processing, not only the
+   sensor — the picture the 2025 *E. coli* work insists on.
+
+So `Σ⁺` and the per-observation information gain depend on the action through either
+`R(μ⁺)` (the input route) or `Q(μ⁺)` (the internal route). The epistemic term
+`½(ln det S − ln det R) = I(state; obs)` is `İ_silicon`, the bits resolved per
+observation — but it is the *perceptual ceiling* (signal→belief), not Mattingly's
+signal→action rate (RFC-001 chapter 8).
+
+### Deferred to Phase 2.5 (not built)
+
+`NonlinearSensor` + 2nd-order Gaussianization — the nonlinear-mean case and the Kouw
+curvature-avoidance demonstrator. The `gaussianize` seam lands *linear* in Phase 2,
+so 2.5 is a pure additive class with no kernel edit. The corrected full-2nd-order
+formula (mean **and** covariance correction together — taking one without the other
+is a real bug) and its dual-oracle definition-of-done are pinned in the build plan
+so they cannot be re-forgotten.
+
+### Validation
+
+- **Form-proof (RFC-004, Phase 2b):** the kernel is the *full* form, not mean-only
+  (the `½tr(ΛS)` variance penalty is present), not the forbidden mix (its `G`
+  differs by exactly `H[Q(o)]`). A Monte-Carlo cross-entropy estimate confirms the
+  pragmatic *formula*, independent of the analytic NumPy oracle that confirms the
+  *implementation*.
+- **The clean straddled-S flip** (full picks `S=1/Λ`, the forbidden mix picks
+  `S=2/Λ`) lives in the internal-`Q` regime (2d), where `R` is held fixed so the
+  flip's math is honest — in the `R(x)` regime `S` and `R` co-vary and the clean
+  flip does not hold.
+- **Hot path:** `observation=None` and `process_noise=None` produce byte-identical
+  `Σ⁺`/`G` to Phase 1A (tested), so the fixed-sensor fast path is untouched.
+- 9 new tests; full suite 106 green. Figures: `docs/assets/efe_collapse.png` (the
+  input route) and `docs/assets/internal_noise.png` (the internal route).
+
+---
+
 ## ADR-005 — v0.3 EFE decomposition: **observation-space cross-entropy pragmatic − state info-gain epistemic** (provisional / speculative)
 
 **Date:** 2026-06-17

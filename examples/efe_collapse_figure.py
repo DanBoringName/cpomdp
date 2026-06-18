@@ -115,7 +115,7 @@ def main():
     well = CallableSensor(
         sensor_model=[[1.0]],
         noise_fn=_precision_well_noise,
-        params={"beacon": BEACON, "width": 0.6, "r_lo": 0.02, "r_hi": 0.8},
+        noise_params={"beacon": BEACON, "width": 0.6, "r_lo": 0.02, "r_hi": 0.8},
     )
     prag_s, epi_s, g_s = _sweep(_model(observation=well))
 

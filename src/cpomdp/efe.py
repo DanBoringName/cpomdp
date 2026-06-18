@@ -13,8 +13,8 @@ the pragmatic term in particular has at least three forms in circulation, and
 sources disagree on signs and on whether risk is a cross-entropy or a KL. I have
 **chosen one route deliberately**, and it is, frankly, somewhat speculative: it
 sits in an area that is well-trodden but inconsistently written down, and well
-outside my core expertise. We are committing to it *and* committing to
-proving (or honestly bounding) that it is the right one — that proof is the job of
+outside my core expertise. I am committing to it *and* to proving (or honestly
+bounding) that it is the right one — that proof is the job of
 rfcs/004 and the validation tests it will spawn. Until then, treat the choices
 flagged ``# FRAGILE(lit):`` below as load-bearing assumptions that may move as the
 literature is pinned down. Over-commented on purpose: this file is the shared
@@ -57,8 +57,9 @@ THE FRAGILE CHOICES  (grep: ``FRAGILE(lit)``)
    *forbidden mix* (KL-risk pragmatic − info-gain) is a double-counting BUG, not an
    option. rfcs/004 holds the discriminating tests (they need a state-dep sensor).
 3. Epistemic = STATE information gain (salience), not parameter information gain
-   (novelty). We compute I(state; obs) only; parameter/novelty EFE is out of scope.
-4. We linearize the sensor at μ⁺ (the predicted mean). For a fixed sensor this is
+   (novelty). Only the state info-gain I(state; obs) is computed; parameter/novelty
+   EFE is out of scope.
+4. The sensor is linearized at μ⁺ (the predicted mean). For a fixed sensor this is
    irrelevant; for a nonlinear sensor *where* you linearize matters (Phase 2).
 5. Sign convention: G is MINIMISED; ``pragmatic`` is a cost (lower better) and
    ``epistemic`` is a value (higher better), so G = pragmatic − epistemic.
