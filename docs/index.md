@@ -15,7 +15,7 @@ pip install cpomdp
 Or the latest from source:
 
 ```bash
-pip install git+https://github.com/DanBoringName/cpomdp
+pip install git+https://github.com/inferogenesis/cpomdp
 ```
 
 There's also an optional RxInfer (Julia) backend the test suite leans on as a correctness oracle. You almost certainly don't need it, but if you want it:

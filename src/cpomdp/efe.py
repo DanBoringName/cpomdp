@@ -92,11 +92,18 @@ THE DATA FLOW  (top → bottom: what goes in → what comes out)
 
 """
 
+from typing import TYPE_CHECKING
+
 import jax.numpy as jnp
 from jaxtyping import Array, Float64
 
-from cpomdp.selection import Preference
 from cpomdp.types import Belief, LinearGaussianModel
+
+if TYPE_CHECKING:
+    # Type-only import: the kernel reads preference.goal/.precision by duck-typing,
+    # so it does NOT depend on selection at runtime. This keeps the dependency
+    # one-way (selectors -> kernel) and lets EFESelector import this module.
+    from cpomdp.selection import Preference
 
 __all__ = ["expected_free_energy"]
 
@@ -105,7 +112,7 @@ def expected_free_energy(
     model: LinearGaussianModel,
     belief: Belief,
     action: Float64[Array, "p"],
-    preference: Preference,
+    preference: "Preference",
 ) -> tuple[Float64[Array, ""], dict[str, Float64[Array, ""]]]:
     """Expected Free Energy of taking ``action`` from ``belief``, and its split.
 

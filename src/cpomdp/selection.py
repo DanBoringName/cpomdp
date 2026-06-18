@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
+import jax
 import jax.numpy as jnp
 from jaxtyping import Array, Float64
 from numpy.typing import ArrayLike
@@ -14,9 +15,10 @@ from cpomdp.types import Belief
 __all__ = ["ActionSelector", "LQRSelector", "Preference"]
 
 
+@jax.tree_util.register_pytree_node_class
 @dataclass(frozen=True, init=False)
 class Preference:
-    """What the agent wants: a goal state and how sharply it is preferred.
+    """What the agent wants: a goal and how sharply it is preferred.
 
     Single-mode for v0.3 — one Gaussian preference. The disjunctive *mixture*
     case (visit one of several goals) is RFC-002, deferred; this type is the seam
@@ -51,6 +53,19 @@ class Preference:
                 f"precision must be {n}x{n} to match the {n}-D goal, "
                 f"got shape {self.precision.shape}"
             )
+
+    def tree_flatten(self):
+        """Leaves: (goal, precision); no static aux. Lets jit/vmap take a Preference."""
+        return (self.goal, self.precision), None
+
+    @classmethod
+    def tree_unflatten(cls, aux_data, children):
+        """Rebuild without re-validating — the leaves may be tracers."""
+        goal, precision = children
+        obj = object.__new__(cls)
+        object.__setattr__(obj, "goal", goal)
+        object.__setattr__(obj, "precision", precision)
+        return obj
 
 
 @runtime_checkable
