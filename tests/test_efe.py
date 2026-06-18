@@ -16,6 +16,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from cpomdp.efe import expected_free_energy
+from cpomdp.observation import CallableSensor, FixedSensor
 from cpomdp.selection import Preference
 from cpomdp.types import Belief, LinearGaussianModel
 
@@ -166,3 +167,188 @@ class TestTransforms:
         )
         assert grad.shape == (1,)
         assert bool(jnp.all(jnp.isfinite(grad)))
+
+
+# --- Phase 2a: state-dependent sensing breaks the collapse, through the kernel ---
+def _state_noise(x, params):
+    """R(x) grows with velocity^2. Depends on x[1] (velocity) — the component the
+    action moves in this double-integrator — so R(μ⁺) is genuinely action-dependent
+    (R on x[0]/position would be flat one-step, since the action doesn't move it)."""
+    return jnp.array([[params["base"] + params["slope"] * x[1] ** 2]])
+
+
+def _callable_model():
+    sensor = CallableSensor(
+        sensor_model=[[1.0, 0.0]],
+        noise_fn=_state_noise,
+        params={"base": jnp.array(0.2), "slope": jnp.array(0.5)},
+    )
+    return _model(observation=sensor)
+
+
+class TestCallableSensorBreaksCollapse:
+    def test_epistemic_varies_across_actions(self):
+        # The DUAL of TestCollapseUnderFixedSensor: with R(μ⁺) action-dependent, the
+        # epistemic term is no longer flat across actions — the collapse is broken.
+        model, belief, pref = _callable_model(), _belief(), _obs_preference()
+        actions = jnp.array([[-1.0], [0.0], [0.5], [2.0]])
+        epis = jnp.array(
+            [
+                expected_free_energy(model, belief, a, pref)[1]["epistemic"]
+                for a in actions
+            ]
+        )
+        assert float(jnp.max(epis) - jnp.min(epis)) > 1e-6
+
+    def test_grad_wrt_sensor_params_through_the_kernel(self):
+        belief, pref = _belief(), _obs_preference()
+        action = jnp.array([0.4])
+
+        def efe_of_params(params):
+            sensor = CallableSensor([[1.0, 0.0]], _state_noise, params)
+            return expected_free_energy(
+                _model(observation=sensor), belief, action, pref
+            )[0]
+
+        grads = jax.tree_util.tree_leaves(
+            jax.grad(efe_of_params)({"base": jnp.array(0.2), "slope": jnp.array(0.5)})
+        )
+        assert all(bool(jnp.all(jnp.isfinite(g))) for g in grads)
+
+
+class TestGaussianizeDispatch:
+    def test_none_fast_path_matches_equivalent_fixed_sensor(self):
+        # observation=None (inline fast path) and an equivalent FixedSensor (routed
+        # through gaussianize) must give a byte-identical G — the dispatch is
+        # behaviour-preserving on the linear case.
+        belief, pref = _belief(), _obs_preference()
+        action = jnp.array([0.4])
+        g_none = expected_free_energy(_model(), belief, action, pref)[0]
+        g_fixed = expected_free_energy(
+            _model(observation=FixedSensor([[1.0, 0.0]], [[0.5]])),
+            belief,
+            action,
+            pref,
+        )[0]
+        np.testing.assert_array_equal(g_none, g_fixed)
+
+
+# --- Phase 2b: RFC-004 form-proof — the kernel is the FULL form (decomposition b),
+# not mean-only, not the forbidden mix. NB the fixed-sensor collapse and the
+# NumPy-oracle test above are NON-discriminating negative controls: they pass for
+# all three forms. Discrimination needs a state-dependent sensor (here) so S(a)
+# moves. The clean argmin "straddled-S flip" (vary S while holding R FIXED) is
+# cleaner under the internal-Q regime (2d) — see TestStraddledSFlip there; in the
+# R(x) regime S and R co-vary, so here we discriminate by value + the variance
+# penalty + an independent Monte-Carlo cross-check.
+def _ramp_noise(x, params):
+    """Asymmetric R(x) = base·exp(rate·x[0]) (always > 0) so S differs across ±a."""
+    return jnp.array([[params["base"] * jnp.exp(params["rate"] * x[0])]])
+
+
+def _ramp_model():
+    # Single integrator: μ⁺ = μ + a, o⁺ = position, so a=±1 gives a TIED mean term.
+    sensor = CallableSensor(
+        sensor_model=[[1.0]],
+        noise_fn=_ramp_noise,
+        params={"base": jnp.array(0.5), "rate": jnp.array(0.4)},
+    )
+    return LinearGaussianModel(
+        dynamics=[[1.0]],
+        sensor_model=[[1.0]],
+        dynamics_noise=[[0.1]],
+        sensor_noise=[[0.5]],
+        prior=Belief(mean=[0.0], cov=[[0.4]]),
+        control=[[1.0]],
+        observation=sensor,
+    )
+
+
+_RAMP_BELIEF = Belief(mean=[0.0], cov=[[0.4]])
+_RAMP_PREF = Preference(goal=[0.0], precision=[[1.0]])
+
+
+def _form_components(model, belief, action):
+    """Recompute the three rival EFE forms in NumPy (independent of the kernel)."""
+    a = np.asarray(action, dtype=float)
+    mu_pred = (
+        np.asarray(model.dynamics) @ np.asarray(belief.mean)
+        + np.asarray(model.control) @ a
+    )
+    sigma_pred = np.asarray(model.dynamics) @ np.asarray(belief.cov) @ np.asarray(
+        model.dynamics
+    ).T + np.asarray(model.dynamics_noise)
+    c, r = model.observation.linearize(mu_pred)
+    c, r = np.asarray(c), np.asarray(r)
+    o = c @ mu_pred
+    s = c @ sigma_pred @ c.T + r
+    g, lam = np.asarray(_RAMP_PREF.goal), np.asarray(_RAMP_PREF.precision)
+    resid = o - g
+    mean_term = 0.5 * resid @ lam @ resid
+    var_term = 0.5 * np.trace(lam @ s)
+    info_gain = 0.5 * (np.linalg.slogdet(s)[1] - np.linalg.slogdet(r)[1])
+    h_qo = 0.5 * np.linalg.slogdet(2 * np.pi * np.e * s)[1]  # entropy of Q(o)
+    full_prag = mean_term + var_term
+    return {
+        "o": o,
+        "s": s,
+        "mean_term": mean_term,
+        "var_term": var_term,
+        "h_qo": h_qo,
+        "g_full": full_prag - info_gain,
+        "g_forbidden": (full_prag - info_gain) - h_qo,  # KL-risk paired with −info-gain
+    }
+
+
+class TestFormProof:
+    def test_pragmatic_carries_variance_penalty_not_mean_only(self):
+        # a=±1 tie the mean term, but the kernel's pragmatic differs — so it carries
+        # the ½tr(ΛS) term that mean-only drops.
+        model = _ramp_model()
+        a1, a2 = jnp.array([1.0]), jnp.array([-1.0])
+        c1 = _form_components(model, _RAMP_BELIEF, a1)
+        c2 = _form_components(model, _RAMP_BELIEF, a2)
+        np.testing.assert_allclose(c1["mean_term"], c2["mean_term"], atol=1e-9)  # tied
+        p1 = float(
+            expected_free_energy(model, _RAMP_BELIEF, a1, _RAMP_PREF)[1]["pragmatic"]
+        )
+        p2 = float(
+            expected_free_energy(model, _RAMP_BELIEF, a2, _RAMP_PREF)[1]["pragmatic"]
+        )
+        assert abs(p1 - p2) > 1e-3  # NOT tied -> not mean-only
+
+    def test_pragmatic_matches_monte_carlo_cross_entropy(self):
+        # MC of E_{o~N(o⁺,S)}[½(o−g)ᵀΛ(o−g)] == the kernel pragmatic (the EXPECTATION,
+        # full form), NOT the point value ½(o⁺−g)ᵀΛ(o⁺−g) (mean-only). MC proves the
+        # FORMULA; the analytic NumPy oracle (above) proves the implementation.
+        model, action = _ramp_model(), jnp.array([0.6])
+        p_kernel = float(
+            expected_free_energy(model, _RAMP_BELIEF, action, _RAMP_PREF)[1][
+                "pragmatic"
+            ]
+        )
+        c = _form_components(model, _RAMP_BELIEF, action)
+        o, s = c["o"], c["s"]
+        g, lam = np.asarray(_RAMP_PREF.goal), np.asarray(_RAMP_PREF.precision)
+        rng = np.random.default_rng(0)
+        samples = rng.multivariate_normal(o, s, size=200_000)
+        diff = samples - g
+        mc = float(np.mean(0.5 * np.einsum("ni,ij,nj->n", diff, lam, diff)))
+        np.testing.assert_allclose(p_kernel, mc, rtol=0.02)  # MC tolerance
+        assert abs(p_kernel - float(c["mean_term"])) > 1e-3  # != mean-only point value
+
+    def test_kernel_g_is_full_not_forbidden_mix(self):
+        # Kernel G == full G; the forbidden mix (KL-risk − info-gain) differs by
+        # EXACTLY H[Q(o)] — the double-counted predicted-observation entropy.
+        model, action = _ramp_model(), jnp.array([0.6])
+        g_kernel = float(
+            expected_free_energy(model, _RAMP_BELIEF, action, _RAMP_PREF)[0]
+        )
+        c = _form_components(model, _RAMP_BELIEF, action)
+        np.testing.assert_allclose(g_kernel, c["g_full"], atol=1e-9)  # kernel == full
+        assert abs(g_kernel - float(c["g_forbidden"])) > 1e-3  # != forbidden mix
+        np.testing.assert_allclose(
+            c["g_full"] - c["g_forbidden"],
+            c["h_qo"],
+            atol=1e-9,  # gap == H[Q(o)]
+        )

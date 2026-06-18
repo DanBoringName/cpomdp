@@ -12,15 +12,13 @@ for two sensors:
   and `G`'s minimum is pulled off the goal toward the information — the agent
   detours. This is why v0.3 exists.
 
-The right-hand sensor is a THROWAWAY illustration of the Phase-2 `CallableSensor`
-regime (it is not production code); it just supplies a position-dependent `R(x)` to
-`expected_free_energy` through the `ObservationModel.linearize` seam.
+The right-hand sensor is a real `CallableSensor` (Phase 2a) supplying a
+position-dependent `R(x)` to `expected_free_energy` through the `gaussianize` seam.
 
 Run: `uv run python examples/efe_collapse_figure.py`
 Output: docs/assets/efe_collapse.png
 """
 
-from dataclasses import dataclass
 from pathlib import Path
 
 import jax.numpy as jnp
@@ -28,6 +26,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from cpomdp.efe import expected_free_energy
+from cpomdp.observation import CallableSensor
 from cpomdp.selection import Preference
 from cpomdp.types import Belief, LinearGaussianModel
 
@@ -46,27 +45,18 @@ ACTIONS = jnp.linspace(-2.0, 4.0, 400)
 BEACON = 1.5  # the sensor is sharpest here — away from the goal at 0
 
 
-@dataclass(frozen=True)
-class PrecisionWell:
-    """Throwaway state-dependent sensor: R(x) small (sharp) near a beacon.
+def _precision_well_noise(x, params):
+    """R(x) for a 'precision well': dips to ``r_lo`` at the beacon, rises to ``r_hi``.
 
-    Previews the Phase-2 ``CallableSensor`` regime for this figure only — NOT
-    production. ``linearize`` returns a constant ``C`` and a position-dependent
-    ``R(x)`` that dips to ``r_lo`` at the beacon and rises to ``r_hi`` away from it.
+    Module-level (jit-safe) so it can ride in ``CallableSensor``'s static aux; all
+    tunables live in ``params``.
     """
-
-    beacon: float
-    width: float
-    r_lo: float
-    r_hi: float
-    is_fixed = False  # class attr (not a field): satisfies the ObservationModel seam
-
-    def linearize(self, x):
-        """Constant ``C``; ``R(x)`` dipping to ``r_lo`` at the beacon."""
-        pos = x[0]
-        falloff = 1.0 - jnp.exp(-((pos - self.beacon) ** 2) / (2.0 * self.width**2))
-        r = self.r_lo + (self.r_hi - self.r_lo) * falloff
-        return jnp.array([[1.0]]), jnp.array([[r]])
+    pos = x[0]
+    falloff = 1.0 - jnp.exp(
+        -((pos - params["beacon"]) ** 2) / (2.0 * params["width"] ** 2)
+    )
+    r = params["r_lo"] + (params["r_hi"] - params["r_lo"]) * falloff
+    return jnp.array([[r]])
 
 
 def _model(observation=None):
@@ -122,7 +112,11 @@ def _panel(ax, prag, epi, g, title, note):
 def main():
     """Render the two-panel collapse/detour figure to docs/assets/."""
     prag_f, epi_f, g_f = _sweep(_model())  # fixed sensor (observation=None)
-    well = PrecisionWell(beacon=BEACON, width=0.6, r_lo=0.02, r_hi=0.8)
+    well = CallableSensor(
+        sensor_model=[[1.0]],
+        noise_fn=_precision_well_noise,
+        params={"beacon": BEACON, "width": 0.6, "r_lo": 0.02, "r_hi": 0.8},
+    )
     prag_s, epi_s, g_s = _sweep(_model(observation=well))
 
     fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(12.5, 5.2), sharex=True)

@@ -67,6 +67,28 @@ NOT IMPLEMENTED (named seams): the *mean-only* pragmatic (drops ½tr(ΛS); the r
 literature alternative — an ambiguity-blind agent); parameter/novelty info gain.
 The KL-risk grouping is NOT a separate option: paired correctly (+ambiguity) it is
 this same G; paired with −info-gain it double-counts H[Q(o)] (a bug to avoid).
+
+--------------------------------------------------------------------------------
+THE DATA FLOW  (top → bottom: what goes in → what comes out)
+--------------------------------------------------------------------------------
+    IN ── model=(A,control,Q,sensor)  belief=(μ,Σ)  action=a  preference=(g,Λ)
+      │
+      ▼    GUARD      control is None?  ──►  raise ValueError
+      │
+      ▼    PREDICT    μ⁺ = A·μ + control·a     (action enters HERE only)
+      │               Σ⁺ = A·Σ·Aᵀ + Q          (action-independent)
+      │
+      ▼    SENSE      (C, R) = linearize(μ⁺)   or fixed (model.C, model.R)
+      │               o⁺ = C·μ⁺
+      │               S  = C·Σ⁺·Cᵀ + R         (predicted-obs cov; computed ONCE)
+      │
+      ├──► PRAGMATIC  ½·(o⁺−g)ᵀ·Λ·(o⁺−g) + ½·tr(Λ·S)    (cost,  lower better)
+      ├──► EPISTEMIC  ½·(ln det S − ln det R)            (value, higher better)
+      │
+      ▼    G = pragmatic − epistemic
+      │
+      ▼    OUT        return (G, {"pragmatic": …, "epistemic": …})
+
 """
 
 import jax.numpy as jnp
@@ -123,22 +145,25 @@ def expected_free_energy(
     # Mirrors the covariance predict in kalman._gain_and_posterior_cov (cov_pred);
     # NB the action moves only the mean — Σ⁺ is action-independent, which is the
     # whole reason the epistemic term collapses under a fixed sensor (ADR-003).
-    # FRAGILE(lit): nothing fragile here — this is exact Kalman prediction.
     mu_pred = model.A @ mu + control @ action
     sigma_pred = model.A @ sigma @ model.A.T + model.Q
 
-    # --- sense: local linear-Gaussian observation model at the predicted mean ---
-    # FRAGILE(lit) #4: linearize at μ⁺. Irrelevant for a fixed sensor; matters for
-    # a nonlinear sensor (Phase 2 / CallableSensor).
+    # --- sense: predicted-observation moments (o⁺, S) + conditional noise R at μ⁺ ---
+    # The sensor owns its moment-matching (D1): the kernel never reconstructs o⁺/S.
+    # FRAGILE(lit) #4: everything is evaluated at μ⁺. Irrelevant for a fixed/linear
+    # sensor; for a nonlinear sensor (Phase 2.5) *where* you linearize matters.
     if model.observation is None:
+        # FAST PATH — a bare matvec/matmul, byte-identical to Phase 1A. Kept inline
+        # (no method dispatch) so the fixed-sensor hot path stays lean.
         sensor_model, sensor_noise = model.C, model.R
+        o_pred = sensor_model @ mu_pred
+        pred_obs_cov = sensor_model @ sigma_pred @ sensor_model.T + sensor_noise
     else:
-        sensor_model, sensor_noise = model.observation.linearize(mu_pred)
-
-    o_pred = sensor_model @ mu_pred
-    # S: covariance of the predicted observation = obs-noise inflated by the
-    # state uncertainty seen through the sensor. Computed ONCE; feeds both terms.
-    pred_obs_cov = sensor_model @ sigma_pred @ sensor_model.T + sensor_noise
+        # Linear sensors return exact (C·μ⁺, C·Σ⁺·Cᵀ+R, R); NonlinearSensor (2.5)
+        # returns its 2nd-order moments. S feeds the pragmatic term, R the epistemic.
+        o_pred, pred_obs_cov, sensor_noise = model.observation.gaussianize(
+            mu_pred, sigma_pred
+        )
 
     # --- pragmatic: expected negative log-preference (cross-entropy form) ---
     # FRAGILE(lit) #1: `preference` is read in OBSERVATION space (g over o, Λ over o).
