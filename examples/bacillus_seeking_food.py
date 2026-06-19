@@ -42,7 +42,7 @@ from matplotlib.patches import Ellipse, FancyBboxPatch
 from matplotlib.transforms import Affine2D
 from PIL import Image
 
-from cpomdp import Agent, Belief, LinearGaussianModel
+from cpomdp import Agent, Belief, LinearGaussianModel, StateGoal
 
 # --- Okabe-Ito colourblind-safe palette --------------------------------------
 BG = "#FAFAFA"
@@ -122,7 +122,7 @@ def simulate(n_steps: int, dt: float, seed: int = 7):
 
     # Softer effort penalty than the identity -> a swimmer that commits to the
     # food rather than creeping, giving a trajectory with visible curvature.
-    agent = Agent(model, goal=goal, effort_penalty=np.eye(2) * 3.0)
+    agent = Agent(model, StateGoal(goal, effort=np.eye(2) * 3.0))
 
     # Frame 0 is the prior, before any observation: the wide opening ellipse.
     true_states = [true_state.copy()]

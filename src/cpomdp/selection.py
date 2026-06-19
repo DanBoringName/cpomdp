@@ -10,9 +10,17 @@ from numpy.typing import ArrayLike
 
 from cpomdp._validation import validate_covariance
 from cpomdp.control import LQRController
-from cpomdp.types import Belief
+from cpomdp.efe import expected_free_energy
+from cpomdp.types import Belief, LinearGaussianModel
 
-__all__ = ["ActionSelector", "LQRSelector", "Preference"]
+__all__ = [
+    "ActionSelector",
+    "EFESelector",
+    "LQRSelector",
+    "ObservationGoal",
+    "Preference",
+    "StateGoal",
+]
 
 
 @jax.tree_util.register_pytree_node_class
@@ -103,3 +111,147 @@ class LQRSelector:
         into the controller's ``(mean, goal)`` signature.
         """
         return self.controller.action(belief.mean, preference.goal)
+
+
+class EFESelector:
+    """Greedy (H=1) EFE action selection over a front-loaded candidate grid.
+
+    Per-cycle cost = exactly ``n_candidates`` kernel evaluations (attributable work,
+    CLAUDE.md / RFC-001). Myopic by design: one-step EFE, not horizon-aware — the
+    H-step rollout is the deferred Phase 3 seam.
+    """
+
+    def __init__(
+        self,
+        model: LinearGaussianModel,
+        *,
+        n_candidates: int,
+        action_bounds: tuple[float, float],
+    ) -> None:
+        if model.control is None:
+            raise ValueError(
+                "EFESelector needs a model with a control matrix; an action has no "
+                "effect on a control-free (pure-tracking) model."
+            )
+        self._model = model
+        lo, hi = action_bounds
+        # p=1 (the tests/corridor): a column of candidate actions, front-loaded once.
+        # p>1 (the 2-D figure) is a meshgrid — WIP.
+        self._candidates = jnp.linspace(lo, hi, n_candidates)[:, None]
+
+    def select(self, belief: Belief, preference: Preference) -> Float64[Array, "p"]:
+        """The candidate action minimising one-step ``G`` over the front-loaded grid.
+
+        One ``vmap`` of the EFE kernel across the candidates, then ``argmin`` — the
+        whole per-cycle cost. At H=1 the chosen candidate *is* the action (no
+        first-of-a-sequence slicing; that is the deferred horizon seam).
+        """
+        g = jax.vmap(
+            lambda a: expected_free_energy(self._model, belief, a, preference)[0]
+        )(self._candidates)
+        return self._candidates[jnp.argmin(g)]
+
+    @property
+    def n_candidates(self) -> int:
+        """The per-cycle EFE-evaluation count — attributable work (RFC-001)."""
+        return self._candidates.shape[0]
+
+
+@dataclass(frozen=True, init=False)
+class StateGoal:
+    """A state-space objective: reach a target state (the LQR / fixed-sensor regime).
+
+    The complete spec for the state-tracking path - the target plus the LQR cost
+    weights it implies. ``precision`` is LQR's state weight Q; ``effort`` is its
+    action weight R, left None here because the action dimension p isn't known
+    until the Agent pairs this with a model (the Agent fills the identity). The
+    Agent dispatches a StateGoal to an LQRSelector. Not a pytree - construction-
+    time only; the Agent extracts a Preference for the selector.
+    """
+
+    target: Float64[Array, "n"]
+    precision: Float64[Array, "n n"]
+    effort: Float64[Array, "p p"] | None
+
+    def __init__(self, target: ArrayLike, *, precision=None, effort=None) -> None:
+        target = jnp.asarray(target, dtype=float)
+        object.__setattr__(self, "target", target)
+        n = target.shape[0]
+        object.__setattr__(
+            self,
+            "precision",
+            jnp.eye(n) if precision is None else jnp.asarray(precision, dtype=float),
+        )
+        object.__setattr__(
+            self,
+            "effort",
+            None if effort is None else jnp.asarray(effort, dtype=float),
+        )
+        self._validate()
+
+    def _validate(self) -> None:
+        if self.target.ndim != 1:
+            raise ValueError(
+                f"target must be a 1-D vector, got shape {self.target.shape}"
+            )
+        validate_covariance(self.precision, "precision")
+        n = self.target.shape[0]
+        if self.precision.shape != (n, n):
+            raise ValueError(
+                f"precision must be {n}x{n} to match the {n}-D target, "
+                f"got shape {self.precision.shape}"
+            )
+
+
+@dataclass(frozen=True, init=False)
+class ObservationGoal:
+    """An observation-space objective: prefer to observe a target (the EFE regime).
+
+    The complete spec for the information-seeking path - the preferred observation,
+    how sharply it is preferred (``precision``), and the action-search config the
+    EFESelector front-loads: ``action_bounds`` is the action box, ``n_candidates``
+    its resolution. The Agent dispatches an ObservationGoal to an EFESelector. Not
+    a pytree - construction-time only; the Agent extracts a Preference.
+    """
+
+    target: Float64[Array, "m"]
+    precision: Float64[Array, "m m"]
+    action_bounds: tuple[float, float]
+    n_candidates: int
+
+    def __init__(
+        self, target, action_bounds, *, precision=None, n_candidates=21
+    ) -> None:
+        target = jnp.asarray(target, dtype=float)
+        object.__setattr__(self, "target", target)
+        m = target.shape[0]
+        object.__setattr__(
+            self,
+            "precision",
+            jnp.eye(m) if precision is None else jnp.asarray(precision, dtype=float),
+        )
+        object.__setattr__(self, "action_bounds", action_bounds)
+        object.__setattr__(self, "n_candidates", n_candidates)
+        self._validate()
+
+    def _validate(self) -> None:
+        if self.target.ndim != 1:
+            raise ValueError(
+                f"target must be a 1-D vector, got shape {self.target.shape}"
+            )
+        validate_covariance(self.precision, "precision")
+        m = self.target.shape[0]
+        if self.precision.shape != (m, m):
+            raise ValueError(
+                f"precision must be {m}x{m} to match the {m}-D observation goal, "
+                f"got shape {self.precision.shape}"
+            )
+        lo, hi = self.action_bounds
+        if not lo < hi:
+            raise ValueError(
+                f"action_bounds must be (lo, hi) with lo < hi, got {self.action_bounds}"
+            )
+        if self.n_candidates < 2:
+            raise ValueError(
+                f"n_candidates must be at least 2 to search, got {self.n_candidates}"
+            )

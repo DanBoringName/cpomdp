@@ -143,8 +143,14 @@ class TestEFESelector:
         prag = _brute_force(model, belief, _PREF, -3.0, 3.0, 4001, key="pragmatic")
         assert abs(chosen - prag) <= 6.0 / 40  # == one-step pragmatic argmin
 
+        # The one-step pragmatic argmin is DEADBEAT (drive the residual to 0 in one
+        # step → a ≈ -1.0). Infinite-horizon LQR is gradual — it spreads the
+        # correction over the horizon. They only coincide as effort_penalty → 0 (LQR
+        # → deadbeat); a *balanced* penalty puts LQR in its characteristic gradual
+        # regime, which is where H=1 EFE ≠ H=∞ LQR is visible. Do not lower the
+        # penalty back toward 0 — that collapses the very distinction being asserted.
         lqr = float(
-            LQRController(model, goal_precision=[[1.0]], effort_penalty=[[0.1]]).action(
+            LQRController(model, goal_precision=[[1.0]], effort_penalty=[[1.0]]).action(
                 belief.mean, jnp.array([0.0])
             )[0]
         )

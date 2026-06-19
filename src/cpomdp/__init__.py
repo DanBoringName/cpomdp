@@ -4,9 +4,9 @@ The continuous-state sibling of pymdp. The public API is the stateful
 :class:`Agent` façade over a :class:`LinearGaussianModel`, driven in the same
 perceive → act loop pymdp users know::
 
-    from cpomdp import Agent, Belief, LinearGaussianModel
+    from cpomdp import Agent, Belief, LinearGaussianModel, StateGoal
 
-    agent = Agent(model, goal=target)
+    agent = Agent(model, StateGoal(target))
     belief = agent.infer_states(observation)   # perceive
     action = agent.sample_action()             # act
 
@@ -22,6 +22,7 @@ import jax
 from cpomdp.agent import Agent
 from cpomdp.backends.base import InferenceBackend
 from cpomdp.backends.kalman import KalmanBackend
+from cpomdp.selection import ObservationGoal, StateGoal
 from cpomdp.types import Belief, LinearGaussianModel
 
 # Float64 throughout — the oracle matches to 1e-9 and JAX defaults to float32.
@@ -36,4 +37,6 @@ __all__ = [
     "InferenceBackend",
     "KalmanBackend",
     "LinearGaussianModel",
+    "ObservationGoal",
+    "StateGoal",
 ]

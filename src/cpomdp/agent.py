@@ -7,7 +7,14 @@ from numpy.typing import ArrayLike
 from cpomdp.backends.base import InferenceBackend
 from cpomdp.backends.kalman import KalmanBackend
 from cpomdp.control import LQRController
-from cpomdp.selection import ActionSelector, LQRSelector, Preference
+from cpomdp.selection import (
+    ActionSelector,
+    EFESelector,
+    LQRSelector,
+    ObservationGoal,
+    Preference,
+    StateGoal,
+)
 from cpomdp.types import Belief, LinearGaussianModel
 
 __all__ = ["Agent"]
@@ -23,7 +30,7 @@ class Agent:
     forward across calls, so you drive it in the same perceive → act loop pymdp
     users already know::
 
-        agent = Agent(model, goal=target)
+        agent = Agent(model, StateGoal(target))
         belief = agent.infer_states(observation)   # perceive
         action = agent.sample_action()             # act
 
@@ -42,7 +49,7 @@ class Agent:
     ``qs``              ``belief``                    posterior over the state
     ``infer_states``    ``infer_states``              fold an observation in
     ``sample_action``   ``sample_action``             choose an action
-    ``C``               ``goal`` + ``goal_precision``  preferred state + precision
+    ``C``               ``objective``                 a StateGoal or ObservationGoal
     ``D``               ``model.prior``               belief before any observation
     ==================  ============================  ==============================
 
@@ -51,81 +58,120 @@ class Agent:
     EFE-minimising action is the LQR optimum (ADR-003), so it returns the single
     best action. The name keeps the pymdp muscle-memory; the behaviour is exact.
 
-    An agent built without a ``goal`` is a pure tracker: ``infer_states`` works,
-    but ``sample_action`` raises — there is nothing to act toward.
+    An agent built without an ``objective`` is a pure tracker: ``infer_states``
+    works, but ``sample_action`` raises — there is nothing to act toward.
     """
 
     def __init__(
         self,
         model: LinearGaussianModel,
+        objective: ObservationGoal | StateGoal | None = None,
         *,
-        goal: ArrayLike | None = None,
-        goal_precision: ArrayLike | None = None,
-        effort_penalty: ArrayLike | None = None,
+        selector: ActionSelector | None = None,
         backend: InferenceBackend | None = None,
     ) -> None:
         """Build an agent over ``model``, optionally one that can act.
 
+        The objective's *type* selects the regime: a ``StateGoal`` steers in state
+        space via LQR (it needs a fixed sensor); an ``ObservationGoal`` seeks a
+        preferred observation via one-step EFE (it needs a control matrix, and a
+        state-dependent sensor unless an explicit ``selector`` is given). Omit the
+        objective for a perceive-only tracker.
+
         Args:
             model: The linear-Gaussian generative model the agent perceives and
-                (if given a goal) acts under. Its ``prior`` becomes the starting
+                (with an objective) acts under. Its ``prior`` becomes the starting
                 belief.
-            goal: The preferred state to steer toward, shape ``(n,)``. Omit it for
-                a perceive-only tracker. Must be an equilibrium the dynamics can
-                hold at zero action (see ``LQRController.action``).
-            goal_precision: How sharply the goal is preferred, an ``(n, n)``
-                matrix; defaults to the identity. Ignored without a ``goal``.
-            effort_penalty: How much action costs, a ``(p, p)`` matrix; defaults
-                to the identity. Ignored without a ``goal``.
+            objective: What the agent pursues — a ``StateGoal`` (a state to reach,
+                carrying the LQR weights) or an ``ObservationGoal`` (an observation
+                to prefer, carrying the action-search config). ``None`` builds a
+                pure tracker that perceives but cannot act.
+            selector: An explicit ``ActionSelector`` overriding the one the
+                objective would dispatch — the escape hatch for regimes the
+                automatic dispatch declines (e.g. EFE on a fixed sensor).
             backend: The inference engine. Defaults to a per-step
                 ``KalmanBackend``; pass any ``InferenceBackend`` (e.g. a
                 steady-state Kalman or the RxInfer oracle) to swap engines.
 
         Raises:
-            ValueError: If ``goal_precision``/``effort_penalty`` are given without
-                a ``goal``, or ``goal`` is not a 1-D vector of length ``n``.
+            ValueError: If the objective and model are incompatible — a
+                ``StateGoal`` on a state-dependent sensor, an ``ObservationGoal``
+                on a control-free model, or an ``ObservationGoal`` on a fixed
+                sensor without a ``selector`` (output regulation, deferred); or if
+                the ``StateGoal`` target is not a 1-D vector of length ``n``.
+            TypeError: If ``objective`` is neither a ``StateGoal`` nor an
+                ``ObservationGoal``.
         """
         self.model = model
         self.belief = model.prior
         self._backend = backend if backend is not None else KalmanBackend(model)
+        sensor_is_fixed = model.observation is None or model.observation.is_fixed
 
-        if goal is None:
-            # perceive-only tracker: preferences without a goal are meaningless,
-            # so flag them rather than silently ignoring them.
-            if goal_precision is not None or effort_penalty is not None:
-                raise ValueError(
-                    "goal_precision/effort_penalty were given but goal is None; "
-                    "preferences need a goal to act toward."
-                )
+        if objective is None:
+            # perceive-only tracker: nothing to act toward.
             self._controller: LQRController | None = None
             self._goal: Float64[Array, "n"] | None = None
             self._last_action: Float64[Array, "p"] | None = None
             self._selector: ActionSelector | None = None
             self._preference: Preference | None = None
-        else:
-            # acting agent — build the front-loaded controller now.
+        elif isinstance(objective, StateGoal):
+            # state-space goal -> LQR. Needs a fixed sensor; a state-dependent sensor
+            # would mean converting the goal through C (deferred), so guard it.
+            if not sensor_is_fixed:
+                raise ValueError(
+                    "a StateGoal needs a fixed sensor; a state-dependent sensor would "
+                    "require converting the goal through C — pass an ObservationGoal."
+                )
             n, p = model.n_states, model.n_controls
-            self._goal = jnp.asarray(goal, dtype=float)
+            self._goal = jnp.asarray(objective.target, dtype=float)
             if self._goal.shape != (n,):
                 raise ValueError(
-                    f"goal must be a 1-D vector of length {n} (the state "
+                    f"StateGoal target must be a 1-D vector of length {n} (the state "
                     f"dimension), got shape {self._goal.shape}"
                 )
-            goal_precision = jnp.eye(n) if goal_precision is None else goal_precision
-            effort_penalty = jnp.eye(p) if effort_penalty is None else effort_penalty
+            effort = jnp.eye(p) if objective.effort is None else objective.effort
             self._controller = LQRController(
-                model, goal_precision=goal_precision, effort_penalty=effort_penalty
+                model, goal_precision=objective.precision, effort_penalty=effort
             )
-            # Wrap the controller in the ActionSelector seam the loop talks to,
-            # and capture the goal as a Preference. Under a fixed sensor this is
-            # LQR; the same seam is where EFESelector and a richer Preference plug
-            # in (v0.3).
-            self._preference = Preference(self._goal, goal_precision)
-            self._selector = LQRSelector(self._controller)
-
-            # No action applied yet — the first predict step coasts on zero
-            # control, then sample_action overwrites this each step.
+            self._preference = Preference(self._goal, objective.precision)
+            self._selector = (
+                selector if selector is not None else LQRSelector(self._controller)
+            )
             self._last_action = jnp.zeros(p)
+        elif isinstance(objective, ObservationGoal):
+            # observation-space goal -> EFE. Needs control to act; on a fixed sensor it
+            # is output regulation (deferred), so require an explicit selector there.
+            if model.control is None:
+                raise ValueError(
+                    "an ObservationGoal needs a model with a control matrix to act."
+                )
+            if sensor_is_fixed and selector is None:
+                raise ValueError(
+                    "an ObservationGoal on a fixed sensor is output regulation "
+                    "(deferred); pass a StateGoal for the LQR path, or "
+                    "selector=EFESelector(...) to opt into H=1 EFE."
+                )
+            self._controller = None
+            self._goal = None
+            self._preference = Preference(
+                jnp.asarray(objective.target, dtype=float), objective.precision
+            )
+            self._selector = (
+                selector
+                if selector is not None
+                else EFESelector(
+                    model,
+                    n_candidates=objective.n_candidates,
+                    action_bounds=objective.action_bounds,
+                )
+            )
+            self._last_action = jnp.zeros(model.n_controls)
+
+        else:
+            raise TypeError(
+                f"objective must be a StateGoal or ObservationGoal, "
+                f"got {type(objective).__name__}."
+            )
 
     def infer_states(self, observation: ArrayLike) -> Belief:
         """Fold one observation into the belief and return the updated belief.
@@ -158,13 +204,14 @@ class Agent:
         return self.belief
 
     def sample_action(self) -> Float64[Array, "p"]:
-        """The action that best drives the current belief toward the goal.
+        """The action the agent's selector chooses for the current belief.
 
-        Delegates to the agent's ``ActionSelector`` (an ``LQRSelector`` here),
-        handing it the current belief and the goal ``Preference``. Under a fixed
-        linear-Gaussian sensor that selection is exactly the LQR optimum,
-        ``-L∞·(mean − goal)`` — one matrix-vector product, front-loaded at
-        construction (ADR-003). Deterministic, not a sample (see the class
+        Delegates to the agent's ``ActionSelector``, handing it the current belief
+        and the objective's ``Preference``. For a ``StateGoal`` under a fixed
+        sensor that selection is exactly the LQR optimum, ``-L∞·(mean − goal)`` —
+        one matrix-vector product, front-loaded at construction (ADR-003); for an
+        ``ObservationGoal`` it is the one-step EFE-minimising action over the
+        front-loaded candidate grid. Deterministic, not a sample (see the class
         docstring). The chosen action is remembered so the next ``infer_states``
         predicts with it.
 
@@ -172,13 +219,14 @@ class Agent:
             The action, shape ``(p,)``.
 
         Raises:
-            ValueError: If this is a perceive-only agent (built without a
-                ``goal``) — there is nothing to act toward.
+            ValueError: If this is a perceive-only agent (built without an
+                ``objective``) — there is nothing to act toward.
         """
         if self._selector is None:
             raise ValueError(
-                "this Agent has no goal, so it can only perceive; pass goal=... to "
-                "Agent(...) to enable sample_action()."
+                "this Agent has no objective, so it can only perceive; pass a "
+                "StateGoal(...) or ObservationGoal(...) to Agent(...) to enable "
+                "sample_action()."
             )
         assert self._preference is not None  # set with _selector; narrows the type
         self._last_action = self._selector.select(self.belief, self._preference)

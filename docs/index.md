@@ -30,7 +30,7 @@ Here's an agent steering a point mass to a target. It can push the mass and it c
 
 ```python
 import jax.numpy as jnp
-from cpomdp import Agent, Belief, LinearGaussianModel
+from cpomdp import Agent, Belief, LinearGaussianModel, StateGoal
 
 # State is [position, velocity]. A push changes velocity, velocity carries
 # position along, and we only ever observe position (through a noisy sensor).
@@ -45,7 +45,7 @@ model = LinearGaussianModel(
 )
 
 # Tell it where to go: sit still at position 1.
-agent = Agent(model, goal=[1.0, 0.0])
+agent = Agent(model, StateGoal([1.0, 0.0]))
 
 true_state = jnp.array([0.0, 0.0])
 for _ in range(100):
@@ -69,7 +69,7 @@ If you've used pymdp, this table is basically the whole API:
 | `qs`             | `belief`                  | the posterior over the state        |
 | `infer_states`   | `infer_states`            | fold in an observation              |
 | `sample_action`  | `sample_action`           | pick an action                      |
-| `C`              | `goal` + `goal_precision` | the state you prefer, how sharply   |
+| `C`              | `StateGoal` / `ObservationGoal` | the goal you pursue (state or observation) |
 | `D`              | `model.prior`             | belief before you've seen anything  |
 
 One honest difference. `sample_action` here is deterministic, not a sample from a policy posterior. For a linear-Gaussian sensor the action that minimises expected free energy turns out to be exactly the LQR optimum, so there's a single best action and that's what comes back. Same loop, exact answer.
