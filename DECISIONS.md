@@ -427,3 +427,92 @@ LinearGaussianModel(
 )
 
 The letters can survive as aliases/internal attributes and definitely in the docstrings but the primary interface is role-named.
+
+## ADR-007 — v0.3 Phase 4–5: typed Agent objectives + greedy EFESelector
+
+**Status:** accepted. Resolves ADR-005 open tension #1 (the `Preference` domain split).
+
+### What acts on the EFE kernel
+
+Phase 1A built `expected_free_energy` but nothing chose actions with it. Phase 4–5
+closes that gap: `EFESelector` turns the kernel into action selection, and `Agent`
+learns to wire it.
+
+**EFESelector (Phase 4).** Greedy, one-step (H=1): front-load a fixed grid of
+candidate actions over the actuator box at construction, then each cycle `vmap` the
+kernel over the grid and take the `argmin`. No inner optimiser. Per-cycle cost is
+therefore *exactly* `n_candidates` kernel evaluations — a single attributable
+number, which is the RFC-001 energy constraint made concrete (an optimiser's cost
+is data-dependent and unattributable). Myopic by design; the H-step rollout is the
+named Phase 3 seam, and the demos/tests stay honest about it (asserted against a
+brute-force *one-step* oracle, never a horizon optimum). Critically, H=1 greedy EFE
+is **not** infinite-horizon LQR even under a fixed sensor — it is the one-step
+*deadbeat* pragmatic argmin; a test asserts the two differ so no one "simplifies"
+the selector into `== LQRController`.
+
+### The Preference-domain reconciliation (the open tension)
+
+ADR-005 left this open: v0.3 EFE reads preferences in **observation** space, but the
+v0.1 LQR path uses a **state**-space goal — one `Preference` type, two consumers
+with different domain assumptions, coinciding only at `C = I`. The first cut (a
+`goal=`/`preference=` kwarg pair on `Agent`) made an **illegal state representable**
+— you could pass both, or pass LQR knobs with an obs preference — so it needed
+runtime guards to bat away mistakes the API itself invited.
+
+**Decision: a typed objective sum type.** The `Agent` takes one `objective`:
+
+- `StateGoal(target, *, precision, effort)` → the LQR / state-space regime.
+- `ObservationGoal(target, action_bounds, *, precision, n_candidates)` → the EFE /
+  observation-space regime.
+- `None` → a perceive-only tracker.
+
+The objective's *type* is the dispatch key; the **sensor type** decides which regime
+is legal (fixed → `StateGoal`/LQR, state-dependent → `ObservationGoal`/EFE), so one
+agent never straddles both preference domains. This is the "typed domain" option
+ADR-005 named, chosen over "map via `C`".
+
+Why it beats the kwarg pair, concretely:
+
+- **Illegal states are unrepresentable.** One objective slot, so "both given" cannot
+  be expressed; the config bundles *into the type* (`effort` on `StateGoal`,
+  `action_bounds`/`n_candidates` on `ObservationGoal`), so "LQR knob on an obs goal"
+  is a `TypeError` at construction, not a runtime guard. The guards those mistakes
+  needed simply evaporate.
+- **`Preference` survives as an internal type.** The `Agent` extracts a
+  `Preference(target, precision)` from either objective to hand the selector, so
+  `select(belief, preference)` is unchanged and the v0.2 LQR path stays
+  **byte-identical** (a regression test asserts exact equality, not `allclose`).
+- **What's left are genuine objective/model compatibility checks**, not
+  self-inflicted ones: `StateGoal` on a state-dependent sensor raises (don't convert
+  through `C`); `ObservationGoal` on a control-free model raises; `ObservationGoal`
+  on a fixed sensor raises (output regulation — see below) unless an explicit
+  `selector=` overrides the dispatch.
+
+`StateGoal`/`ObservationGoal` are top-level exports (the objects a user constructs);
+the selectors stay in `cpomdp.selection` (the dispatch picks them; advanced override
+via `selector=`).
+
+### The biological reading (why observation-space is primary)
+
+A `StateGoal` is a wish in *world* coordinates ("be at position x") — it assumes a
+god's-eye fix on the agent's own configuration; the engineering case, and the
+special case where the whole state is observed. An `ObservationGoal` is a wish in
+*sensory* coordinates ("sense reading o") — what an organism actually has. *E. coli*
+climbing a nutrient gradient has no concept of "move to (x, y)"; its preference is
+"taste high concentration," and movement is the emergent side-effect. That is why
+observation-space is primary and `StateGoal` is the privileged special case.
+
+### Deferred (named, not built)
+
+- **Output-regulation LQR** — letting the LQR/fixed-sensor path consume an obs-space
+  preference (pull `Λ` back through `C`). When it lands, the duality collapses:
+  everything is an `ObservationGoal`, `StateGoal` becomes sugar, and even the
+  surviving compatibility guards mostly go. The current duality is transitional
+  scaffolding pending this, *not* a committed design.
+- **R(x) in perception.** The Kalman backend still filters with the model's fixed
+  `R`; an `ObservationGoal` agent therefore *acts* on `R(x)` (via the kernel) but
+  *perceives* on fixed `R`. Fine for dispatch, but it must be reconciled before the
+  end-to-end "EFE drives uncertainty down faster than LQR" payoff (the RFC-001
+  comparison), where the agent's online belief has to see `R(x)`.
+- Multi-step (H≥2) rollout; `GradientEFESelector`; LQR-seeded / Sobol candidate
+  grids; the mixture (disjunctive) `Preference`.
