@@ -113,10 +113,13 @@ class KalmanBackend:
         self.model = model
         self.steady_state = steady_state
         if steady_state:
-            if not (model.observation is None or model.observation.is_fixed):
+            sensor_fixed = model.observation is None or model.observation.is_fixed
+            process_fixed = model.process_noise is None or model.process_noise.is_fixed
+            if not (sensor_fixed and process_fixed):
                 raise ValueError(
-                    "steady_state=True needs a fixed sensor; a state-dependent "
-                    "R(x) has no constant fixed point — use steady_state=False."
+                    "steady_state=True needs fixed sensor and process noise; a "
+                    "state-dependent R(x) or Q(x) has no constant fixed point — "
+                    "use steady_state=False."
                 )
             self._steady_gain, self._steady_cov = self._converge_to_steady_state(
                 tol, max_iter
@@ -167,16 +170,29 @@ class KalmanBackend:
             assert action is not None
             control_term = control @ action
 
-        if model.observation is None or model.observation.is_fixed:
-            # fixed sensor: direct reads, byte-identical hot path (no linearize,
-            # no dispatch). Mirrors efe.py's inline fast path.
+        sensor_is_fixed = model.observation is None or model.observation.is_fixed
+        process_is_fixed = model.process_noise is None or model.process_noise.is_fixed
+
+        # μ⁻ is needed only to linearize a state-dependent sensor and/or process
+        # noise; the fully-fixed hot path computes no extra matvec.
+        mean_pred = (
+            model.dynamics @ prior.mean + control_term
+            if not (sensor_is_fixed and process_is_fixed)
+            else prior.mean  # placeholder, unused on the fixed path
+        )
+
+        if sensor_is_fixed:
+            # fixed sensor: direct reads, byte-identical hot path (no linearize).
             sensor_model, sensor_noise = model.sensor_model, model.sensor_noise
         else:
-            # state-dependent R(x): linearize at the predicted mean μ⁻ — the same
-            # point the EFE kernel uses, so the agent perceives what it planned for.
-            # One extra matvec, callable path only.
-            mean_pred = model.dynamics @ prior.mean + control_term
+            # state-dependent R(x), linearized at μ⁻ (the EFE kernel's point).
             sensor_model, sensor_noise = model.observation.linearize(mean_pred)
+
+        if process_is_fixed:
+            dynamics_noise = model.dynamics_noise
+        else:
+            # state-dependent Q(x), evaluated at μ⁻ — the dual of the R(x) gate.
+            dynamics_noise = model.process_noise.noise_at(mean_pred)
 
         if self.steady_state:
             gain, cov_post = self._steady_gain, self._steady_cov  # frozen
@@ -184,7 +200,7 @@ class KalmanBackend:
             gain, cov_post = _gain_and_posterior_cov(
                 model.dynamics,
                 sensor_model,
-                model.dynamics_noise,
+                dynamics_noise,
                 sensor_noise,
                 prior.cov,
             )

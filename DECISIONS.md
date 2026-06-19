@@ -572,13 +572,20 @@ regime, not a bug; a stronger preference recovers goal-seeking but forgoes the
 uncertainty win. The test documents this and asserts the uncertainty gap, the
 detour mechanism, and that the LQR baseline does reach its own state goal.
 
+### The `Q(x)` dual — closed in the same pass
+
+The exact mirror of `R(x)`: `efe.py` evaluates state-dependent process noise at
+`μ⁺` (`process_noise.noise_at`), so the filter now evaluates `Q(x)` at `μ⁻` in the
+covariance predict, through the same `is None or is_fixed` gate. `μ⁻` is computed
+once and *shared* by both seams (lazy — the fully-fixed path still does no extra
+matvec), and the steady-state guard rejects a state-dependent `Q(x)` for the same
+reason it rejects `R(x)`. Same independent-NumPy-oracle strategy
+(`_numpy_qx_filter`: scalar + 2-D + a `μ⁻`-not-prior discriminator + a constant-Q
+consistency net). The two seams are now symmetric: `R(x)` on the sensor
+(`linearize`), `Q(x)` on the dynamics (`noise_at`), both at the predicted state.
+
 ### Named seams (not built here)
 
-- **`Q(x)` in perception (the parallel gap).** `efe.py` already consults
-  `process_noise.noise_at(μ⁺)` for state-dependent process noise `Q(x)`, but the
-  filter still uses only `model.dynamics_noise`. So a `Q(x)` model has the
-  exactly-analogous planner/filter disagreement this ADR just fixed for `R(x)`. Out
-  of scope (the corridor uses constant `Q`); the next seam to close.
 - **Gate harmonization.** The filter gates on `is None or is_fixed`; `efe.py`'s
   inline fast path gates on `is None` only (harmless — `FixedSensor.gaussianize`
   returns the constant `R` — but an asymmetry to reconcile later).
