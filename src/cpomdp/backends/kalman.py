@@ -113,6 +113,11 @@ class KalmanBackend:
         self.model = model
         self.steady_state = steady_state
         if steady_state:
+            if not (model.observation is None or model.observation.is_fixed):
+                raise ValueError(
+                    "steady_state=True needs a fixed sensor; a state-dependent "
+                    "R(x) has no constant fixed point — use steady_state=False."
+                )
             self._steady_gain, self._steady_cov = self._converge_to_steady_state(
                 tol, max_iter
             )
@@ -162,20 +167,31 @@ class KalmanBackend:
             assert action is not None
             control_term = control @ action
 
+        if model.observation is None or model.observation.is_fixed:
+            # fixed sensor: direct reads, byte-identical hot path (no linearize,
+            # no dispatch). Mirrors efe.py's inline fast path.
+            sensor_model, sensor_noise = model.sensor_model, model.sensor_noise
+        else:
+            # state-dependent R(x): linearize at the predicted mean μ⁻ — the same
+            # point the EFE kernel uses, so the agent perceives what it planned for.
+            # One extra matvec, callable path only.
+            mean_pred = model.dynamics @ prior.mean + control_term
+            sensor_model, sensor_noise = model.observation.linearize(mean_pred)
+
         if self.steady_state:
             gain, cov_post = self._steady_gain, self._steady_cov  # frozen
         else:
             gain, cov_post = _gain_and_posterior_cov(
                 model.dynamics,
-                model.sensor_model,
+                sensor_model,
                 model.dynamics_noise,
-                model.sensor_noise,
+                sensor_noise,
                 prior.cov,
             )
 
         mean_post = _posterior_mean(
             model.dynamics,
-            model.sensor_model,
+            sensor_model,
             prior.mean,
             control_term,
             gain,

@@ -516,3 +516,70 @@ observation-space is primary and `StateGoal` is the privileged special case.
   comparison), where the agent's online belief has to see `R(x)`.
 - Multi-step (H≥2) rollout; `GradientEFESelector`; LQR-seeded / Sobol candidate
   grids; the mixture (disjunctive) `Preference`.
+
+## ADR-008 — R(x) in perception: state-dependent sensor noise in the filter
+
+**Status:** accepted. Closes the "R(x) in perception" deferred seam named in ADR-007.
+
+### The gap
+
+ADR-007 shipped an `ObservationGoal` agent that **acts** on state-dependent sensor
+noise `R(x)` — the EFE kernel calls `model.observation.gaussianize(μ⁺, …)` — but
+**perceives** on the model's *fixed* `R`: `KalmanBackend` only ever read
+`model.sensor_noise`. So the agent would detour toward a high-precision beacon to
+"sense better," yet its filter couldn't see the sharper sensing. This blocked the
+v0.3 payoff (RFC-001): *EFE drives uncertainty below LQR*.
+
+### Decision: linearize `R` at the predicted mean `μ⁻`, gated to callable sensors
+
+`KalmanBackend.infer_states` now gates on the sensor type:
+
+- **Fixed sensor** (`observation is None or is_fixed`): unchanged — direct reads of
+  `model.sensor_model`/`model.sensor_noise`, no `linearize`, no dispatch. The hot
+  path stays **byte-identical and lean** (CLAUDE.md / RFC-001); the whole existing
+  `test_kalman.py` suite passing unmodified is the regression proof.
+- **State-dependent sensor**: compute the predicted mean `μ⁻ = A·μ + B·a`, then
+  `(C, R) = observation.linearize(μ⁻)`, and feed that `(C, R)` to the (unchanged)
+  jit kernels. One extra `μ⁻` matvec, callable path only.
+
+`μ⁻` is the load-bearing choice: it is **exactly the EFE kernel's linearization
+point**, so the agent's filter and its action-evaluation evaluate `R` at the same
+state — "the agent perceives what it planned for." This makes the filter a
+first-order EKF-style filter, consistent with the documented "mean-exact, R-plug-in"
+approximation; the second-order Jensen term `½tr(H_R Σ⁺)` stays deferred to
+`NonlinearSensor` (Phase 2.5), dropped consistently by filter *and* kernel.
+
+**Steady-state mode is incompatible** with `R(x)` (no state-independent Riccati
+fixed point) and now raises at construction rather than freezing a silently-wrong
+gain. A single source of truth for `(C, R)`: both the gain/cov *and* the mean update
+read the linearized `C` (a `CallableSensor` keeps `C` constant, so this is
+byte-identical today, but it closes the trap for a future varying-`C` sensor).
+
+### The payoff (validated, deterministic)
+
+The end-to-end test compares the EFE agent's belief covariance against an LQR
+baseline via a **covariance-only replay**: the Kalman covariance recursion is
+observation-*independent*, so "the LQR path's uncertainty under the same `R(x)`" is
+fully determined by the LQR agent's `μ⁻` sequence — no noise, no RNG, fully
+deterministic. It isolates "the path won, not the model." Result on the
+precision-well corridor: the EFE agent ends **~5× more certain** than LQR
+(trace(cov) ≈ 0.03 vs ≈ 0.17).
+
+An honest note on behaviour: with a *weak* preference the **epistemic drive
+dominates** — the agent seeks and *holds* the beacon rather than returning to the
+pragmatic goal (it never reaches observe-0). That is the correct active-inference
+regime, not a bug; a stronger preference recovers goal-seeking but forgoes the
+uncertainty win. The test documents this and asserts the uncertainty gap, the
+detour mechanism, and that the LQR baseline does reach its own state goal.
+
+### Named seams (not built here)
+
+- **`Q(x)` in perception (the parallel gap).** `efe.py` already consults
+  `process_noise.noise_at(μ⁺)` for state-dependent process noise `Q(x)`, but the
+  filter still uses only `model.dynamics_noise`. So a `Q(x)` model has the
+  exactly-analogous planner/filter disagreement this ADR just fixed for `R(x)`. Out
+  of scope (the corridor uses constant `Q`); the next seam to close.
+- **Gate harmonization.** The filter gates on `is None or is_fixed`; `efe.py`'s
+  inline fast path gates on `is None` only (harmless — `FixedSensor.gaussianize`
+  returns the constant `R` — but an asymmetry to reconcile later).
+- The Jensen / second-order term (Phase 2.5 `NonlinearSensor`).

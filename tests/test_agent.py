@@ -277,3 +277,90 @@ def test_state_goal_path_is_byte_identical_to_lqr():
         model, goal_precision=jnp.eye(2), effort_penalty=jnp.eye(1)
     ).action(agent.belief.mean, jnp.asarray(GOAL, dtype=float))
     np.testing.assert_array_equal(action, expected)
+
+
+# ============================================================================
+# The v0.3 payoff: under state-dependent R(x), an information-seeking EFE agent
+# drives its belief covariance far below an LQR baseline — by seeking the
+# high-precision beacon the LQR agent can't perceive. The comparison is fair via
+# a *covariance-only replay*: the Kalman cov recursion is observation-independent,
+# so "the LQR path's uncertainty under the SAME R(x)" is fully determined by the
+# LQR agent's predicted-mean (μ⁻) sequence — no noise, fully deterministic. This
+# isolates "the path won, not the model".
+# ============================================================================
+
+
+def _run_recording(agent, start_pos, steps):
+    """Noise-free closed loop recording the (μ⁻, cov, position) traces per step.
+
+    Sibling of `_run_closed_loop` (which returns only the final state). The EFE leg
+    needs the per-step belief covariance; the LQR leg needs the μ⁻ sequence the
+    filter linearized R at, for the replay baseline.
+    """
+    model = agent.model
+    a_mat = np.asarray(model.dynamics)
+    b_mat = None if model.control is None else np.asarray(model.control)
+    c_mat = np.asarray(model.sensor_model)
+    p = 0 if b_mat is None else b_mat.shape[1]
+    true = np.asarray(start_pos, dtype=float)
+    last_action = np.zeros(p)
+    mu_minus, cov_trace, positions = [], [], []
+    for _ in range(steps):
+        mean = np.asarray(agent.belief.mean)
+        control = b_mat @ last_action if b_mat is not None else 0.0
+        mu_minus.append(a_mat @ mean + control)
+        agent.infer_states(c_mat @ true)  # perceive (noise-free)
+        cov_trace.append(np.asarray(agent.belief.cov))
+        action = np.asarray(agent.sample_action())
+        true = a_mat @ true + (b_mat @ action if b_mat is not None else 0.0)
+        last_action = action
+        positions.append(float(true[0]))
+    return mu_minus, cov_trace, positions, np.asarray(agent.belief.mean)
+
+
+def _replay_cov_trace(model, mu_minus, noise_fn, params):
+    """Roll the Kalman covariance recursion along a μ⁻ sequence under R(x).
+
+    Mirrors `_gain_and_posterior_cov` in NumPy (an independent oracle). The cov
+    recursion never touches observation *values*, so this faithfully reconstructs
+    the covariance a path would accumulate under the state-dependent noise.
+    """
+    a_mat = np.asarray(model.dynamics)
+    c_mat = np.asarray(model.sensor_model)
+    q_mat = np.asarray(model.dynamics_noise)
+    n = a_mat.shape[0]
+    cov = np.asarray(model.prior.cov, dtype=float)
+    trace = []
+    for mu in mu_minus:
+        cov_pred = a_mat @ cov @ a_mat.T + q_mat
+        r_mat = np.asarray(noise_fn(jnp.asarray(mu), params), dtype=float)
+        s = c_mat @ cov_pred @ c_mat.T + r_mat
+        gain = cov_pred @ c_mat.T @ np.linalg.inv(s)
+        cov = (np.eye(n) - gain @ c_mat) @ cov_pred
+        trace.append(cov)
+    return trace
+
+
+def test_efe_agent_reaches_lower_uncertainty_than_lqr():
+    # With a weak preference the epistemic drive dominates: the EFE agent seeks and
+    # holds the precision beacon (it does NOT reach the observe-0 goal — that's the
+    # information drive, not a bug), so under the SAME R(x) its belief ends far more
+    # certain than the LQR baseline, which sits in the fog at its state goal.
+    steps = 15
+    efe = Agent(
+        _corridor_model(fixed=False),
+        ObservationGoal([0.0], (-3.0, 3.0), precision=[[0.4]], n_candidates=61),
+    )
+    _, efe_cov, efe_pos, _ = _run_recording(efe, [0.0], steps)
+
+    lqr = Agent(_corridor_model(fixed=True), StateGoal([0.0]))
+    lqr_mu, _, _, lqr_mean = _run_recording(lqr, [0.0], steps)
+    lqr_cov = _replay_cov_trace(
+        _corridor_model(fixed=False), lqr_mu, _well_noise, _WELL_PARAMS
+    )
+
+    efe_final = float(np.trace(efe_cov[-1]))
+    lqr_final = float(np.trace(lqr_cov[-1]))
+    assert efe_final < 0.5 * lqr_final  # the payoff: markedly more certain under R(x)
+    assert max(efe_pos) > 1.0  # mechanism: it sought the beacon, off the goal
+    assert abs(float(lqr_mean[0])) < 0.05  # the LQR baseline does reach its state goal

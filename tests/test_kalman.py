@@ -8,6 +8,7 @@ from cpomdp.backends.kalman import (
     _gain_and_posterior_cov,
     _posterior_mean,
 )
+from cpomdp.observation import CallableSensor
 from cpomdp.types import Belief, LinearGaussianModel
 
 # Scalar linear-Gaussian setup, matching the Phase-0 spike.
@@ -277,3 +278,155 @@ class TestJitReady:
         )(covs)
         assert gains.shape == (3, 1, 1)
         assert cov_posts.shape == (3, 1, 1)
+
+
+# --- state-dependent sensor noise R(x) in the filter (Part A) ---------------
+# A CallableSensor carries R(x); the filter must evaluate it at the PREDICTED
+# mean μ⁻ (matching the EFE kernel's linearization point), keeping the fixed
+# path byte-identical. Noise functions are module-level (jit-safe, hashable by
+# identity), like the corridor fixtures.
+
+
+def _const_noise(x, params):
+    """R(x) that ignores x — a constant. For the callable==fixed reduction check."""
+    return params["R"]
+
+
+def _quad_noise(x, params):
+    """R(x) = base + scale·position² — always positive, varies with the state."""
+    return jnp.array([[params["base"] + params["scale"] * x[0] ** 2]])
+
+
+_QUAD = {"base": jnp.array(0.2), "scale": jnp.array(0.5)}
+
+
+def _numpy_rx_filter(
+    model, observations, noise_fn, params, actions=None, r_point="pred"
+):
+    """Independent NumPy R(x)-plug-in Kalman filter; shares no code with the backend.
+
+    R is evaluated at the predicted mean μ⁻ (``r_point="pred"``) — the point the
+    backend must use — or at the incoming (prior) mean (``r_point="prior"``), the
+    wrong point, so a test can assert the backend picked the right one.
+    """
+    a_mat = np.asarray(model.dynamics)
+    c_mat = np.asarray(model.sensor_model)
+    q_mat = np.asarray(model.dynamics_noise)
+    b_mat = None if model.control is None else np.asarray(model.control)
+    mean = np.asarray(model.prior.mean, dtype=float)
+    cov = np.asarray(model.prior.cov, dtype=float)
+    n = mean.shape[0]
+    out = []
+    for t, y in enumerate(observations):
+        if b_mat is None:
+            mean_pred = a_mat @ mean
+        else:
+            assert actions is not None  # a model with control must be given actions
+            mean_pred = a_mat @ mean + b_mat @ np.asarray(actions[t], dtype=float)
+        r_at = mean_pred if r_point == "pred" else mean
+        r_mat = np.asarray(noise_fn(jnp.asarray(r_at), params), dtype=float)
+        cov_pred = a_mat @ cov @ a_mat.T + q_mat
+        s = c_mat @ cov_pred @ c_mat.T + r_mat
+        gain = cov_pred @ c_mat.T @ np.linalg.inv(s)
+        mean = mean_pred + gain @ (np.asarray(y, dtype=float) - c_mat @ mean_pred)
+        cov = (np.eye(n) - gain @ c_mat) @ cov_pred
+        out.append((mean.copy(), cov.copy()))
+    return out
+
+
+def _callable_scalar_model(noise_fn, params, *, sensor_noise=None, control=None):
+    return LinearGaussianModel(
+        dynamics=[[0.9]],
+        sensor_model=[[1.0]],
+        dynamics_noise=[[0.5]],
+        sensor_noise=[[1.0]] if sensor_noise is None else sensor_noise,
+        prior=Belief(mean=[0.0], cov=[[10.0]]),
+        control=control,
+        observation=CallableSensor(
+            sensor_model=[[1.0]], noise_fn=noise_fn, noise_params=params
+        ),
+    )
+
+
+class TestKalmanCallableSensor:
+    def test_constant_callable_reduces_to_fixed_filter(self):
+        # Safety net — green BEFORE and AFTER the change. A CallableSensor whose R
+        # ignores x and equals the model's fixed sensor_noise must filter exactly
+        # like the fixed-sensor model. Guards the gating and the fixed hot path.
+        r0 = [[1.0]]
+        fixed = LinearGaussianModel(
+            dynamics=[[0.9]],
+            sensor_model=[[1.0]],
+            dynamics_noise=[[0.5]],
+            sensor_noise=r0,
+            prior=Belief(mean=[0.0], cov=[[10.0]]),
+        )
+        callable_model = _callable_scalar_model(
+            _const_noise, {"R": jnp.array(r0)}, sensor_noise=r0
+        )
+        kf_fixed, kf_call = KalmanBackend(fixed), KalmanBackend(callable_model)
+        b_fixed, b_call = fixed.prior, callable_model.prior
+        for y in OBSERVATIONS:
+            b_fixed = kf_fixed.infer_states(np.array([y]), b_fixed)
+            b_call = kf_call.infer_states(np.array([y]), b_call)
+            np.testing.assert_array_equal(b_call.mean, b_fixed.mean)
+            np.testing.assert_array_equal(b_call.cov, b_fixed.cov)
+
+    def test_matches_numpy_rx_oracle_scalar(self):
+        # RED until Part A: the current filter uses the fixed sensor_noise (1.0),
+        # not R(μ⁻). The independent oracle evaluates R at the predicted mean.
+        model = _callable_scalar_model(_quad_noise, _QUAD)
+        kf = KalmanBackend(model)
+        belief = model.prior
+        oracle = _numpy_rx_filter(
+            model, [[y] for y in OBSERVATIONS], _quad_noise, _QUAD
+        )
+        for y, (mean_exp, cov_exp) in zip(OBSERVATIONS, oracle, strict=True):
+            belief = kf.infer_states(np.array([y]), belief)
+            np.testing.assert_allclose(belief.mean, mean_exp, rtol=1e-10)
+            np.testing.assert_allclose(belief.cov, cov_exp, rtol=1e-10)
+
+    def test_matches_numpy_rx_oracle_2d_state(self):
+        # 2-D state, 1-D obs: exercises the gain/cov orientation (K·C is 2x2) that
+        # the scalar case can't, with R varying through the position component.
+        model = LinearGaussianModel(
+            dynamics=[[1.0, 1.0], [0.0, 1.0]],
+            sensor_model=[[1.0, 0.0]],
+            dynamics_noise=[[1e-3, 0.0], [0.0, 1e-3]],
+            sensor_noise=[[1.0]],
+            prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
+            observation=CallableSensor(
+                sensor_model=[[1.0, 0.0]], noise_fn=_quad_noise, noise_params=_QUAD
+            ),
+        )
+        kf = KalmanBackend(model)
+        belief = model.prior
+        obs = [[1.0], [1.3], [0.7], [1.6]]
+        oracle = _numpy_rx_filter(model, obs, _quad_noise, _QUAD)
+        for y, (mean_exp, cov_exp) in zip(obs, oracle, strict=True):
+            belief = kf.infer_states(np.array(y), belief)
+            np.testing.assert_allclose(belief.mean, mean_exp, rtol=1e-10)
+            np.testing.assert_allclose(belief.cov, cov_exp, rtol=1e-10)
+
+    def test_evaluates_R_at_predicted_mean_not_prior(self):
+        # The discriminator (perception-side mirror of test_detours_toward_the_beacon):
+        # a control input carries μ⁻ far from the prior mean into a different R
+        # regime. The filter must use R(μ⁻), not R(prior.mean).
+        model = _callable_scalar_model(_quad_noise, _QUAD, control=[[1.0]])
+        action = np.array([3.0])  # μ⁻ = 0 + 3 = 3 -> R(3)=4.7 vs R(0)=0.2
+        belief = KalmanBackend(model).infer_states(np.array([2.0]), model.prior, action)
+        at_pred = _numpy_rx_filter(
+            model, [[2.0]], _quad_noise, _QUAD, actions=[action], r_point="pred"
+        )[0]
+        at_prior = _numpy_rx_filter(
+            model, [[2.0]], _quad_noise, _QUAD, actions=[action], r_point="prior"
+        )[0]
+        np.testing.assert_allclose(belief.cov, at_pred[1], rtol=1e-10)  # R(μ⁻)
+        assert not np.allclose(belief.cov, at_prior[1])  # ... NOT R(prior.mean)
+
+    def test_steady_state_with_callable_sensor_raises(self):
+        # R(x) has no state-independent Riccati fixed point, so the steady-state
+        # gain can't be precomputed — refuse it loudly rather than freeze a wrong gain.
+        model = _callable_scalar_model(_quad_noise, _QUAD)
+        with pytest.raises(ValueError, match="steady"):
+            KalmanBackend(model, steady_state=True)
