@@ -123,7 +123,7 @@ class TestStateGoal:
     def test_rejects_efe_search_knobs(self):
         # Unrepresentable: a state goal has no action-search config.
         with pytest.raises(TypeError):
-            StateGoal([0.0], action_bounds=(-1.0, 1.0))
+            StateGoal([0.0], action_bounds=(-1.0, 1.0))  # ty: ignore[unknown-argument]
 
 
 class TestObservationGoal:
@@ -155,4 +155,4 @@ class TestObservationGoal:
     def test_rejects_lqr_effort_knob(self):
         # Unrepresentable: an observation goal carries no LQR effort weight.
         with pytest.raises(TypeError):
-            ObservationGoal([0.0], (-1.0, 1.0), effort=[[1.0]])
+            ObservationGoal([0.0], (-1.0, 1.0), effort=[[1.0]])  # ty: ignore[unknown-argument]

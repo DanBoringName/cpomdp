@@ -262,7 +262,7 @@ class TestRegimeDispatch:
     def test_unknown_objective_type_raises(self):
         # The objective must be a StateGoal or ObservationGoal — nothing else.
         with pytest.raises(TypeError, match=r"StateGoal|ObservationGoal|objective"):
-            Agent(_reaching_model(), "reach the goal")
+            Agent(_reaching_model(), "reach the goal")  # ty: ignore[invalid-argument-type]
 
 
 def test_state_goal_path_is_byte_identical_to_lqr():

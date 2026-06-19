@@ -1,6 +1,6 @@
 # One-time setup after cloning (installs both the pre-commit and commit-msg hooks):
 #   uv run pre-commit install --hook-type pre-commit --hook-type commit-msg
-# The ruff hooks mirror the CI `lint` job, so a clean commit here is a green CI.
+# The ruff and ty hooks mirror the CI `lint` job, so a clean commit here is a green CI.
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # Keep this in sync with the `ruff` pin in pyproject's dev group, so local
@@ -10,6 +10,18 @@ repos:
       - id: ruff-check
         args: [--fix]
       - id: ruff-format
+
+  # Strict type-checking, mirroring the CI `ty (strict types)` step exactly.
+  # A local hook running the same `uv run ty check` keeps local and CI in lockstep
+  # (the pinned ty version lives in pyproject's dev group, like ruff above).
+  - repo: local
+    hooks:
+      - id: ty
+        name: ty (strict types)
+        entry: uv run ty check
+        language: system
+        types: [python]
+        pass_filenames: false
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
