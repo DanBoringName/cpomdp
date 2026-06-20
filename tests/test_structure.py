@@ -170,3 +170,53 @@ class TestStructureIsInertArithmetic:
         b1 = KalmanBackend(structured).infer_states(obs, structured.prior, action)
         np.testing.assert_array_equal(b0.mean, b1.mean)
         np.testing.assert_array_equal(b0.cov, b1.cov)
+
+
+class TestValidatePartition:
+    """validate()'s partition half: pure index arithmetic, the stable contract.
+
+    A 2-state / 1-observation ``_model()`` (n=2, m=1). Factors and roles must each
+    partition the state (in-bounds, disjoint, full coverage — coverage is the
+    strict, reversible decision of ADR-010); channels must index valid, distinct
+    observation rows but need NOT cover them all.
+    """
+
+    def test_well_formed_declaration_passes(self):
+        s = ModelStructure.from_dicts(
+            factors={"a": [0], "b": [1]},
+            roles={"internal": [0], "external": [1]},
+            channels={"y": [0]},
+        )
+        s.validate(_model())  # must not raise
+
+    def test_empty_structure_passes(self):
+        ModelStructure().validate(_model())  # nothing declared → nothing to check
+
+    def test_factor_index_out_of_bounds_raises(self):
+        s = ModelStructure.from_dicts(factors={"a": [0], "b": [2]})  # n=2: index 2 bad
+        with pytest.raises(ValueError, match="out of range"):
+            s.validate(_model())
+
+    def test_overlapping_factors_raise(self):
+        s = ModelStructure.from_dicts(factors={"a": [0, 1], "b": [1]})  # 1 in both
+        with pytest.raises(ValueError, match=r"disjoint|overlap"):
+            s.validate(_model())
+
+    def test_factors_must_cover_every_state(self):
+        s = ModelStructure.from_dicts(factors={"a": [0]})  # index 1 left out (n=2)
+        with pytest.raises(ValueError, match="cover"):
+            s.validate(_model())
+
+    def test_roles_must_cover_every_state(self):
+        s = ModelStructure.from_dicts(roles={"internal": [0]})  # index 1 left out
+        with pytest.raises(ValueError, match="cover"):
+            s.validate(_model())
+
+    def test_channel_row_out_of_bounds_raises(self):
+        s = ModelStructure.from_dicts(channels={"y": [1]})  # m=1: row 1 bad
+        with pytest.raises(ValueError, match="out of range"):
+            s.validate(_model())
+
+    def test_partial_channels_are_allowed(self):
+        # channels need not cover all observation rows — only factors/roles must.
+        ModelStructure.from_dicts(factors={"a": [0], "b": [1]}).validate(_model())

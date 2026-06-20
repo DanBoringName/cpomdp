@@ -28,6 +28,15 @@ precision-based test in v0.4.
 
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+# TODO(revisit): this makes me uneasy. ModelStructure referencing LinearGaussianModel
+# even for types is a peer back-reference only validate needs — the reason this import
+# hides under TYPE_CHECKING. Not a layering break, so I'm keeping it FOR NOW. Come back
+# and decide if model.validate_structure() (model as information-expert) or a Protocol
+# here reads cleaner; flip unless this stays well-organised with no real coupling cost.
+if TYPE_CHECKING:
+    from cpomdp.types import LinearGaussianModel
 
 __all__ = ["ModelStructure"]
 
@@ -132,6 +141,53 @@ class ModelStructure:
                 ")",
             ]
         )
+
+    def validate(self, model: "LinearGaussianModel", *, atol: float = 1e-9) -> None:
+        """Raise if this declaration contradicts ``model`` (opt-in; EXPERIMENTAL).
+
+        Partition well-formedness (pure index arithmetic, a stable contract): declared
+        factors and roles each partition the ``n``-state space — every index in
+        ``[0, n)``, pairwise disjoint, covering all of it; channels index valid,
+        distinct observation rows in ``[0, m)`` but need not cover them. The
+        full-coverage requirement for factors/roles is a strict but reversible choice
+        (ADR-010), to relax if it proves a faff.
+
+        Not run at construction to remain lean; opt in via
+        ``model.structure.validate(model)``.
+        """
+        n_states = model.n_states
+        n_observations = model.n_observations
+
+        self._validate_partition(self.factors, n_states, "factor", require_cover=True)
+        self._validate_partition(self.roles, n_states, "role", require_cover=True)
+        self._validate_partition(
+            self.channels, n_observations, "channel", require_cover=False
+        )
+
+    @staticmethod
+    def _validate_partition(
+        groups: _Groups, size: int, kind: str, *, require_cover: bool
+    ) -> None:
+        if not groups:
+            return
+        seen: set[int] = set()
+        for name, idx in groups:
+            for i in idx:
+                if not 0 <= i < size:
+                    raise ValueError(
+                        f"{kind} {name!r} has index {i} out of range [0, {size})"
+                    )
+                if i in seen:
+                    raise ValueError(
+                        f"{kind} {name!r} index {i} overlaps another {kind} "
+                        f"— {kind}s must be disjoint"
+                    )
+                seen.add(i)
+        if require_cover and seen != set(range(size)):
+            missing = sorted(set(range(size)) - seen)
+            raise ValueError(
+                f"{kind}s must cover all {size} indices; missing {missing}"
+            )
 
     @staticmethod
     def _lookup(groups: _Groups, name: str, kind: str) -> tuple[int, ...]:
