@@ -30,6 +30,8 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+import numpy as np
+
 # TODO(revisit): this makes me uneasy. ModelStructure referencing LinearGaussianModel
 # even for types is a peer back-reference only validate needs — the reason this import
 # hides under TYPE_CHECKING. Not a layering break, so I'm keeping it FOR NOW. Come back
@@ -152,6 +154,13 @@ class ModelStructure:
         full-coverage requirement for factors/roles is a strict but reversible choice
         (ADR-010), to relax if it proves a faff.
 
+        Conditional independence (EXPERIMENTAL): factors declared independent must have
+        ≈0 cross-blocks in the dynamics ``A`` (and the fixed process noise ``Q``) to
+        ``atol``, and a sensory channel must read within a single factor. A
+        state-dependent ``Q(x)`` has no single matrix to check, so it is skipped. This
+        criterion checks one-step blocks now and tightens to the rigorous
+        precision-based (``Σ⁻¹`` block-diagonal) test in v0.4.
+
         Not run at construction to remain lean; opt in via
         ``model.structure.validate(model)``.
         """
@@ -163,6 +172,55 @@ class ModelStructure:
         self._validate_partition(
             self.channels, n_observations, "channel", require_cover=False
         )
+        a_mat = np.asarray(model.dynamics)
+        c_mat = np.asarray(model.sensor_model)
+        # fixed Q only — a state-dependent Q(x) has no single matrix to check (skip it).
+        q_mat = (
+            None
+            if model.process_noise is not None
+            else np.asarray(model.dynamics_noise)
+        )
+        for name_i, idx_i in self.factors:
+            for name_j, idx_j in self.factors:
+                if name_i == name_j:
+                    continue
+                self._assert_zero_block(a_mat, idx_i, idx_j, atol, "A", name_i, name_j)
+                if q_mat is not None:
+                    self._assert_zero_block(
+                        q_mat, idx_i, idx_j, atol, "dynamics_noise", name_i, name_j
+                    )
+        if self.channels and self.factors:
+            for ch_name, rows in self.channels:
+                self._assert_channel_clean(c_mat, rows, self.factors, atol, ch_name)
+
+    @staticmethod
+    def _assert_zero_block(mat, rows, cols, atol, mat_name, fi, fj):
+        block = mat[np.ix_(list(rows), list(cols))]
+        if block.size == 0:
+            return
+        a, b = np.unravel_index(int(np.argmax(np.abs(block))), block.shape)
+        peak = float(block[a, b])
+        if abs(peak) > atol:
+            raise ValueError(
+                f"factors {fi!r} and {fj!r} are declared conditionally independent, "
+                f"but {mat_name}[{fi}, {fj}] has a nonzero entry {peak:.3g} at "
+                f"({list(rows)[a]}, {list(cols)[b]}) — {mat_name} couples them; the "
+                f"declaration does not match the matrix sparsity."
+            )
+
+    @staticmethod
+    def _assert_channel_clean(c_mat, rows, factors, atol, ch_name):
+        sub = np.abs(c_mat[list(rows), :])
+        active = set(np.nonzero(np.max(sub, axis=0) > atol)[0].tolist())
+        if not active:
+            return
+        touched = [name for name, idx in factors if active & set(idx)]
+        if len(touched) > 1:
+            raise ValueError(
+                f"channel {ch_name!r} reads state columns {sorted(active)} spanning "
+                f"multiple factors {touched} — a sensory channel must read within "
+                f"a single factor (cross-contamination; does not match C)."
+            )
 
     @staticmethod
     def _validate_partition(

@@ -42,6 +42,35 @@ def _model(**over) -> LinearGaussianModel:
     return LinearGaussianModel(**_kwargs(**over))
 
 
+def _block_kwargs(**over):
+    """A 4-state, 2-factor, 2-observation block model; ``over`` swaps fields.
+
+    Factors f0=(0,1), f1=(2,3): ``A`` is block-diagonal, ``C`` reads each factor on
+    its own observation row, ``Q`` is diagonal. A matching ModelStructure honours that
+    sparsity; the tests perturb one block to break it. (Unannotated builder, like
+    ``_kwargs`` — its gradual return keeps ty happy with the ``**`` unpack into the
+    typed constructor.)
+    """
+    kwargs = {
+        "dynamics": [[0.9, 0.1, 0.0, 0.0], [0.0, 0.9, 0.0, 0.0],
+                     [0.0, 0.0, 0.8, 0.2], [0.0, 0.0, 0.0, 0.8]],
+        "sensor_model": [[1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]],
+        "dynamics_noise": 0.1 * jnp.eye(4),
+        "sensor_noise": jnp.eye(2),
+        "prior": Belief(mean=[0.0, 0.0, 0.0, 0.0], cov=jnp.eye(4)),
+        "structure": ModelStructure.from_dicts(
+            factors={"f0": [0, 1], "f1": [2, 3]}, channels={"y0": [0], "y1": [1]}
+        ),
+    }
+    kwargs.update(over)
+    return kwargs
+
+
+def _block_model(**over) -> LinearGaussianModel:
+    """The 4-state block model; ``over`` swaps individual fields."""
+    return LinearGaussianModel(**_block_kwargs(**over))
+
+
 class TestModelStructureType:
     def test_from_dicts_matches_direct_tuple_construction(self):
         from_dict = ModelStructure.from_dicts(factors={"pos": [0], "vel": [1]})
@@ -179,6 +208,12 @@ class TestValidatePartition:
     partition the state (in-bounds, disjoint, full coverage — coverage is the
     strict, reversible decision of ADR-010); channels must index valid, distinct
     observation rows but need NOT cover them all.
+
+    The "passes" cases declare two single-index factors, so they must use a model
+    whose dynamics honour that split (diagonal ``A``) — the default ``_model()`` couples
+    state 0 and 1 (``A[0, 1] = 0.1``), which validate's sparsity half rightly rejects.
+    The "raises" cases all trip the partition check before sparsity is reached, so the
+    coupled default is fine for them.
     """
 
     def test_well_formed_declaration_passes(self):
@@ -187,7 +222,7 @@ class TestValidatePartition:
             roles={"internal": [0], "external": [1]},
             channels={"y": [0]},
         )
-        s.validate(_model())  # must not raise
+        s.validate(_model(dynamics=[[1.0, 0.0], [0.0, 1.0]]))  # must not raise
 
     def test_empty_structure_passes(self):
         ModelStructure().validate(_model())  # nothing declared → nothing to check
@@ -219,4 +254,43 @@ class TestValidatePartition:
 
     def test_partial_channels_are_allowed(self):
         # channels need not cover all observation rows — only factors/roles must.
-        ModelStructure.from_dicts(factors={"a": [0], "b": [1]}).validate(_model())
+        # Diagonal A so the two-factor split is also sparsity-clean (class docstring).
+        ModelStructure.from_dicts(factors={"a": [0], "b": [1]}).validate(
+            _model(dynamics=[[1.0, 0.0], [0.0, 1.0]])
+        )
+
+
+class TestValidateSparsity:
+    """validate()'s conditional-independence half: A/C/Q cross-block sparsity.
+
+    EXPERIMENTAL — this criterion tightens to the precision-based test in v0.4.
+    """
+
+    def test_block_structured_model_honours_its_declaration(self):
+        m = _block_model()
+        s = m.structure
+        assert s is not None
+        s.validate(m)  # must not raise
+
+    def test_off_block_dynamics_coupling_fails(self):
+        bad = _block_model(dynamics=[[0.9, 0.1, 0.3, 0.0], [0.0, 0.9, 0.0, 0.0],
+                                     [0.0, 0.0, 0.8, 0.2], [0.0, 0.0, 0.0, 0.8]])
+        s = bad.structure
+        assert s is not None
+        with pytest.raises(ValueError, match="conditionally independent"):
+            s.validate(bad)
+
+    def test_channel_cross_contamination_fails(self):
+        bad = _block_model(sensor_model=[[1.0, 0.0, 0.5, 0.0], [0.0, 0.0, 1.0, 0.0]])
+        s = bad.structure
+        assert s is not None
+        with pytest.raises(ValueError, match="single factor"):
+            s.validate(bad)
+
+    def test_off_block_process_noise_fails(self):
+        bad = _block_model(dynamics_noise=[[0.1, 0.0, 0.05, 0.0], [0.0, 0.1, 0.0, 0.0],
+                                           [0.05, 0.0, 0.1, 0.0], [0.0, 0.0, 0.0, 0.1]])
+        s = bad.structure
+        assert s is not None
+        with pytest.raises(ValueError, match="dynamics_noise"):
+            s.validate(bad)
