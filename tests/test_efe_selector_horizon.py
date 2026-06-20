@@ -20,9 +20,10 @@ file: `test_efe_selector.py` must pass UNMODIFIED.
 
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 from cpomdp.agent import Agent
-from cpomdp.efe import policy_efe
+from cpomdp.efe import expected_free_energy, policy_efe
 from cpomdp.observation import CallableSensor
 from cpomdp.selection import EFESelector, ObservationGoal, Preference
 from cpomdp.types import Belief, LinearGaussianModel
@@ -151,3 +152,47 @@ class TestAgentThreadsHorizon:
         sel = agent._selector
         assert isinstance(sel, EFESelector)
         assert sel.horizon == 1
+
+
+class TestEFESelectorValidation:
+    def test_rejects_too_few_candidates(self):
+        with pytest.raises(ValueError, match="at least 2"):
+            EFESelector(_model(), n_candidates=1, action_bounds=(-2.0, 2.0))
+
+    def test_rejects_inverted_bounds(self):
+        with pytest.raises(ValueError, match="lo < hi"):
+            EFESelector(_model(), n_candidates=11, action_bounds=(2.0, -2.0))
+
+    def test_rejects_multidimensional_action(self):
+        # EFESelector's grid is 1-D; p>1 must error clearly, not crash cryptically.
+        m2 = LinearGaussianModel(
+            dynamics=[[1.0, 0.0], [0.0, 1.0]],
+            sensor_model=[[1.0, 0.0]],
+            dynamics_noise=[[0.1, 0.0], [0.0, 0.1]],
+            sensor_noise=[[0.3]],
+            prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
+            control=[[1.0, 0.0], [0.0, 1.0]],  # p = 2
+        )
+        with pytest.raises(ValueError, match=r"1-D action grid|p=1|p>1"):
+            EFESelector(m2, n_candidates=11, action_bounds=(-2.0, 2.0))
+
+    def test_nan_scoring_candidate_does_not_win(self):
+        # A non-PD R(x) at reachable states scores those candidates NaN; the selector
+        # must pick a finite-scoring action, not the NaN one (the nan-safe argmin).
+        def half_neg(x, params):
+            return jnp.array([[1.0 - x[0]]])  # PD at probe x=0; non-PD where x[0] > 1
+
+        belief = Belief(mean=[0.0], cov=[[0.5]])
+        model = LinearGaussianModel(
+            dynamics=[[1.0]],
+            sensor_model=[[1.0]],
+            dynamics_noise=[[0.05]],
+            sensor_noise=[[0.3]],
+            prior=belief,
+            control=[[1.0]],
+            observation=CallableSensor([[1.0]], half_neg, {}),
+        )
+        sel = EFESelector(model, n_candidates=21, action_bounds=(-3.0, 3.0))
+        chosen = sel.select(belief, _pref())
+        g = float(expected_free_energy(model, belief, chosen, _pref())[0])
+        assert jnp.isfinite(g)  # a NaN-scoring candidate did not win

@@ -277,10 +277,14 @@ def _efe_step(
 
     # --- epistemic: state information gain I(state; obs) = ½ ln(det S / det R) ---
     # FRAGILE(lit) #3: this is *salience* (state info gain), not *novelty* (parameter
-    # info gain). slogdet (not det) for numerical stability; the sign is +1 for the
-    # PD covariances here, so we keep only the log-abs-det.
-    _, logdet_pred_obs = jnp.linalg.slogdet(pred_obs_cov)
-    _, logdet_noise = jnp.linalg.slogdet(sensor_noise)
+    # info gain). slogdet (not det) for numerical stability; keep the SIGN so a
+    # non-PD S or R (sign <= 0) — e.g. a degenerate R(x) at a reachable state — has no
+    # real ½ln det and yields NaN, not a plausible-but-wrong finite value. The NaN
+    # propagates to G and is caught at the selection boundary (the nan-safe argmin).
+    sign_s, logdet_pred_obs = jnp.linalg.slogdet(pred_obs_cov)
+    sign_r, logdet_noise = jnp.linalg.slogdet(sensor_noise)
+    logdet_pred_obs = jnp.where(sign_s > 0, logdet_pred_obs, jnp.nan)
+    logdet_noise = jnp.where(sign_r > 0, logdet_noise, jnp.nan)
     epistemic = 0.5 * (logdet_pred_obs - logdet_noise)
 
     # FRAGILE(lit) #5: G = pragmatic − epistemic (minimise). Pairing cross-entropy

@@ -142,14 +142,33 @@ class EFESelector:
                 "EFESelector needs a model with a control matrix; an action has no "
                 "effect on a control-free (pure-tracking) model."
             )
-        self._model = model
+        p = model.control.shape[1]
+        if p != 1:
+            raise ValueError(
+                f"EFESelector searches a 1-D action grid (p=1); got p={p}. "
+                f"Multi-dimensional action search is the deferred v0.4 "
+                f"GradientEFESelector seam — pass a custom selector for p>1."
+            )
         lo, hi = action_bounds
-        # p=1 (the tests/corridor): a column of candidate actions, front-loaded once.
-        # p>1 (the 2-D figure) is a meshgrid — WIP.
+        if not lo < hi:
+            raise ValueError(
+                f"action_bounds must be (lo, hi) with lo < hi, got {action_bounds}"
+            )
+        if n_candidates < 2:
+            raise ValueError(
+                f"n_candidates must be at least 2 to search, got {n_candidates}"
+            )
         if horizon < 1:
             raise ValueError(f"horizon must be >= 1, got {horizon}")
+        self._model = model
         self._horizon = horizon
         self._candidates = jnp.linspace(lo, hi, n_candidates)[:, None]
+
+    @staticmethod
+    def _argmin(g: Float64[Array, "k"]) -> Array:
+        # A NaN-scoring candidate must not silently win: map NaN -> +inf so it loses
+        # the search (jnp.argmin otherwise treats NaN as the minimum).
+        return jnp.argmin(jnp.where(jnp.isnan(g), jnp.inf, g))
 
     def select(self, belief: Belief, preference: Preference) -> Float64[Array, "p"]:
         """The grid action minimising ``G`` over the horizon (the per-cycle work).
@@ -162,13 +181,13 @@ class EFESelector:
             g = jax.vmap(
                 lambda a: expected_free_energy(self._model, belief, a, preference)[0]
             )(self._candidates)
-            return self._candidates[jnp.argmin(g)]
+            return self._candidates[self._argmin(g)]
         # H>1: each candidate becomes a constant-action policy (held for H steps).
         policies = jnp.repeat(self._candidates[:, None, :], self._horizon, axis=1)
         g = jax.vmap(lambda pol: policy_efe(self._model, belief, pol, preference)[0])(
             policies
         )
-        return self._candidates[jnp.argmin(g)]  # first (= constant) action
+        return self._candidates[self._argmin(g)]  # first (= constant) action
 
     @property
     def n_candidates(self) -> int:

@@ -50,8 +50,20 @@ _Pairs = Iterable[tuple[str, Sequence[int]]]
 
 
 def _freeze(pairs: _Pairs) -> _Groups:
-    """Normalise an iterable of (name, indices) pairs into the hashable tuple form."""
-    return tuple((str(name), tuple(int(i) for i in idx)) for name, idx in pairs)
+    """Normalise an iterable of (name, indices) pairs into the hashable tuple form.
+
+    Rejects duplicate names within a group: a repeat would make the stable
+    ``factor``/``role_of``/``channel`` lookups silently return only the first match.
+    """
+    frozen = tuple((str(name), tuple(int(i) for i in idx)) for name, idx in pairs)
+    names = [name for name, _ in frozen]
+    dupes = sorted({n for n in names if names.count(n) > 1})
+    if dupes:
+        raise ValueError(
+            f"duplicate group name(s) {dupes} — factor/role/channel names must be "
+            f"unique (a repeat would shadow earlier indices in lookups)."
+        )
+    return frozen
 
 
 @dataclass(frozen=True, init=False)
@@ -198,6 +210,16 @@ class ModelStructure:
         block = mat[np.ix_(list(rows), list(cols))]
         if block.size == 0:
             return
+        finite = np.isfinite(block)
+        if not finite.all():
+            a, b = np.unravel_index(int(np.argmax(~finite)), block.shape)
+            bad = block[a, b]
+            raise ValueError(
+                f"factors {fi!r} and {fj!r} are declared conditionally independent, "
+                f"but {mat_name}[{fi}, {fj}] has a non-finite entry {bad} at "
+                f"({list(rows)[a]}, {list(cols)[b]}) — a NaN/Inf cannot be certified "
+                f"zero; the declaration does not match the matrix sparsity."
+            )
         a, b = np.unravel_index(int(np.argmax(np.abs(block))), block.shape)
         peak = float(block[a, b])
         if abs(peak) > atol:
@@ -210,8 +232,16 @@ class ModelStructure:
 
     @staticmethod
     def _assert_channel_clean(c_mat, rows, factors, atol, ch_name):
-        sub = np.abs(c_mat[list(rows), :])
-        active = set(np.nonzero(np.max(sub, axis=0) > atol)[0].tolist())
+        rows = list(rows)
+        if not rows:
+            return  # empty channel: no rows to read, nothing to cross-contaminate
+        sub = c_mat[rows, :]
+        if not np.isfinite(sub).all():
+            raise ValueError(
+                f"channel {ch_name!r} reads a non-finite entry in the sensor matrix "
+                f"C — a NaN/Inf cannot be certified within a single factor."
+            )
+        active = set(np.nonzero(np.max(np.abs(sub), axis=0) > atol)[0].tolist())
         if not active:
             return
         touched = [name for name, idx in factors if active & set(idx)]

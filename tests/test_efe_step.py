@@ -15,7 +15,7 @@ Two locks live here:
 
 - `_frozen_efe` is a verbatim snapshot of the pre-extraction kernel arithmetic. An inert
   extraction reproduces it to the ULP — asserted with `assert_array_equal`, NOT
-  `allclose` (the project's byte-identical discipline, CLAUDE.md / RFC-001). Robust to
+  `allclose` (the project's byte-identical discipline, RFC-001). Robust to
   XLA drift: both sides move together, so only a real arithmetic change trips it. Covers
   all three branches the extraction moves: fixed (`None`), `R(x)`, `Q(x)`.
 - `TestEfeStepContract` pins the signature, the `_EfeStep` fields, the byte-identical

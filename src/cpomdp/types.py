@@ -7,7 +7,7 @@ import jax.numpy as jnp
 from jaxtyping import Array, Float64
 from numpy.typing import ArrayLike
 
-from cpomdp._validation import validate_covariance
+from cpomdp._validation import validate_covariance, validate_finite
 from cpomdp.dynamics import DynamicsNoise
 from cpomdp.observation import ObservationModel
 from cpomdp.structure import ModelStructure
@@ -54,6 +54,7 @@ class Belief:
             raise ValueError(
                 f"belief mean must be a 1-D vector, got shape {self.mean.shape}"
             )
+        validate_finite(self.mean, "belief mean")
         validate_covariance(self.cov, "belief covariance")
         n = self.mean.shape[0]
         if self.cov.shape != (n, n):
@@ -200,7 +201,7 @@ class LinearGaussianModel:
             )
 
         # sensor_noise: covariance of the sensor noise, (m, m), symmetric.
-        validate_covariance(self.sensor_noise, "sensor_noise")
+        validate_covariance(self.sensor_noise, "sensor_noise", require_definite=True)
         if self.sensor_noise.shape != (m, m):
             raise ValueError(
                 f"sensor_noise must be {m}x{m} to match the {m}-D observation, "
@@ -240,7 +241,7 @@ class LinearGaussianModel:
                 )
 
         # structure (optional): declarative metadata; validated opt-in via
-        # structure.validate(model), never here (the constructor stays lean, CLAUDE.md).
+        # structure.validate(model), never here (the constructor stays lean, RFC-001).
         if self.structure is not None and not isinstance(
             self.structure, ModelStructure
         ):

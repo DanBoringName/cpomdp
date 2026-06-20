@@ -151,6 +151,13 @@ class Agent:
                     "(deferred); pass a StateGoal for the LQR path, or "
                     "selector=EFESelector(...) to opt into H=1 EFE."
                 )
+            m = model.n_observations
+            obs_target = jnp.asarray(objective.target, dtype=float)
+            if obs_target.shape != (m,):
+                raise ValueError(
+                    f"ObservationGoal target must be a 1-D vector of length {m} (the "
+                    f"observation dimension), got shape {obs_target.shape}"
+                )
             self._controller = None
             self._goal = None
             self._preference = Preference(

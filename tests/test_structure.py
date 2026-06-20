@@ -52,8 +52,12 @@ def _block_kwargs(**over):
     typed constructor.)
     """
     kwargs = {
-        "dynamics": [[0.9, 0.1, 0.0, 0.0], [0.0, 0.9, 0.0, 0.0],
-                     [0.0, 0.0, 0.8, 0.2], [0.0, 0.0, 0.0, 0.8]],
+        "dynamics": [
+            [0.9, 0.1, 0.0, 0.0],
+            [0.0, 0.9, 0.0, 0.0],
+            [0.0, 0.0, 0.8, 0.2],
+            [0.0, 0.0, 0.0, 0.8],
+        ],
         "sensor_model": [[1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]],
         "dynamics_noise": 0.1 * jnp.eye(4),
         "sensor_noise": jnp.eye(2),
@@ -118,6 +122,12 @@ class TestModelStructureType:
         s = ModelStructure(factors=(("pos", [0, 1]),))
         assert s.factors == (("pos", (0, 1)),)
         assert isinstance(hash(s), int)
+
+    def test_rejects_duplicate_group_names(self):
+        # A repeated name would make factor()/role_of()/channel() silently return only
+        # the first group's indices — reject it at construction.
+        with pytest.raises(ValueError, match="duplicate"):
+            ModelStructure(factors=(("a", [0]), ("a", [1])))
 
 
 class TestStructureOnModel:
@@ -273,8 +283,14 @@ class TestValidateSparsity:
         s.validate(m)  # must not raise
 
     def test_off_block_dynamics_coupling_fails(self):
-        bad = _block_model(dynamics=[[0.9, 0.1, 0.3, 0.0], [0.0, 0.9, 0.0, 0.0],
-                                     [0.0, 0.0, 0.8, 0.2], [0.0, 0.0, 0.0, 0.8]])
+        bad = _block_model(
+            dynamics=[
+                [0.9, 0.1, 0.3, 0.0],
+                [0.0, 0.9, 0.0, 0.0],
+                [0.0, 0.0, 0.8, 0.2],
+                [0.0, 0.0, 0.0, 0.8],
+            ]
+        )
         s = bad.structure
         assert s is not None
         with pytest.raises(ValueError, match="conditionally independent"):
@@ -288,9 +304,43 @@ class TestValidateSparsity:
             s.validate(bad)
 
     def test_off_block_process_noise_fails(self):
-        bad = _block_model(dynamics_noise=[[0.1, 0.0, 0.05, 0.0], [0.0, 0.1, 0.0, 0.0],
-                                           [0.05, 0.0, 0.1, 0.0], [0.0, 0.0, 0.0, 0.1]])
+        bad = _block_model(
+            dynamics_noise=[
+                [0.1, 0.0, 0.05, 0.0],
+                [0.0, 0.1, 0.0, 0.0],
+                [0.05, 0.0, 0.1, 0.0],
+                [0.0, 0.0, 0.0, 0.1],
+            ]
+        )
         s = bad.structure
         assert s is not None
         with pytest.raises(ValueError, match="dynamics_noise"):
             s.validate(bad)
+
+    def test_nan_cross_block_is_not_certified_independent(self):
+        # A NaN in an off-block must not silently pass: NaN > atol is False, so the
+        # old magnitude check certified a NaN-coupled model conditionally independent.
+        bad = _block_model(
+            dynamics=[
+                [0.9, 0.1, float("nan"), 0.0],
+                [0.0, 0.9, 0.0, 0.0],
+                [0.0, 0.0, 0.8, 0.2],
+                [0.0, 0.0, 0.0, 0.8],
+            ]
+        )
+        s = bad.structure
+        assert s is not None
+        with pytest.raises(ValueError, match="non-finite"):
+            s.validate(bad)
+
+    def test_empty_channel_group_does_not_crash(self):
+        # An empty channel declaration must not crash validate() with a cryptic numpy
+        # reduction error — no rows means nothing to cross-contaminate.
+        m = _block_model(
+            structure=ModelStructure.from_dicts(
+                factors={"f0": [0, 1], "f1": [2, 3]}, channels={"empty": []}
+            )
+        )
+        s = m.structure
+        assert s is not None
+        s.validate(m)  # must not raise

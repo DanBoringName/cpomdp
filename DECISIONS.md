@@ -557,7 +557,7 @@ v0.3 payoff (RFC-001): *EFE drives uncertainty below LQR*.
 
 - **Fixed sensor** (`observation is None or is_fixed`): unchanged — direct reads of
   `model.sensor_model`/`model.sensor_noise`, no `linearize`, no dispatch. The hot
-  path stays **byte-identical and lean** (CLAUDE.md / RFC-001); the whole existing
+  path stays **byte-identical and lean** (RFC-001); the whole existing
   `test_kalman.py` suite passing unmodified is the regression proof.
 - **State-dependent sensor**: compute the predicted mean `μ⁻ = A·μ + B·a`, then
   `(C, R) = observation.linearize(μ⁻)`, and feed that `(C, R)` to the (unchanged)
