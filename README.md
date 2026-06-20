@@ -103,3 +103,7 @@ Right now (v0.1) cpomdp handles linear-Gaussian models: Kalman filtering for per
 You can swap the inference engine if you want to. `KalmanBackend` is the default and does the real work; `RxInferBackend` re-derives the same answers through Julia and exists mainly so the fast path has something independent to check itself against. Both sit behind the `InferenceBackend` protocol, so you can write your own.
 
 This is pre-alpha. The API works and the maths is tested against that independent oracle, but expect things to move before 1.0.
+
+## Acknowledgements
+
+Thanks to **Kevin Backhouse** (Postgraduate Researcher in Cognitive Neuroscience, Durham University) for guidance on the active-inference formulation, collaboration on related discrete generative-model projects, and for being a consistent sounding board throughout the design of this work.
