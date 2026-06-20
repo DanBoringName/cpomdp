@@ -163,6 +163,7 @@ class Agent:
                     model,
                     n_candidates=objective.n_candidates,
                     action_bounds=objective.action_bounds,
+                    horizon=objective.horizon,
                 )
             )
             self._last_action = jnp.zeros(model.n_controls)

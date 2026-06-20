@@ -107,7 +107,7 @@ if TYPE_CHECKING:
     # one-way (selectors -> kernel) and lets EFESelector import this module.
     from cpomdp.selection import Preference
 
-__all__ = ["expected_free_energy"]
+__all__ = ["expected_free_energy", "policy_efe"]
 
 
 @dataclass(frozen=True)
@@ -179,7 +179,25 @@ def expected_free_energy(
     return step.g, {"pragmatic": step.pragmatic, "epistemic": step.epistemic}
 
 
-def policy_efe(model: LinearGaussianModel, belief: Belief, policy, preference):
+def policy_efe(
+    model: LinearGaussianModel,
+    belief: Belief,
+    policy: Float64[Array, "H p"],
+    preference: "Preference",
+) -> tuple[Float64[Array, ""], dict[str, Float64[Array, ""]]]:
+    """Summed EFE of a horizon-H ``policy`` from ``belief`` (the rollout seam).
+
+    Internal — ``EFESelector`` searches over it. A ``lax.scan`` over the ``policy``
+    rows sums each step's ``G`` while propagating the belief predict-only between
+    steps (the mean follows the prediction; the covariance contracts by the Kalman
+    update, reusing the moments ``_efe_step`` returns). ``H`` is ``policy.shape[0]``;
+    at ``H = 1`` it reduces exactly to ``expected_free_energy``. Composes under
+    ``jit`` / ``vmap`` / ``grad``.
+
+    Returns:
+        ``(G, {"pragmatic": ..., "epistemic": ...})`` — the summed EFE and its
+        summed components over the horizon.
+    """
     if model.control is None:
         raise ValueError(
             "policy_efe needs a model with a control matrix; an action has no "
