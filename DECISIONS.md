@@ -756,8 +756,8 @@ not a monolith (the same "take the internals seriously" thread as ADR-006 / RFC-
 ch. 8). v0.3 ships the vocabulary so a researcher can *express* that reading.
 
 **Call for input.** The right factorisation of E. coli-style distributed internals is
-itself open research; field experts with a better reading are invited to open a repo
-Discussion or Issue (referenced from the README and the structure docs).
+itself open research; field experts with a better reading are invited to a pinned repo
+Discussion (the structure docstring points there too).
 
 ### Sub-decisions
 
