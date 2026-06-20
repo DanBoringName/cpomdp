@@ -92,9 +92,11 @@ THE DATA FLOW  (top → bottom: what goes in → what comes out)
 
 """
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import jax.numpy as jnp
+from jax import lax
 from jaxtyping import Array, Float64
 
 from cpomdp.types import Belief, LinearGaussianModel
@@ -106,6 +108,25 @@ if TYPE_CHECKING:
     from cpomdp.selection import Preference
 
 __all__ = ["expected_free_energy"]
+
+
+@dataclass(frozen=True)
+class _EfeStep:
+    """One EFE step: the public split plus the moments the rollout propagates.
+
+    ``expected_free_energy`` exposes only ``g`` + ``{pragmatic, epistemic}``; the
+    H-step rollout (``policy_efe``, B2) additionally needs ``mu_pred``/``sigma_pred``/
+    ``s`` (μ⁺, Σ⁺, S) to propagate the belief — but NOT ``C`` (it fetches its own where
+    it propagates). Consumed locally; it never crosses a ``jit``/``vmap``/``scan``
+    boundary, so it needs no pytree registration.
+    """
+
+    g: Float64[Array, ""]
+    pragmatic: Float64[Array, ""]
+    epistemic: Float64[Array, ""]
+    mu_pred: Float64[Array, "n"]
+    sigma_pred: Float64[Array, "n n"]
+    s: Float64[Array, "m m"]
 
 
 def expected_free_energy(
@@ -145,10 +166,57 @@ def expected_free_energy(
             "has no effect on a control-free (pure-tracking) model."
         )
     control = model.control  # narrowed to Array by the guard above
-
     action = jnp.asarray(action, dtype=float)
-    mu, sigma = belief.mean, belief.cov
+    step = _efe_step(
+        model,
+        belief.mean,
+        belief.cov,
+        control,
+        action,
+        preference.goal,
+        preference.precision,
+    )
+    return step.g, {"pragmatic": step.pragmatic, "epistemic": step.epistemic}
 
+
+def policy_efe(model: LinearGaussianModel, belief: Belief, policy, preference):
+    if model.control is None:
+        raise ValueError(
+            "policy_efe needs a model with a control matrix; an action has no "
+            "effect on a control-free (pure-tracking) model."
+        )
+    control = model.control
+    goal, precision = preference.goal, preference.precision
+    policy = jnp.asarray(policy, dtype=float)
+
+    def step(carry, action):
+        mu, sigma = carry
+        r = _efe_step(model, mu, sigma, control, action, goal, precision)
+        # predict-only propagation: rollout fetches its OWN C (the one eval the
+        # one-step wrapper never pays), reusing the (Σ⁺, S) r already returned.
+        c = (
+            model.C
+            if model.observation is None
+            else model.observation.linearize(r.mu_pred)[0]
+        )
+        p_xo = r.sigma_pred @ c.T
+        sigma_post = r.sigma_pred - p_xo @ jnp.linalg.solve(r.s, p_xo.T)
+        sigma_post = 0.5 * (sigma_post + sigma_post.T)
+        return (r.mu_pred, sigma_post), (r.g, r.pragmatic, r.epistemic)
+
+    _, (gs, prags, epis) = lax.scan(step, (belief.mean, belief.cov), policy)
+    return jnp.sum(gs), {"pragmatic": jnp.sum(prags), "epistemic": jnp.sum(epis)}
+
+
+def _efe_step(
+    model: LinearGaussianModel,
+    mu: Float64[Array, "n"],
+    sigma: Float64[Array, "n n"],
+    control: Float64[Array, "n p"],
+    action: Float64[Array, "p"],
+    goal: Float64[Array, "m"],
+    precision: Float64[Array, "m m"],
+) -> _EfeStep:
     # --- predict: push the belief one step through the dynamics under `action` ---
     # Mirrors the covariance predict in kalman._gain_and_posterior_cov (cov_pred);
     # NB the action moves only the mean — Σ⁺ is action-independent, which is the
@@ -184,7 +252,6 @@ def expected_free_energy(
     # FRAGILE(lit) #2: cross-entropy form = mean term + ½tr(ΛS). The ½tr(ΛS) piece
     # is the variance penalty that distinguishes this from the mean-only form and,
     # via −½ln det S, from the KL-risk form. rfcs/004 must prove this is the right one.
-    goal, precision = preference.goal, preference.precision
     residual = o_pred - goal
     pragmatic_mean = 0.5 * residual @ precision @ residual
     pragmatic_var = 0.5 * jnp.trace(precision @ pred_obs_cov)
@@ -201,4 +268,11 @@ def expected_free_energy(
     # FRAGILE(lit) #5: G = pragmatic − epistemic (minimise). Pairing cross-entropy
     # with −info-gain is decomposition (b); it is self-consistent (no double-count).
     g = pragmatic - epistemic
-    return g, {"pragmatic": pragmatic, "epistemic": epistemic}
+    return _EfeStep(
+        g=g,
+        pragmatic=pragmatic,
+        epistemic=epistemic,
+        mu_pred=mu_pred,
+        sigma_pred=sigma_pred,
+        s=pred_obs_cov,
+    )
