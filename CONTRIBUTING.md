@@ -31,6 +31,18 @@ save, point it at ruff yourself; just don't rely on it, the hooks are what count
 
 - **ruff** lints and formats the code. Line length is 88. Formatting isn't a
   matter of taste here, ruff decides and that's that.
+- **markdown** is linted by [markdownlint-cli2](https://github.com/DavidAnson/markdownlint-cli2)
+  (config in `.markdownlint-cli2.yaml`). It auto-fixes the mechanical stuff —
+  blank lines around headings, fenced blocks and lists — so most of the time it
+  just tidies your edit and asks you to re-stage. The only things it can't fix for
+  you are ones it can't guess, like naming a code fence's language. Prose lines
+  aren't wrapped, so line length isn't checked.
+- **spelling** in markdown and in `src/` docstrings is checked by
+  [cspell](https://cspell.org) (`cspell.json`). It's British English and seeded
+  with the project's vocabulary (cpomdp, Kalman, pytree, ...); if it flags a real
+  term it doesn't know yet, add it to the `words` list in that file rather than
+  working around it. It splits `snake_case`/`camelCase` into real words, so it
+  reads your docstrings without choking on most identifiers.
 - **docstrings** are required on public modules, classes, functions and methods in
   `src/` (Google style). Tests are exempt; their names are the documentation.
   Constructors can be documented at the class level instead of in `__init__`.

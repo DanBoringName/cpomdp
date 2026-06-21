@@ -1,0 +1,37 @@
+# Markdown linting config, read by markdownlint-cli2 — both the pre-commit hook
+# and any bare `markdownlint-cli2` run pick this up, so local and CI agree.
+# Rule reference: https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md
+
+fix: true
+
+config:
+  # The structural rules we actually want enforced. All on by default; listed
+  # explicitly so the intent is documented rather than implied.
+  MD022: true # headings surrounded by blank lines
+  MD031: true # fenced code blocks surrounded by blank lines
+  MD032: true # lists surrounded by blank lines
+  MD040: true # every fenced block names its language (```python, ```bash, ...)
+  MD012: true # no runs of consecutive blank lines
+
+  # Inline HTML is flagged by default (MD033); allow the two tags we use for
+  # collapsible <details> dropdowns (they render in both mkdocs and GitHub).
+  MD033:
+    allowed_elements:
+      - details
+      - summary
+
+  # Off, because they fight this repo's deliberate style:
+  # prose is one line per paragraph, not hard-wrapped (ruff wraps code at 88;
+  # prose stays long), so line-length doesn't apply.
+  MD013: false
+  # ADR files reuse section headings (### Decision, ### Context, ...) under
+  # different "## ADR-NNN" parents; only flag duplicate *siblings*.
+  MD024:
+    siblings_only: true
+
+# The docs site single-sources these from the project root via mkdocs snippet
+# includes (--8<--), so they aren't standalone documents — don't lint the stubs.
+# (Also excluded in .pre-commit-config.yaml; kept here for bare local runs.)
+ignores:
+  - "docs/index.md"
+  - "docs/changelog.md"

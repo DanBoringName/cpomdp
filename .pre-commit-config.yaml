@@ -32,6 +32,35 @@ repos:
       - id: check-toml
       - id: check-merge-conflict
 
+  # Markdown linting. Rules and ignores live in `.markdownlint-cli2.yaml` so a
+  # local run (`markdownlint-cli2`) and this hook judge the docs identically.
+  # pre-commit provisions its own Node, so no global install is needed.
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: v0.22.1
+    hooks:
+      - id: markdownlint-cli2
+        # The mkdocs single-source stubs aren't standalone documents (they're
+        # `--8<--` includes of README.md / CHANGELOG.md), so skip them.
+        exclude: ^docs/(index|changelog)\.md$
+
+  # Spell-check prose and docstrings. The dictionary and ignores live in
+  # `cspell.json`, so the editor extension and these hooks agree. pre-commit
+  # provisions its own Node. Two runs: markdown everywhere, plus the `src/`
+  # Python (cspell splits snake_case into real words, so it mostly catches
+  # docstring/comment typos — code identifiers are allow-listed in cspell.json).
+  - repo: https://github.com/streetsidesoftware/cspell-cli
+    rev: v10.0.1
+    hooks:
+      - id: cspell
+        name: cspell (markdown)
+        types: [markdown]
+        # The mkdocs single-source stubs are `--8<--` includes, not documents.
+        exclude: ^docs/(index|changelog)\.md$
+      - id: cspell
+        name: cspell (src docstrings)
+        types: [python]
+        files: ^src/
+
   # Enforce Conventional Commit messages (feat:, fix:, docs:, ...), matching the
   # style already used in the git history. Runs at the commit-msg stage.
   - repo: https://github.com/compilerla/conventional-pre-commit

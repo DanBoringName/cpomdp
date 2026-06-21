@@ -1,16 +1,3 @@
-% references.bib — cpomdp
-%
-% The literature cpomdp is built on. Two groups: the active-inference /
-% free-energy papers the implementation follows, and the software peers
-% (pymdp as the discrete sibling whose API cpomdp mirrors; RxInfer as the
-% correctness oracle the native path is validated against).
-%
-% DOIs for the four JOSS/JMP papers below were verified against the
-% publishers; the Bogacz and Smith DOIs are from memory — worth a 10-second
-% check before this feeds a JOSS paper.
-
-% ── Active inference / free-energy foundations ──────────────────────────
-
 @article{bogacz2017tutorial,
   author  = {Bogacz, Rafal},
   title   = {A tutorial on the free-energy framework for modelling perception and learning},
@@ -18,8 +5,8 @@
   year    = {2017},
   volume  = {76},
   pages   = {198--211},
-  doi     = {10.1016/j.jmp.2015.11.001},
-  url     = {https://doi.org/10.1016/j.jmp.2015.11.001}
+  doi     = {10.1016/j.jmp.2015.11.003},
+  url     = {https://doi.org/10.1016/j.jmp.2015.11.003}
 }
 
 @article{buckley2017fep,
@@ -55,8 +42,6 @@
   url     = {https://doi.org/10.1016/j.jmp.2021.102632}
 }
 
-% ── Software peers ──────────────────────────────────────────────────────
-
 @article{heins2022pymdp,
   author  = {Heins, Conor and Millidge, Beren and Demekas, Daphne and Klein, Brennan and Friston, Karl and Couzin, Iain D. and Tschantz, Alexander},
   title   = {pymdp: A Python library for active inference in discrete state spaces},
@@ -81,7 +66,6 @@
   url     = {https://doi.org/10.21105/joss.05161}
 }
 
-% ── Candidate (present but not yet cited) ────────────────────────────────
 @article{koudahl2021epistemics,
   author  = {Koudahl, Magnus T. and Kouw, Wouter M. and de Vries, Bert},
   title   = {On epistemics in expected free energy for linear Gaussian state space models},
@@ -93,12 +77,6 @@
   doi     = {10.3390/e23121565},
   url     = {https://doi.org/10.3390/e23121565}
 }
-
-% ── Chemotaxis / information-in-biology (the abiogenesis-probe motivation) ──
-% Why cpomdp exists for you beyond infrastructure: probing information rate in
-% the first instances of "life". Mattingly 2021 is the foundational
-% information-rate result; the 2026 paper is its follow-up; Lan & Tu is the
-% standing review of the field.
 
 @article{mattingly2021information,
   author  = {Mattingly, Henry H. and Kamino, Keita and Machta, Benjamin B. and Emonet, Thierry},

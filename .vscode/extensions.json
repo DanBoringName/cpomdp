@@ -1,0 +1,23 @@
+{
+  // Recommended, not required — VSCode prompts contributors to install these.
+  // Enforcement still lives in pre-commit and CI, so any editor works.
+  "recommendations": [
+    // Python: lint + format (matches the ruff hook), plus IntelliSense, the
+    // debugger and the test runner (ms-python.python pulls in Pylance + debugpy).
+    "charliermarsh.ruff",
+    "ms-python.python",
+
+    // The repo's config files: pyproject.toml, and the YAML behind pre-commit,
+    // mkdocs and CI (schema validation + completion).
+    "tamasfe.even-better-toml",
+    "redhat.vscode-yaml",
+
+    // Docs: live markdown linting + spell-check, reading the repo's own configs
+    // (.markdownlint-cli2.yaml, cspell.json) so the editor matches pre-commit/CI.
+    "DavidAnson.vscode-markdownlint",
+    "streetsidesoftware.code-spell-checker",
+
+    // The CI workflows under .github/workflows.
+    "github.vscode-github-actions",
+  ]
+}

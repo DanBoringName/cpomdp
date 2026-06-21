@@ -436,7 +436,8 @@ type, exception, or docstring. Shape A vs B is an implementation detail the wall
 makes swappable.
 
 ## On changing the matrices names
-To explicitly name the matricices to avoid further confusion and collision within the space.
+
+To explicitly name the matrices to avoid further confusion and collision within the space.
 An example:
 
 LinearGaussianModel(
@@ -785,6 +786,47 @@ Discussion (the structure docstring points there too).
 - Pytree round-trip + `jit` survival + `__hash__` (the aux-hashability proof);
   byte-identical arithmetic with structure vs `None` (`assert_array_equal`);
   `structure=None` leaves an unchanged 8-child / `None`-aux treedef.
-- Partition failers (out-of-bounds, overlap, non-coverage); a block-structured model
+- Partition failures (out-of-bounds, overlap, non-coverage); a block-structured model
   honouring its declaration passes, while an off-block `A` or a cross-contaminating `C`
   fails with a message naming the offending factor pair (`tests/test_structure.py`).
+
+## ADR-011 — Runnable doc examples (Rust-style doctests) deferred to v1.0
+
+**Date:** 2026-06-21
+**Status:** Accepted — implementation deferred to v1.0 (overkill pre-1.0)
+**Phase:** post-v0.3 / v1.0 roadmap
+**Relates to:** the D3 docs-accuracy pass (the current, manual guard); ADR-002 (don't
+build ahead of a consumer).
+
+### Decision
+
+Defer Rust-style doc tests — executing the docs' fenced ` ```python ` blocks as part of
+the suite so examples can't silently rot — until v1.0. Pre-1.0 it is overkill.
+
+### Why not now
+
+- **The public API is still moving.** Pre-1.0 a minor version may break the surface (per
+  the README status note), so example code churns with it. Doc tests lock the *example
+  contracts*; that only pays once the contracts are stable — i.e. at 1.0. Adding them
+  earlier means re-cutting them on every API shift for little protection.
+- **The cost isn't free, and pre-1.0 it isn't yet earned.** A correct setup has three
+  repo-specific wrinkles: (1) the build-up tutorial's blocks share state across the file
+  (needs shared-namespace execution, not block-isolation); (2) at least one block
+  *intentionally* raises (the README "no objective" `sample_action()` → `ValueError`) and
+  must be marked, not fail the run; (3) it wants its own pytest marker + CI step so the
+  cost stays isolable. Worth it at 1.0; premature before the examples settle.
+- **The gap is covered for now** by the by-hand D3 docs-accuracy pass against the source —
+  adequate at pre-1.0 volume, not a standing guarantee.
+
+### What we'll adopt at v1.0
+
+- A fenced-block runner (`pytest-markdown-docs` for pytest-native per-block collection +
+  skip/raises markers, or `mktestdocs` for a minimal `check_md_file(..., memory=True)`
+  shared-namespace run). Stdlib `doctest` is a poor fit — it only reads `>>>` REPL
+  examples, and the docs use script-style fenced blocks.
+- **Gate it behind a pytest marker** (mirror the existing `rxinfer` marker) so it is a
+  labeled, deselectable, attributable cost, not buried in the default run.
+- Only ` ```python ` blocks execute; output/diagram blocks are already tagged ` ```text `
+  (the markdownlint MD040 pass did this), so the runnable-vs-illustrative split is done.
+- Resolve the intentional-error block (skip or assert-raises) and the tutorial's
+  cross-block state (shared namespace).
