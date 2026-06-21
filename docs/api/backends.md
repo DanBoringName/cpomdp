@@ -1,6 +1,6 @@
 # Backends
 
-The inference engine is swappable behind the `InferenceBackend` protocol. `KalmanBackend` is the default fast path; `RxInferBackend` re-derives the same answers through Julia and exists as an independent correctness oracle.
+The inference engine is swappable behind the `InferenceBackend` protocol. `KalmanBackend` is the default fast path; `RxInferBackend` re-derives the same answers through Julia and exists as an independent correctness oracle [@bagaev2023rxinfer].
 
 ::: cpomdp.InferenceBackend
 
