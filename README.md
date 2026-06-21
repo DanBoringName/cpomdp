@@ -4,7 +4,7 @@
 [![Python](https://img.shields.io/pypi/pyversions/cpomdp.svg)](https://pypi.org/project/cpomdp/)
 [![CI](https://github.com/inferogenesis/cpomdp/actions/workflows/ci.yml/badge.svg)](https://github.com/inferogenesis/cpomdp/actions/workflows/ci.yml)
 [![coverage](https://raw.githubusercontent.com/inferogenesis/cpomdp/main/docs/assets/coverage.svg)](https://github.com/inferogenesis/cpomdp/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/inferogenesis/cpomdp/blob/main/LICENSE)
 
 Continuous active inference for Python. The continuous-state sibling of [pymdp](https://github.com/infer-actively/pymdp).
 
@@ -18,9 +18,9 @@ Full documentation — API reference and guides — lives at [cpomdp.inferogenes
 
 Four bacilli seeking food in the same world — the continuous-state answer to pymdp's mouse-seeking-cheese, now with the **epistemic** term v0.3 adds. Each body sits at its **true** hidden state; the orange `+` is where it *believes* it is (`belief.mean`); the ellipse is its uncertainty (`belief.cov`); the star is the food (the goal). A **beacon** marks where the sensor is sharp, so visiting it collapses the agent's uncertainty. The four differ in **one number only** — the weight λ on the information-seeking term of the Expected Free Energy each minimises (`G = pragmatic − λ·epistemic`): with no epistemic term, **classic LQR** beelines to the food; **too little λ** barely deflects; the **right λ** detours to the beacon to localise, *then* heads to the food; **too much λ** and it never leaves the beacon. One knob, four behaviours.
 
-![Four bacilli navigating to food under different epistemic weights λ, via continuous active inference](docs/assets/bacillus.gif)
+![Four bacilli navigating to food under different epistemic weights λ, via continuous active inference](https://raw.githubusercontent.com/inferogenesis/cpomdp/main/docs/assets/bacillus.gif)
 
-Reproduce it with [`examples/bacillus_seeking_food.py`](examples/bacillus_seeking_food.py) (`pip install "cpomdp[examples]"`). More — including the original v0.2 single-bacillus demo — in the [examples gallery](examples/README.md).
+Reproduce it with [`examples/bacillus_seeking_food.py`](https://github.com/inferogenesis/cpomdp/blob/main/examples/bacillus_seeking_food.py) (`pip install "cpomdp[examples]"`). More — including the original v0.2 single-bacillus demo — in the [examples gallery](https://github.com/inferogenesis/cpomdp/blob/main/examples/README.md).
 
 ## Install
 
@@ -79,18 +79,20 @@ Run that and the belief lands on `[1, 0]`. The agent worked out it was at positi
 
 ## The pymdp parallel
 
-If you've used pymdp, this table is basically the whole API:
+If you've used pymdp, the loop is the same and most of the names are too. Four carry over verbatim:
 
-| pymdp (discrete) | cpomdp (continuous)         | what it is                       |
-| ---------------- | --------------------------- | -------------------------------- |
-| `Agent`          | `Agent`                     | the stateful thing you drive     |
-| `qs`             | `belief`                    | the posterior over the state     |
-| `infer_states`   | `infer_states`              | fold in an observation           |
-| `sample_action`  | `sample_action`             | pick an action                   |
-| `C`              | `StateGoal` / `ObservationGoal` | the goal you pursue, and how sharply |
-| `D`              | `model.prior`               | belief before you've seen anything |
+> `Agent` · `qs` · `infer_states` · `sample_action`
 
-One honest difference. `sample_action` here is deterministic, not a sample from a policy posterior. For a linear-Gaussian sensor the action that minimises expected free energy turns out to be exactly the LQR optimum, so there's a single best action and that's what comes back. Same loop, exact answer. The reasoning is in [DECISIONS.md](https://github.com/inferogenesis/cpomdp/blob/main/DECISIONS.md) (ADR-003) if you want it.
+(`qs` is a read-only alias for `belief`, cpomdp's canonical name — so `agent.qs` and `agent.belief` are the same posterior. Use whichever your fingers reach for.)
+
+Only two things are spelled differently:
+
+| pymdp | cpomdp                          | what it is                           |
+| ----- | ------------------------------- | ------------------------------------ |
+| `C`   | `StateGoal` / `ObservationGoal` | the goal you pursue, and how sharply |
+| `D`   | `model.prior`                   | belief before you've seen anything   |
+
+One honest difference in behaviour. `sample_action` here is deterministic, not a sample from a policy posterior. For a linear-Gaussian sensor the action that minimises expected free energy turns out to be exactly the LQR optimum, so there's a single best action and that's what comes back. Same loop, exact answer. The reasoning is in [DECISIONS.md](https://github.com/inferogenesis/cpomdp/blob/main/DECISIONS.md) (ADR-003) if you want it.
 
 ## Just want to track, not act?
 
@@ -109,13 +111,26 @@ agent.infer_states([0.5])             # perceiving is fine
 agent.sample_action()                 # ValueError: this Agent has no objective ...
 ```
 
-## What's in the box
+## What it handles
 
-cpomdp handles linear-Gaussian models end to end. Perception is Kalman filtering; for action you get both steady-state **LQR** (reach a target state) and **Expected Free Energy** selection (seek information) — the epistemic, information-seeking behaviour that arrived in v0.3, alongside state-dependent sensing `R(x)`, state-dependent process noise `Q(x)`, an H-step planning horizon, and an optional declarable model-structure layer. Nonlinear sensors are the next step.
+cpomdp handles linear-Gaussian models end to end — and, as of v0.3, a little past the "linear-Gaussian" label. The mean dynamics and observations are linear and the noise is Gaussian, so perception is **exact Kalman filtering**, no approximation. For action you get both steady-state **LQR** (reach a target state) and **Expected Free Energy** selection (seek information) — the epistemic, information-seeking behaviour that arrived in v0.3.
+
+What v0.3 added beyond the fixed linear-Gaussian model is state-dependence in the *noise*. The mean stays linear, but:
+
+- **state-dependent sensing `R(x)`** — the observation noise can vary with the state, so some places see more sharply than others (the beacon in the example above);
+- **state-dependent process noise `Q(x)`** — the dynamics can diffuse more in some states than others;
+- an **H-step planning horizon** for EFE selection;
+- an optional **declarable model-structure layer**.
+
+It's the state-dependent noise that gives the agent a reason to seek information: when sensing is sharper somewhere, going there is worth something. The mean is still linear, though — genuinely **nonlinear sensors** (a curved `g(x)` that needs a second-order moment match) are the next step, not here yet.
+
+## Swappable backends
 
 You can swap the inference engine if you want to. `KalmanBackend` is the default and does the real work; `RxInferBackend` re-derives the same answers through Julia and exists mainly so the fast path has something independent to check itself against. Both sit behind the `InferenceBackend` protocol, so you can write your own.
 
-Still pre-1.0: v0.3 secures the public API, but until 1.0 a minor version is where breaking changes can land. The maths is tested throughout against an independent RxInfer oracle.
+## Status
+
+Still pre-1.0: v0.3 aims to secure the public API, but until 1.0 a minor version is where breaking changes can land. The maths is tested throughout against an independent RxInfer oracle.
 
 ## Acknowledgements
 
