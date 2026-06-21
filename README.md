@@ -130,13 +130,19 @@ You can swap the inference engine if you want to. `KalmanBackend` is the default
 
 ## Status
 
-Still pre-1.0: v0.3 aims to secure the public API, but until 1.0 a minor version is where breaking changes can land. The maths is tested throughout against an independent RxInfer oracle.
+Still pre-1.0: v0.3 aims to secure the public API, however if you have a request or suggest to make this front-facing API more usual please open an Github issue, Im happy to listen. Until 1.0 a minor version is where breaking changes can land.
 
 ## Development
 
-I designed and built cpomdp — the architecture, the conditionally-linear-Gaussian formulation, the API, and every decision in [DECISIONS.md](DECISIONS.md) are mine. The design draws on my day-to-day work as a full-time software engineer and on hands-on experience integrating and developing large machine-learning models at scale.
+I designed and built cpomdp — the architecture, the conditionally-linear-Gaussian formulation, the API, and every decision in [DECISIONS.md](DECISIONS.md) are mine. The design draws on my day-to-day work as a full-time software engineer and on hands-on expertise integrating and developing large machine-learning models at scale using event-driven microservice architecture.
 
-I used an AI coding assistant (Claude Opus4.8) as a tool under close review: to draft docstrings, probe for edge cases and candidate bugs, and expand the test suite, including adversarial ones. Everything it produced I read, checked, and approved before it landed. None of it is taken on trust — the numbers are validated independently against the RxInfer (Julia) and analytic NumPy oracles described above. Correctness rests on those checks, not on the tool that helped write the code.
+I used an AI coding assistant (Claude Opus-4.8) as a tool under close review: to draft docstrings, probe for edge cases and candidate bugs, and expand the test suite, including adversarial ones. Everything it produced I read, checked, and approved before it landed. None of it is taken on trust — the numbers are validated independently against the RxInfer (Julia) and analytic NumPy oracles described above. Correctness rests on those checks, not on the tool that helped write the code.
+
+## Contributions
+
+If you would like to contribute either your dev time or help steer the direction of the toolbox, please add a Github issue or discussion thread. I am monitoring this repository closesly and would love to collaborate.
+
+If you notice a better method in something I've already done or are just curious and want to chat I am more than happy to talk through my decision processes. I intend to blog my construction of cpomdp provided it doesn't interfere with developing it.
 
 ## Acknowledgements
 

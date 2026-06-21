@@ -17,6 +17,7 @@ pip install cpomdp
 ```
 
 Inside some Python file or Jupyter Notebook:
+
 ```python
 import jax.numpy as jnp
 from cpomdp import Belief, LinearGaussianModel
@@ -24,12 +25,11 @@ from cpomdp import Belief, LinearGaussianModel
 
 >If you're using Jax already in a notebook, you will need to run this import cell first or restart the kernel so cpomdp's 64-bit switch takes effect.
 
-## The 2D World
+## The World on a Line
 
-Conceptually, it's most intuitive (for me at least, I would imagine for most humans this is the case) if we keep to a physical world simplified to 2-Dimensions.
+Although the examples I give in the documentation and examples folder are in 2 dimensions. The math is much more intuative and less convoluted in 1 dimension. So the senario we're going to define and use is a bug sliding along a line. A line leading directly to food. To define it's state in the world we need two numbers: it's **position** - how far down the line it is; and **velocity** - how fast it's moving down the line.
 
 First we define what it is like for something to experience being in that petri-dish. In our everyday lives this is our interpretation of physics. You know that if you are standing still, you will remain still, unless you act. Or if you're sliding on ice, you will remain sliding (forget friction, says the physics grad).
-
 
 ### Dynamics
 
@@ -186,7 +186,7 @@ model = LinearGaussianModel(
 If you run this nothing will happen and that is expected. You have `built a world and a belief`, but the agent hasn't sensed anything or moved yet. That is the next two chapters.
 
 !!! note "Why linear-Gaussian, and why first?"
-    Honest answer: it's the *easy* one. But easy here is a feature, not a
+    Honest answer: it's the _easy_ one. But easy here is a feature, not a
     cop-out. Linear dynamics + Gaussian noise is the single case where the
     maths closes cleanly — the belief stays a tidy bell curve forever, and
     perceiving collapses to a few matrix multiplications (the Kalman filter)
@@ -194,7 +194,7 @@ If you run this nothing will happen and that is expected. You have `built a worl
     (you can actually prove the code is right against known answers), it's
     **cheap** (no iterating, no sampling — just matrices), and it's the
     **foundation** — curved dynamics and nastier noise are almost always
-    handled by bending them *back* toward this one. Every field has its
+    handled by bending them _back_ toward this one. Every field has its
     hydrogen atom; this is ours.
 
 ## Perceiving
@@ -210,3 +210,58 @@ Every call to `infer_states` does two things:
 2) **Update** - Now look (sense). Compare what you're sensing to that prediction you hold and nudge the belief toward it. Uncertainty shrinks now, you learning something.
 
 How _hard_ we update is exactly what we setup in the sensor. If it's fuzzy -> we can't trust it too well -> budge our belief slightly. If it's a sharp sensor -> trust heavily -> lean into the update. The trust ration is called the **Kalman gain**.
+
+To show off the range of capabilities lets turn off control for now and build.
+
+Firstly, add `Agent` to your imports.
+
+```python
+import jax.numpy as jnp
+from cpomdp import Agent, Belief, LinearGaussianModel # <- Add Agent here
+```
+
+Now, we are going to disable our control for a second. Perception engines have been around for a long time and it's worth discussing quickly. So on your `LinearGaussianModel` block remove control quickly. We can now give it to our `Agent` class as a perception model.
+
+```python
+model = LinearGaussianModel(
+    dynamics=dynamics,
+    # control=control,          # <-- comment or delete
+    sensor_model=sensor_model,
+    dynamics_noise=dynamics_noise,
+    sensor_noise=sensor_noise,
+    prior=prior,
+)
+
+# Hand the Agent class it's model
+agent = Agent(model)    # no goal -> it perceives, it doesn't act
+```
+
+We can now add our `infer_states` loop after our agent assignment.
+
+```python
+print(agent.belief.mean, agent.belief.cov)        # the belief BEFORE any reading
+for y in [0.1, 0.2, 0.3, 0.4, 0.5]:               # position creeping up 0.1 each step
+    belief = agent.infer_states([y])
+    print(belief.mean, jnp.diag(belief.cov))
+```
+
+_Now_ when you run this code you should be greeted by a nice table that looks something like this:
+
+```
+                belief                 uncertainty
+                pos     vel       var(pos)   var(vel)
+start (prior)   0.00    0.00        1.00       1.00
+see 0.1         0.10    0.01        0.01       0.99
+see 0.2         0.17    0.34        0.01       0.66
+see 0.3         0.27    0.67        0.01       0.33
+see 0.4         0.38    0.84        0.01       0.16
+see 0.5         0.48    0.91        0.01       0.09
+
+```
+
+Few things to point out here:
+
+- **Position locks in after one step** (1.0 -> 0.01)
+- **Velocity is never measured, yet it's uncertainty keeps halving** (1.0 -> 0.09) and the estimate climbs towards the true 2.0 it was never told to - this is inferend from
+
+## Acting
