@@ -12,7 +12,7 @@ pymdp is great, but it speaks in discrete states. A lot of the world isn't discr
 
 That's the whole idea: keep the pymdp muscle memory, swap the discrete machinery underneath for continuous.
 
-Full documentation — API reference and guides — lives at [inferogenesis.github.io/cpomdp](https://inferogenesis.github.io/cpomdp/).
+Full documentation — API reference and guides — lives at [cpomdp.inferogenesis.com](https://cpomdp.inferogenesis.com/).
 
 ## Example
 

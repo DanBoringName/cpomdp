@@ -31,7 +31,7 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/inferogenesis/cpomdp"
 Repository = "https://github.com/inferogenesis/cpomdp"
-Documentation = "https://inferogenesis.github.io/cpomdp/"
+Documentation = "https://cpomdp.inferogenesis.com/"
 
 [project.optional-dependencies]
 # The RxInfer (Julia) backend. Optional so the pure-Python parts install without Julia.

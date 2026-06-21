@@ -1,6 +1,6 @@
 site_name: cpomdp
 site_description: Continuous active inference for Python — the continuous-state sibling of pymdp.
-site_url: https://inferogenesis.github.io/cpomdp/
+site_url: https://cpomdp.inferogenesis.com/
 repo_url: https://github.com/inferogenesis/cpomdp
 repo_name: inferogenesis/cpomdp
 

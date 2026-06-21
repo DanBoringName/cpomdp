@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: "If you use cpomdp in your research, please cite it as below."
+title: cpomdp
+abstract: >-
+  Continuous active inference for Python — the continuous-state sibling of pymdp.
+  Linear-Gaussian generative models with Kalman-filter perception and Expected
+  Free Energy action selection, on a JAX backend.
+type: software
+authors:
+  - name: "Inferogenesis"
+    email: "hello@inferogenesis.com"
+version: 0.3.0
+license: MIT
+repository-code: "https://github.com/inferogenesis/cpomdp"
+url: "https://cpomdp.inferogenesis.com/"
+keywords:
+  - active inference
+  - free energy principle
+  - expected free energy
+  - Kalman filter
+  - linear-Gaussian
+  - state-space models
+  - JAX
+  - control
