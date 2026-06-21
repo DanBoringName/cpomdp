@@ -625,13 +625,18 @@ the gallery (`examples/README.md`) as the before-picture.
 
 Two framing notes, so the demo isn't mis-read back into the library:
 
-- **The "λ" knob is the demo's, not the kernel's.** `expected_free_energy` is fixed at
-  `pragmatic − epistemic` (ADR-005); there is no weight in it. The demo calls the
-  kernel directly over a 2-D action grid (its own — `EFESelector` is still p=1) and
-  *recombines* the returned `{pragmatic, epistemic}` split as `pragmatic − λ·epistemic`
-  to sweep the balance on one clean axis. It is the same balance the payoff above tips
-  via preference precision `Λ` (weak `Λ` ⇒ epistemic-dominant), reparameterised from the
-  other side for a four-panel story.
+- **The explore/exploit knob is the preference precision `Λ` — a real, public knob.**
+  `expected_free_energy` is fixed at `pragmatic − epistemic` (ADR-005); there is no
+  weight in it. But the pragmatic term is *linear* in `Λ` and the epistemic term is
+  *independent* of it, so scaling `Λ` by `c` gives `G = c·pragmatic − epistemic`, whose
+  argmin equals minimising `pragmatic − (1/c)·epistemic`. So the preference precision IS
+  the explore/exploit axis: weak `Λ` ⇒ epistemic-dominant (curious), sharp `Λ` ⇒
+  goal-dominant. The bacillus demo varies exactly this — each agent an `ObservationGoal`
+  with a different `precision`, scored through the real kernel over its own 2-D grid
+  (`EFESelector` is still p=1). (An earlier cut hand-recombined the split as
+  `pragmatic − λ·epistemic`; the same knob reparameterised as `λ = 1/c`, but it read as a
+  kernel weight users could not reach — so the demo now uses the precision knob directly,
+  and `tests/test_efe.py` pins that precision controls the balance.)
 - **One-step EFE needs one-step observability.** The demo is a single integrator
   (`μ⁺ = μ + dt·a`; the action moves the observed position *this* step). On a double
   integrator the action moves only velocity, so it does not touch the predicted

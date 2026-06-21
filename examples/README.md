@@ -21,22 +21,23 @@ optional output path as `argv[1]`.
 
 ---
 
-## Flagship — four bacilli, one knob (the epistemic weight λ)
+## Flagship — four bacilli, one knob (the goal precision Λ)
 
 [`bacillus_seeking_food.py`](bacillus_seeking_food.py) · v0.3
 
-Four bacilli in one world, differing in a single number: the weight **λ** on the
-*information-seeking* term of the Expected Free Energy each minimises
-(`G = pragmatic − λ·epistemic`). A **beacon** marks where the sensor is sharp, so
-visiting it collapses the agent's uncertainty. Classic LQR beelines to the food;
-too little λ barely deflects; the right λ detours to the beacon to localise *then*
-heads to the food; too much λ and it never leaves. The simulation is real — every
-agent shares one Kalman filter over a `CallableSensor` whose `R(x)` dips at the
-beacon, and the EFE agents call the library's own `expected_free_energy` kernel.
+Four bacilli in one world, differing in a single number: the **goal precision Λ** each
+is built with (`ObservationGoal(precision=…)`). They all minimise the same Expected
+Free Energy `G = pragmatic − epistemic`; Λ scales the pragmatic (goal) term but not the
+epistemic (information) one, so it alone tips the balance. A **beacon** marks where the
+sensor is sharp, so visiting it collapses the agent's uncertainty. Classic LQR beelines
+to the food; a sharp Λ barely deflects; a balanced Λ detours to the beacon to localise
+*then* heads to the food; a weak Λ never leaves. The simulation is real — every agent
+shares one Kalman filter over a `CallableSensor` whose `R(x)` dips at the beacon, and
+the EFE agents call the library's own `expected_free_energy` kernel.
 
-![Four bacilli navigating to food under different epistemic weights λ](../docs/assets/bacillus.gif)
+![Four bacilli navigating to food under different goal precisions Λ](../docs/assets/bacillus.gif)
 
-`bacillus_seeking_food.py --scan` prints the λ-sweep tuning metrics without rendering.
+`bacillus_seeking_food.py --scan` prints the precision-Λ sweep metrics without rendering.
 
 ---
 

@@ -39,6 +39,8 @@ markdown_extensions:
 
 plugins:
   - search
+  - bibtex:
+      bib_file: docs/references.bib
   - mkdocstrings:
       default_handler: python
       handlers:
