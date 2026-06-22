@@ -130,7 +130,7 @@ You can swap the inference engine if you want to. `KalmanBackend` is the default
 
 ## Status
 
-Still pre-1.0: v0.3 aims to secure the public API, however if you have a request or suggest to make this front-facing API more usual please open an Github issue, Im happy to listen. Until 1.0 a minor version is where breaking changes can land.
+Still pre-1.0: v0.3 aims to secure the public API, however if you have a request or suggestion to make this front-facing API more usable please open a GitHub issue, I'm happy to listen. Until 1.0 a minor version is where breaking changes can land.
 
 ## Development
 
@@ -140,7 +140,7 @@ I used an AI coding assistant (Claude Opus-4.8) as a tool under close review: to
 
 ## Contributions
 
-If you would like to contribute either your dev time or help steer the direction of the toolbox, please add a Github issue or discussion thread. I am monitoring this repository closely and would love to collaborate.
+If you would like to contribute either your dev time or help steer the direction of the toolbox, please add a GitHub issue or discussion thread. I am monitoring this repository closely and would love to collaborate.
 
 If you notice a better method in something I've already done or are just curious and want to chat I am more than happy to talk through my decision processes. I intend to blog my construction of cpomdp provided it doesn't interfere with developing it.
 
