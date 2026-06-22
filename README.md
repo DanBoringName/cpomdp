@@ -3,7 +3,7 @@
 [![PyPI](https://img.shields.io/pypi/v/cpomdp.svg)](https://pypi.org/project/cpomdp/)
 [![Python](https://img.shields.io/pypi/pyversions/cpomdp.svg)](https://pypi.org/project/cpomdp/)
 [![CI](https://github.com/inferogenesis/cpomdp/actions/workflows/ci.yml/badge.svg)](https://github.com/inferogenesis/cpomdp/actions/workflows/ci.yml)
-[![coverage](https://raw.githubusercontent.com/inferogenesis/cpomdp/main/docs/assets/coverage.svg)](https://github.com/inferogenesis/cpomdp/actions/workflows/ci.yml)
+[![coverage](https://cpomdp.inferogenesis.com/assets/coverage.svg)](https://github.com/inferogenesis/cpomdp/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/inferogenesis/cpomdp/blob/main/LICENSE)
 
 Continuous active inference for Python. The continuous-state sibling of [pymdp](https://github.com/infer-actively/pymdp).

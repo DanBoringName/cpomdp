@@ -27,6 +27,14 @@ jobs:
           enable-cache: true
           python-version: "3.12"
       - run: uv sync --locked --group docs
+      # Regenerate the coverage badge into the docs tree so it ships in the Pages
+      # site at /assets/coverage.svg (the URL the README badge points at). No
+      # commit-back, no third-party service — the SVG is rebuilt on every deploy.
+      - name: coverage badge
+        run: |
+          uv run pytest -m "not rxinfer" --cov=cpomdp --cov-report=xml -q
+          uvx --from "genbadge[coverage]" genbadge coverage \
+            -i coverage.xml -o docs/assets/coverage.svg
       - run: uv run mkdocs build --strict
       - uses: actions/upload-pages-artifact@v3
         with:
