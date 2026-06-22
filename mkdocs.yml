@@ -1,6 +1,6 @@
 site_name: cpomdp
 site_description: Continuous active inference for Python — the continuous-state sibling of pymdp.
-site_url: https://inferogenesis.github.io/cpomdp/
+site_url: https://cpomdp.inferogenesis.com/
 repo_url: https://github.com/inferogenesis/cpomdp
 repo_name: inferogenesis/cpomdp
 
@@ -29,6 +29,7 @@ theme:
 
 markdown_extensions:
   - admonition
+  - md_in_html
   - toc:
       permalink: true
   - pymdownx.highlight:
@@ -39,6 +40,8 @@ markdown_extensions:
 
 plugins:
   - search
+  - bibtex:
+      bib_file: docs/references.bib
   - mkdocstrings:
       default_handler: python
       handlers:
@@ -57,10 +60,16 @@ plugins:
 
 nav:
   - Home: index.md
+  - Step-by-step guide: guides/step-by-step.md
   - Examples: examples.md
   - API reference:
       - Agent: api/agent.md
       - Model & belief: api/model.md
+      - Observation models: api/observation.md
+      - Process noise: api/dynamics.md
+      - Model structure: api/structure.md
       - Backends: api/backends.md
-      - Control: api/control.md
+      - Action selection & goals: api/selection.md
+      - Expected free energy: api/efe.md
+      - Control (internal): api/control.md
   - Changelog: changelog.md

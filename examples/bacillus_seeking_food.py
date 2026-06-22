@@ -9,23 +9,28 @@ the same 2-D plane with the same two landmarks:
   *collapses the agent's uncertainty*. Away from the beacon the world is murky and
   the agent can barely tell where it is.
 
-Each agent senses only a noisy reading of its own position, so it must *infer*
-where it is while *acting*. The four differ in **one number only** — the weight λ
-on the epistemic (information-gain) term of the Expected Free Energy it minimises::
+Each agent senses only a noisy reading of its own position, so it must *infer* where
+it is while *acting*. The four differ in **one real, public knob** — the **goal
+precision Λ** each is built with (``ObservationGoal(precision=…)`` /
+``Preference(precision=…)``). All minimise the *same* Expected Free Energy::
 
-    G(a) = pragmatic(a)  −  λ · epistemic(a)
-           └ goal cost ┘     └ info gain ┘
+    G(a) = ½(o⁺−g)ᵀ Λ (o⁺−g) + ½ tr(Λ S)   −   ½ ln(det S / det R)
+           └──────── pragmatic(Λ) ────────┘     └── epistemic ──┘
 
-- **classic LQR** (top-left) — no epistemic term at all. It beelines straight to
-  the food; it never exploits the beacon, so it only ever localises *slowly*, by
+Λ scales the pragmatic (goal) term but not the epistemic (info-gain) one, so it sets
+the whole explore/exploit balance from inside the standard equation — no hand-tuned
+weight on the split (see DECISIONS.md ADR-008):
+
+- **classic LQR** (top-left) — no epistemic term at all. It beelines straight to the
+  food; it never exploits the beacon, so it only ever localises *slowly*, by
   averaging the murk as it goes.
-- **low λ** (top-right) — the beacon tugs at it, so it bulges off the straight
-  line, but the food pull wins before it ever reaches the beacon.
-- **right λ** (bottom-left) — the hero. Information is worth enough to *detour* to
+- **sharp Λ** (top-right) — the goal dominates. The beacon tugs at it, so it bulges
+  off the straight line, but the food pull wins before it reaches the beacon.
+- **balanced Λ** (bottom-left) — the hero. Information is worth enough to *detour* to
   the beacon; the uncertainty ellipse collapses the moment it arrives there; then,
   with nothing left to learn, the food pull takes over and it heads on, **confident**.
-- **λ too strong** (bottom-right) — over-curious. The beacon is worth so much it
-  parks there and never leaves for the food.
+- **weak Λ** (bottom-right) — over-curious. The goal counts for so little it parks at
+  the beacon and never leaves for the food.
 
 What each visual element maps onto in the model:
 
@@ -41,14 +46,15 @@ What each visual element maps onto in the model:
 The simulation is real: every agent shares one ``KalmanBackend`` filter over a
 ``CallableSensor`` whose ``R(x)`` dips at the beacon, and the three EFE agents pick
 each action by minimising the library's own ``expected_free_energy`` kernel over a
-grid of candidate moves, re-weighting its epistemic split by λ. The classic agent
-uses the ``LQRController`` — which is what EFE collapses to when λ = 0 (ADR-003).
+grid of candidate moves — they differ only in their ``ObservationGoal`` precision Λ.
+The classic agent uses the ``LQRController`` — what EFE collapses to under a fixed
+sensor (ADR-003).
 
 Run it (``RUN`` = ``uv run --with matplotlib --with pillow python``)::
 
     RUN examples/bacillus_seeking_food.py            # -> docs/assets/bacillus.gif
     RUN examples/bacillus_seeking_food.py out.gif    # custom path
-    RUN examples/bacillus_seeking_food.py --scan     # λ-sweep tuning metrics, no GIF
+    RUN examples/bacillus_seeking_food.py --scan     # precision sweep, no GIF
 
 Needs ``matplotlib`` and ``pillow`` on top of cpomdp; neither is a runtime
 dependency of the library itself.
@@ -80,38 +86,43 @@ FOOD = "#D55E00"  # vermillion   -- the food / goal
 
 VERSION_TAG = "cpomdp v0.3"
 
-# --- the four regimes: same world, one knob (the epistemic weight λ) ----------
-# `kind` is "lqr" (no epistemic term) or "efe" (minimise pragmatic − λ·epistemic).
+# --- the four regimes: same world, one real knob — the goal precision Λ --------
+# `kind` is "lqr" (no epistemic term) or "efe" (minimise the EFE G = pragmatic −
+# epistemic). The only thing that varies across the EFE agents is the OBSERVATION
+# preference precision Λ they are built with — `ObservationGoal(precision=…)` /
+# `Preference(precision=…)`, the public knob. A softer Λ (a gentler goal) lets the
+# epistemic term win and the agent turns curious; a sharper Λ makes the goal
+# dominate. No hand-weighted split — see DECISIONS.md ADR-008.
 REGIMES = [
     {
         "key": "lqr",
         "kind": "lqr",
-        "lam": 0.0,
+        "precision": 0.0,  # unused — LQR has no EFE preference precision
         "title": "classic LQR  ·  no epistemic term",
         "note": "beelines to the food — never detours to localise",
         "accent": "#7A7A7A",
     },
     {
-        "key": "low",
+        "key": "sharp",
         "kind": "efe",
-        "lam": 8.5,
-        "title": "low λ  ·  information barely counts",
+        "precision": 0.026,
+        "title": "sharp Λ  ·  the goal dominates",
         "note": "tugged toward the beacon, but the food wins",
         "accent": "#56B4E9",
     },
     {
-        "key": "right",
+        "key": "balanced",
         "kind": "efe",
-        "lam": 14.0,
-        "title": "right λ  ·  detour, then dinner",
+        "precision": 0.016,
+        "title": "balanced Λ  ·  detour, then dinner",
         "note": "detours to the beacon, localises, then to the food",
         "accent": "#009E73",
     },
     {
-        "key": "strong",
+        "key": "weak",
         "kind": "efe",
-        "lam": 50.0,
-        "title": "λ too strong  ·  over-curious",
+        "precision": 0.004,
+        "title": "weak Λ  ·  over-curious",
         "note": "so over-curious it parks at the beacon — never eats",
         "accent": "#CC79A7",
     },
@@ -129,11 +140,11 @@ BEACON_PT = np.array([0.0, 2.7])  # up and central — clearly off the start→f
 R_LO = 0.02  # sensor noise floor at the beacon (sharp sensing)
 R_HI = 1.30  # sensor noise far from the beacon (murky world)
 R_WIDTH = 2.3  # width of the precision well — how far the beacon's pull reaches
-GOAL_PRECISION = 0.22  # Λ scalar (obs-space): gentle enough that a detour can win
+GOAL_PRECISION = 0.22  # the LQR agent's goal-cost weight; EFE agents set their own Λ
 # near-zero process noise: at the beacon Σ collapses (slowly, ∝1/t), so the epistemic
-# pull fades and a moderate-λ agent rolls on to the food. The fade is gradual, so
-# *dwell time grows with λ*: a very large λ over-values the slowly-fading residual and
-# is still dithering at the beacon at the end.
+# pull fades and a moderate-Λ agent rolls on to the food. The fade is gradual, so
+# *dwell time grows as Λ weakens*: a very soft Λ over-values the slowly-fading
+# residual and is still dithering at the beacon at the end.
 PROCESS_Q = 2e-5
 PRIOR_COV = 2.6  # wide initial uncertainty → strong early epistemic drive (easy detour)
 
@@ -200,34 +211,32 @@ def _candidate_grid():
 
 
 @jax.jit
-def _efe_split_grid(model, belief, preference, candidates):
-    """Pragmatic and epistemic of every candidate action, via the library kernel.
+def _efe_grid(model, belief, preference, candidates):
+    """The EFE ``G`` of every candidate action, via the library kernel.
 
-    One ``vmap`` of ``expected_free_energy`` across the grid; the λ re-weighting and
-    the ``argmin`` happen in plain NumPy outside, so a single scored grid serves
-    every λ that shares this belief.
+    One ``vmap`` of ``expected_free_energy`` across the grid; the ``argmin`` (the
+    chosen action) happens outside. The explore/exploit balance is set entirely by
+    ``preference.precision`` Λ — this is the real public path, not a hand-weighted
+    recombination of the pragmatic/epistemic split.
     """
-
-    def one(a):
-        _, parts = expected_free_energy(model, belief, a, preference)
-        return parts["pragmatic"], parts["epistemic"]
-
-    return jax.vmap(one)(candidates)
+    return jax.vmap(lambda a: expected_free_energy(model, belief, a, preference)[0])(
+        candidates
+    )
 
 
 def simulate(regime, *, seed=7):
     """Run one agent's perceive → act loop, recording truth, belief mean, belief cov.
 
     Perception is identical across regimes (a per-step Kalman filter over the
-    beacon sensor); only the *action* differs — LQR for the classic agent, a
-    λ-weighted one-step EFE argmin for the others.
+    beacon sensor); only the *action* differs — LQR for the classic agent, and for
+    the others a one-step EFE ``argmin`` whose explore/exploit balance is set purely
+    by the observation preference precision Λ (``regime["precision"]``).
     """
     from cpomdp.backends.kalman import KalmanBackend
 
     rng = np.random.default_rng(seed)
     model = build_model()
     backend = KalmanBackend(model)
-    preference = Preference(goal=FOOD_PT, precision=np.eye(2) * GOAL_PRECISION)
     candidates = _candidate_grid()
     candidates_np = np.asarray(candidates)
 
@@ -235,20 +244,24 @@ def simulate(regime, *, seed=7):
     b_mat = np.eye(2) * DT
 
     controller = None
+    preference = None
     if regime["kind"] == "lqr":
         controller = LQRController(
             model,
             goal_precision=np.eye(2) * GOAL_PRECISION,
             effort_penalty=np.eye(2) * 0.6,
         )
+    else:
+        # the real public knob: a softer Λ lets the epistemic term win (curious),
+        # a sharper Λ makes the goal dominate. Nothing is hand-weighted.
+        preference = Preference(goal=FOOD_PT, precision=np.eye(2) * regime["precision"])
 
     def choose(belief):
         if regime["kind"] == "lqr":
             act = np.asarray(controller.action(belief.mean, FOOD_PT))
             return np.clip(act, ACTION_LO, ACTION_HI)
-        prag, epi = _efe_split_grid(model, belief, preference, candidates)
-        cost = np.asarray(prag) - regime["lam"] * np.asarray(epi)
-        return candidates_np[int(np.argmin(cost))]
+        g = _efe_grid(model, belief, preference, candidates)
+        return candidates_np[int(np.argmin(np.asarray(g)))]
 
     belief = model.prior
     true = START.astype(float).copy()
@@ -293,10 +306,10 @@ def _metrics(true_states):
 
 
 def scan():
-    """Print behaviour metrics over a λ sweep — the tuning harness (no rendering)."""
+    """Print behaviour metrics over a precision-Λ sweep — tuning harness (no render)."""
     print(f"world: start={START}  food={FOOD_PT}  beacon={BEACON_PT}")
     print(
-        f"  R(x): r_lo={R_LO} r_hi={R_HI} w={R_WIDTH}  Λ={GOAL_PRECISION}  "
+        f"  R(x): r_lo={R_LO} r_hi={R_HI} w={R_WIDTH}  LQR_Λ={GOAL_PRECISION}  "
         f"Q={PROCESS_Q}  dt={DT}"
     )
     print(
@@ -306,19 +319,19 @@ def scan():
     )
     print(f"  N_STEPS={N_STEPS}\n")
     print("  LQR (classic):")
-    ts, _, covs = simulate({"key": "lqr", "kind": "lqr", "lam": 0.0})
+    ts, _, covs = simulate({"key": "lqr", "kind": "lqr", "precision": 0.0})
     db, sm, dw, df = _metrics(ts)
     print(
         f"    minBeacon={db:5.2f}@{sm:2d}  dwell={dw:2d}  finalFood={df:5.2f}  "
         f"finalΣtr={np.trace(covs[-1]):.3f}"
     )
-    print("\n  EFE λ sweep   (B=reached beacon, F=reached food):")
-    for lam in [2, 4, 6, 7, 8, 9, 10, 11, 12, 14, 16, 20, 25, 35, 50]:
-        ts, _, covs = simulate({"key": "efe", "kind": "efe", "lam": float(lam)})
+    print("\n  EFE precision Λ sweep   (B=reached beacon, F=reached food):")
+    for prec in [0.110, 0.055, 0.037, 0.028, 0.022, 0.016, 0.011, 0.008, 0.004]:
+        ts, _, covs = simulate({"key": "efe", "kind": "efe", "precision": float(prec)})
         db, sm, dw, df = _metrics(ts)
         flags = ("B" if db < 0.6 else " ") + ("F" if df < 0.5 else " ")
         print(
-            f"    λ={lam:5.1f}  minBeacon={db:5.2f}@{sm:2d}  dwell={dw:2d}  "
+            f"    Λ={prec:6.3f}  minBeacon={db:5.2f}@{sm:2d}  dwell={dw:2d}  "
             f"finalFood={df:5.2f}  finalΣtr={np.trace(covs[-1]):5.3f}  [{flags}]"
         )
 
@@ -502,7 +515,7 @@ def render(regimes, runs, beacon, food, out_path, *, fps=20):
                 color="#555555",
                 fontsize=7.8,
             )
-            label = "LQR" if reg["kind"] == "lqr" else f"λ = {reg['lam']:g}"
+            label = "LQR" if reg["kind"] == "lqr" else f"Λ = {reg['precision']:g}"
             ax.text(
                 0.028,
                 0.962,
@@ -523,7 +536,7 @@ def render(regimes, runs, beacon, food, out_path, *, fps=20):
             )
 
         fig.suptitle(
-            "four bacilli, one knob — the epistemic weight λ  ·  "
+            "four bacilli, one knob — the goal precision Λ  ·  "
             "continuous active inference",
             color=INK,
             fontsize=12.5,
@@ -659,7 +672,7 @@ def main():
     for r in REGIMES:
         ts, _, _ = runs[r["key"]]
         db, _sm, dw, df = _metrics(ts)
-        tag = "LQR" if r["kind"] == "lqr" else f"λ={r['lam']:g}"
+        tag = "LQR" if r["kind"] == "lqr" else f"Λ={r['precision']:g}"
         print(
             f"  {tag:>7}: min‖·−beacon‖={db:4.2f}  dwell={dw:2d}  "
             f"final‖·−food‖={df:4.2f}"

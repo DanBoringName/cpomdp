@@ -233,6 +233,49 @@ class TestCallableSensorBreaksCollapse:
         assert bool(jnp.isnan(epi))
 
 
+class TestPrecisionControlsBalance:
+    """The preference precision Λ is the explore/exploit knob — no hand-weighted split.
+
+    Weak Λ lets the epistemic term win (seek the sharp-sensing beacon); sharp Λ makes
+    the goal dominate (pursue it). Pins the bacillus demo's "one knob, the spectrum"
+    as a real, reproducible capability of the public API.
+    """
+
+    def test_weak_precision_explores_sharp_precision_exploits(self):
+        def beacon_noise(x, params):  # sharp (low R) at the beacon (1.5), foggy away
+            sharp = jnp.exp(-((x[0] - 1.5) ** 2) / (2 * 0.6**2))
+            return jnp.array([[0.05 + 0.8 * (1.0 - sharp)]])
+
+        model = LinearGaussianModel(
+            dynamics=[[1.0]],
+            control=[[1.0]],
+            sensor_model=[[1.0]],
+            dynamics_noise=[[0.05]],
+            sensor_noise=[[0.3]],
+            prior=Belief(mean=[0.0], cov=[[0.5]]),
+            observation=CallableSensor([[1.0]], beacon_noise, {}),
+        )
+        belief = model.prior
+        actions = jnp.linspace(-3.0, 3.0, 121)
+
+        def chosen(precision):  # argmin-G action over the grid at this precision
+            g = jnp.array(
+                [
+                    expected_free_energy(
+                        model, belief, jnp.array([a]), Preference([0.0], [[precision]])
+                    )[0]
+                    for a in actions
+                ]
+            )
+            return float(actions[jnp.argmin(g)])
+
+        weak = chosen(0.02)  # weak Λ -> seek the beacon (~ +1.5)
+        sharp = chosen(3.0)  # sharp Λ -> pursue the goal (~ 0)
+        assert weak > 1.0  # explores: heads to the beacon
+        assert sharp < 0.5  # exploits: stays near the goal
+        assert weak > sharp  # weakening Λ shifts toward exploration
+
+
 class TestGaussianizeDispatch:
     def test_none_fast_path_matches_equivalent_fixed_sensor(self):
         # observation=None (inline fast path) and an equivalent FixedSensor (routed

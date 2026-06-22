@@ -42,7 +42,7 @@ dmypy.json
 *.jl.*.cov
 
 # Editors / OS
-.vscode/
+.vscode/settings*
 .idea/
 *.swp
 .DS_Store
