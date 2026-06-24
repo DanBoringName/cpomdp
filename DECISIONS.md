@@ -830,3 +830,79 @@ the suite so examples can't silently rot — until v1.0. Pre-1.0 it is overkill.
   (the markdownlint MD040 pass did this), so the runnable-vs-illustrative split is done.
 - Resolve the intentional-error block (skip or assert-raises) and the tutorial's
   cross-block state (shared namespace).
+
+## ADR-012 — v0.4: FFG message passing, canonical form, from-scratch JAX
+
+**Date:** 2026-06-24
+**Status:** Accepted
+**Phase:** v0.4, Phase 0
+**Extends:** ADR-004 (the JAX backend this stays inside); does not touch the v0.1-v0.3
+Kalman/EFE path, which remains the chain special case (validated against it, not
+replaced by it).
+
+### Decision
+
+v0.4 generalises the existing Kalman/EFE machinery to a Forney-style factor graph
+(FFG) — variables as wires, factors as nodes — to express the E. coli chemotaxis
+network, where the shared `CheA` node has edges into both a fast (CheY-P/motor)
+and a slow (CheR/CheB methylation) branch and so cannot be drawn cleanly as a model
+hierarchy. Four choices, settled in the build plan and recorded here as the ADR of
+record:
+
+1. **From scratch in JAX, not RxInfer.** Message passing is owned code. A Julia
+   call in the inference core would break `jax.grad`/`jax.jit`/`jax.vmap` through
+   the agent — the franchise property this library exists to deliver (ADR-002,
+   ADR-004). Non-negotiable.
+2. **RxInfer's role narrows to oracle-only.** It stays the test-time ground truth
+   (the existing `rxinfer` pytest marker) plus an optional, minimal tier-4
+   fallback held strictly off the differentiable hot path. Never imported by the
+   core; `pip install cpomdp` stays Julia-free, continuing ADR-002's wall.
+3. **Message representation is canonical/information form.** Messages carry
+   `(Λ, h)` with `Λ = Σ⁻¹` (precision) and `h = Σ⁻¹μ` (precision-mean). Factor
+   product is addition of `(Λ, h)`; marginalization is a Schur complement. This
+   matches the information-filter algebra the Kalman backend already owns and
+   avoids inversions in the product step; moment form is a readout view, not the
+   storage form.
+4. **The schedule is hand-authored, not reactive.** The chemotaxis graph is small
+   and fixed, so v0.4 writes its message order by hand rather than building a
+   general reactive/automatic-conjugacy scheduler (named out of scope below).
+
+### Why this generalises rather than replaces
+
+Gaussian belief propagation on a linear chain *is* the Kalman filter — the v0.4
+Phase 2 keystone gate is therefore byte-identity against the existing Kalman path
+on a chain topology, not mere agreement. The FFG is the more general structure;
+the chain is its degenerate case, already trusted.
+
+### Out of scope (say no on sight)
+
+General `@model`-style frontend / arbitrary user models; a full tier-2
+conjugate-exponential engine for arbitrary exponential families (the seam is
+declared and stubbed, deferred to v0.5+); reactive message scheduling /
+automatic conjugacy dispatch across arbitrary graphs; constrained Bethe Free
+Energy as a general objective (free energy is evaluated on the fixed graph, not
+minimised generally); structure *learning* (continuous coupling pruning) — v0.4
+ships representation only.
+
+### Hierarchy as a derived view
+
+Fast/slow strata are not a primitive of the graph — they are computed from a
+`CouplingGraph.levels()` projection at a τ cutoff. The graph (and its τ labels)
+is stored; the hierarchy is a view recomputed from it, never the reverse. This
+is what makes the shared-CheA node representable at all: a model hierarchy would
+force a choice of which branch CheA "belongs to," but the factor graph just gives
+it two edges.
+
+### Validation strategy
+
+Same discipline as the existing backends: a Kalman-path byte-identity gate on the
+linear-chain case (Phase 2), an RxInfer oracle check on small graphs (behind the
+`rxinfer` marker), and jit/grad/vmap smoke tests treated as gates, not
+nice-to-haves, on every new public inference entry point. Full detail, phase
+breakdown, and exit gates live in `.claude/cpomdp_v0.4_build_plan.md`.
+
+### Numbering note
+
+The v0.4 build plan originally named this "ADR-004"; that slot was already taken
+by the v0.2 JAX-backend decision (above). Renumbered to ADR-012, the next free
+slot — a clerical fix, not a reopened decision.
