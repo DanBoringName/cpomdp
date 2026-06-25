@@ -14,6 +14,7 @@ vector). Two properties make this the storage form (DECISIONS.md ADR-012):
   operation: it inverts only the eliminated block, never the whole ``Λ``).
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import jax
@@ -71,6 +72,135 @@ class CanonicalGaussian:
         """Dimensionality of the message — the length of the potential vector."""
         return self.precision.shape[0]
 
+    @classmethod
+    def _unchecked(cls, precision, potential):
+        """Build without validating — for trusted, invariant-preserving inputs.
+
+        Used by the factor product, the marginal, and the pytree rebuild path;
+        precision/potential are trusted and may be tracers.
+        """
+        obj = object.__new__(cls)
+        object.__setattr__(obj, "precision", precision)
+        object.__setattr__(obj, "potential", potential)
+        return obj
+
+    def __add__(self, other: "CanonicalGaussian") -> "CanonicalGaussian":
+        """Factor product: combine two messages on the same variable.
+
+        In canonical form the product of two Gaussian potentials is the
+        elementwise sum of their parameters::
+
+            (Λ1, h1) + (Λ2, h2) = (Λ1 + Λ2, h1 + h2)
+
+        This is the whole reason messages live in information form: a factor
+        node combining its inputs never inverts anything on this path. Both
+        operands must share the same dimension; a shape mismatch raises
+        ``ValueError`` (the message mentions "shape").
+        """
+        if self.precision.shape != other.precision.shape:
+            raise ValueError(
+                f"cannot add messages of shape {self.precision.shape} "
+                f"and {other.precision.shape}"
+            )
+
+        return CanonicalGaussian._unchecked(
+            self.precision + other.precision, potential=self.potential + other.potential
+        )
+
+    def to_moment(self) -> tuple[Float64[Array, "n"], Float64[Array, "n n"]]:
+        """Read out moment form ``(mean, cov)`` from canonical (information) form.
+
+        Takes no parameters — it reads the message's own two stored fields and
+        inverts the precision to recover covariance and mean::
+
+            Σ = Λ⁻¹        μ = Σ h = Λ⁻¹ h
+
+        The two fields, and the names they go by across domains:
+
+        - ``self.precision`` = Λ = Σ⁻¹ — the precision, a.k.a. the information
+          matrix.
+        - ``self.potential`` = h = Λμ = Σ⁻¹μ — the *potential* (cpomdp's field
+          name); the information-filter and message-passing literature call this
+          exact vector the *information vector*. One quantity, two names.
+
+        A *view*, computed on demand — not the storage form. The precision must
+        be positive-**definite** here (something is actually reading a combined
+        belief); a singular Λ has no moment form and must raise ``ValueError``
+        rather than return inf/NaN — use ``validate_covariance(...,
+        require_definite=True)`` (its message says "positive-definite"). Prefer a
+        single linear solve over forming Λ⁻¹ explicitly, and stay jit/grad-clean.
+
+        Returns:
+            ``(mean, cov)``, matching the signature
+            ``tuple[Float64[Array, "n"], Float64[Array, "n n"]]``:
+
+            - ``mean`` — μ = Λ⁻¹ h, the distribution mean. Shape ``(n,)``
+              (``Float64[Array, "n"]``).
+            - ``cov`` — Σ = Λ⁻¹, the covariance. Shape ``(n, n)``
+              (``Float64[Array, "n n"]``).
+
+        Raises:
+            ValueError: If the precision is not positive-definite (singular or
+                indefinite) — moment form does not exist.
+        """
+        validate_covariance(self.precision, "precision", require_definite=True)
+
+        mean = jnp.linalg.solve(self.precision, self.potential)
+        cov = jnp.linalg.inv(self.precision)
+        return (mean, cov)
+
+    def marginalize(self, over: Sequence[int]) -> "CanonicalGaussian":
+        """Eliminate the variables in ``over``, returning the marginal on the rest.
+
+        Partition the indices into the eliminated set ``b = over`` and the kept
+        set ``a`` (everything else). With
+
+            Λ = [[Λaa, Λab],      h = [ha,
+                 [Λba, Λbb]]            hb]
+
+        the marginal over ``a`` is the Schur complement of the ``b`` block::
+
+            Λ' = Λaa − Λab Λbb⁻¹ Λba
+            h' = ha  − Λab Λbb⁻¹ hb
+
+        The kept indices come back in ascending order, whatever order ``over``
+        was given in. Only the eliminated block ``Λbb`` is inverted — never the
+        whole precision — and it must be positive-definite, else this raises
+        ``ValueError`` (message "positive-definite"). This is the one operation
+        where an inversion is intrinsic to the algebra.
+        """
+        # Two notions of "index" meet here; keep them straight:
+        #   (1) the FIXED variable-name → index mapping — slot i (0..n-1) always
+        #       denotes the same variable: the order variables were stacked into
+        #       Λ/h, fixed for the message's whole life.
+        #   (2) `over` — derived PER EMISSION (which variables to eliminate this
+        #       call), given as integer indices under mapping (1).
+        # So over_set / keep / elim below are all positions in mapping (1); this
+        # step just splits those fixed slots into stay (keep) vs go (elim).
+        over_set = {int(i) for i in over}
+        keep = [
+            i for i in range(self.ndim) if i not in over_set
+        ]  # ascending by construction
+        elim = [
+            i for i in range(self.ndim) if i in over_set
+        ]  # same ordering everywhere
+
+        keep_idx = jnp.asarray(keep)
+        elim_idx = jnp.asarray(elim)
+
+        Laa = self.precision[jnp.ix_(keep_idx, keep_idx)]
+        Lab = self.precision[jnp.ix_(keep_idx, elim_idx)]
+        Lba = self.precision[jnp.ix_(elim_idx, keep_idx)]
+        Lbb = self.precision[jnp.ix_(elim_idx, elim_idx)]
+        ha = self.potential[keep_idx]
+        hb = self.potential[elim_idx]
+
+        validate_covariance(Lbb, "eliminated block", require_definite=True)
+
+        Lprime = Laa - Lab @ jnp.linalg.solve(Lbb, Lba)  # Λaa − Λab Λbb⁻¹ Λba
+        hprime = ha - Lab @ jnp.linalg.solve(Lbb, hb)  # ha  − Λab Λbb⁻¹ hb
+        return CanonicalGaussian._unchecked(Lprime, hprime)
+
     def tree_flatten(
         self,
     ) -> tuple[tuple[Float64[Array, "n"], Float64[Array, "n n"]], None]:
@@ -85,7 +215,4 @@ class CanonicalGaussian:
     ) -> "CanonicalGaussian":
         """Rebuild from leaves without validating — the leaves may be tracers."""
         precision, potential = children
-        obj = object.__new__(cls)
-        object.__setattr__(obj, "precision", precision)
-        object.__setattr__(obj, "potential", potential)
-        return obj
+        return cls._unchecked(precision, potential)

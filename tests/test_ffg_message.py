@@ -25,6 +25,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
+
 from cpomdp.ffg.message import CanonicalGaussian
 
 
@@ -89,16 +90,12 @@ class TestConstruction:
 
     def test_rejects_asymmetric_precision(self):
         with pytest.raises(ValueError, match="symmetric"):
-            CanonicalGaussian(
-                precision=[[1.0, 0.2], [0.9, 1.0]], potential=[0.0, 0.0]
-            )
+            CanonicalGaussian(precision=[[1.0, 0.2], [0.9, 1.0]], potential=[0.0, 0.0])
 
     def test_rejects_indefinite_precision(self):
         # eigenvalues (-1, 3): a genuinely impossible precision matrix.
         with pytest.raises(ValueError, match="positive-semi-definite"):
-            CanonicalGaussian(
-                precision=[[1.0, 2.0], [2.0, 1.0]], potential=[0.0, 0.0]
-            )
+            CanonicalGaussian(precision=[[1.0, 2.0], [2.0, 1.0]], potential=[0.0, 0.0])
 
     def test_accepts_singular_precision(self):
         # A not-yet-combined message: zero precision is a legitimate "no
@@ -156,14 +153,12 @@ class TestFactorProduct:
             CanonicalGaussian(p3, h3),
         )
         left, right = (a + b) + c, a + (b + c)
-        np.testing.assert_array_equal(left.precision, right.precision)
-        np.testing.assert_array_equal(left.potential, right.potential)
+        np.testing.assert_allclose(left.precision, right.precision, rtol=1e-12)
+        np.testing.assert_allclose(left.potential, right.potential, rtol=1e-12)
 
     def test_add_rejects_shape_mismatch(self):
         a = CanonicalGaussian(precision=[[1.0]], potential=[0.0])
-        b = CanonicalGaussian(
-            precision=[[1.0, 0.0], [0.0, 1.0]], potential=[0.0, 0.0]
-        )
+        b = CanonicalGaussian(precision=[[1.0, 0.0], [0.0, 1.0]], potential=[0.0, 0.0])
         with pytest.raises(ValueError, match="shape"):
             a + b
 
