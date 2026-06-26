@@ -5,6 +5,7 @@
     "allclose",
     "argmax",
     "argmin",
+    "atol",
     "autodiff",
     "AΣAᵀ",
     "bagaev",

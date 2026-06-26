@@ -906,3 +906,22 @@ breakdown, and exit gates live in `.claude/cpomdp_v0.4_build_plan.md`.
 The v0.4 build plan originally named this "ADR-004"; that slot was already taken
 by the v0.2 JAX-backend decision (above). Renumbered to ADR-012, the next free
 slot — a clerical fix, not a reopened decision.
+
+### Amendment (2026-06-26) — keystone tolerance + R(x)/Q(x) parity
+
+Two Phase-2 clarifications, recorded as the work landed:
+
+1. **"Byte-identity" reads as tight *numerical* identity (atol 1e-7).** The keystone
+   gate runs the FFG chain in information form against the moment-form Kalman path;
+   the two invert/re-invert at different points, so literal bit-for-bit agreement is
+   impossible. The decision (chain == Kalman on a chain topology) stands; only the
+   wording softens. The validation-strategy line above should be read this way.
+
+2. **The FFG chain path gains R(x)/Q(x) parity before v0.4 ships.** Phase 2 ships
+   fixed-matrix only — `ChainBackend` rejects a state-dependent `observation`/
+   `process_noise` at construction — to keep the keystone clean. This is *not* a
+   capability regression: `KalmanBackend` keeps R(x)/Q(x) on the chain throughout.
+   A Phase 2.5 then lifts the restriction via the same *linearize-at-μ⁻ plug-in*
+   Kalman already uses (evaluate `C, R(μ⁻)` / `Q(μ⁻)` at the predicted mean each
+   step; factors go per-step on that path only, the fixed path stays front-loaded).
+   This is the conjugate of the Phase-3 Gaussianization machinery and reuses it.

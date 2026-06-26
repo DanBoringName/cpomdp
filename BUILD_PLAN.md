@@ -44,17 +44,56 @@ The FFG wire payload: `src/cpomdp/ffg/message.py`, spec in
 Parked open question: a `from_moment` / moment-form constructor (none in v0.4;
 moment form is readout-only via `to_moment`).
 
-### Phase 2 — factor nodes + chain = Kalman byte-identity gate — NEXT
+### Phase 2 — factor nodes + chain = Kalman numerical-identity gate — IN PROGRESS (RxInfer oracle open)
 
-- [ ] Factor nodes that *produce* messages (emit `CanonicalGaussian`s from
-      incoming ones) — the grammar over the Phase 1 alphabet.
-- [ ] Hand-authored schedule for the fixed chemotaxis graph (no reactive
-      scheduler — out of scope).
-- [ ] **KEYSTONE GATE:** a linear chain of factor nodes is *byte-identical* to
-      the existing Kalman path (not mere agreement) — the chain is the filter's
-      degenerate case.
+Tier-1 linear-Gaussian factor nodes (`src/cpomdp/ffg/factors/linear_gaussian.py`)
+plus the chain backend (`src/cpomdp/ffg/chain.py`); specs in
+`tests/test_ffg_factors.py` and `tests/test_ffg_chain.py`. Registered as JAX
+pytrees. 290 tests green, `ty`/`ruff` clean.
+
+- [x] **Observation factor** — `GaussianObservation.message(y)` = the likelihood's
+      information form `(CᵀR⁻¹C, CᵀR⁻¹y)`; the update is `belief + message`. Oracle:
+      moment-form measurement update.
+- [x] **Transition factor** — `GaussianTransition.predict(message, control_term)`:
+      build the joint over `[x, x']`, fold the message into the x block, marginalize
+      x out. Oracle: moment-form predict `AΣAᵀ+Q` / `Aμ+b`. PD-Q only — the
+      information form inverts Q, so no deterministic (`Q=0`) transition.
+- [x] **Chain backend** — `src/cpomdp/ffg/chain.py`: `ChainBackend` wires
+      `lift → predict → update → to_moment` into `infer_states` (satisfies the
+      `InferenceBackend` protocol). Factors front-loaded in `__init__`; the moment→
+      canonical lift builds via `_unchecked`, so the eager loop's only validation is
+      the output `Belief` — same per-step cost as `KalmanBackend`. Tier-1 fixed only
+      (state-dependent R(x)/Q(x) rejected → Phase 2.5; `Q=0` rejected as the
+      info-form divergence).
+- [x] **KEYSTONE GATE** — `tests/test_ffg_chain.py` (18 tests): numerical identity
+      (atol 1e-7) vs `KalmanBackend` over sequences, dims (1,1)→(4,3), with/without
+      control; plus an independent NumPy scalar-filter oracle. (Tolerance note below.)
 - [ ] RxInfer oracle check on small graphs (behind the `rxinfer` marker).
-- [ ] jit/grad/vmap smoke tests as gates on every new public inference entry.
+- [x] jit/grad/vmap smoke tests as gates on every new public inference entry
+      (`TestChainBackendTransforms`).
+
+Tolerance note: the keystone is *numerical* identity (atol 1e-7), not literal
+bit-for-bit — info-vs-moment form inverts/re-inverts. ADR-012's "byte-identity"
+wording amended accordingly (2026-06-26).
+
+### Phase 2.5 — `ChainBackend` R(x)/Q(x) parity — PLANNED
+
+Before v0.4 ships, the FFG chain path reaches feature parity with `KalmanBackend`
+on state-dependent noise (decided 2026-06-26; recorded in ADR-012). Phase 2 ships
+fixed-matrix only (rejected at construction) to keep the keystone clean; this phase
+lifts that restriction via the same *linearize-at-μ⁻ plug-in* Kalman already uses.
+
+- [ ] After `predict`, read μ⁻ from the predicted message; build the observation
+      factor from `observation.linearize(μ⁻)` and the transition's Q from
+      `process_noise.noise_at(μ⁻)` that step (per-step factors on this path only —
+      the fixed path keeps front-loaded factors).
+- [ ] Drop the Phase 2 scope rejection; gate against `KalmanBackend`'s R(x)/Q(x)
+      path (the existing `test_kalman.py` R(x)/Q(x) oracles, ported to the chain).
+
+### Extras
+
+- [ ] Demos: A comparison v0.3 kalman demo with v0.4 ffg demo with R(x) revealing goal position, not state agent precision.
+- [ ] Update contribution section of the docs that explicitly state code blatantly wrote by AI with zero regard for quality cpomdp tries to upkeep will result in PR being closed.
 
 ### Out of scope (ADR-012 — say no on sight)
 
