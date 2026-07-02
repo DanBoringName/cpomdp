@@ -314,6 +314,50 @@ class GaussianCoupling:
         joint = CanonicalGaussian._unchecked(precision, potential)
         return joint.marginalize(over=range(p, p + c))  # eliminate child, keep parent
 
+    def message_to_child(self, parent_message: CanonicalGaussian) -> CanonicalGaussian:
+        """Push a parent's belief down the edge onto the child: eliminate the parent.
+
+        The distribute-pass mirror of ``message_to_parent``. Over the same joint on
+        ``z = [parent, child]``, but here the *parent* is known, so its message folds
+        into the *parent* block of ``Λ_J`` and the parent is marginalized out, leaving
+        the message on the c-D child.
+
+        Structurally this is ``GaussianTransition.predict`` (fold the incoming belief
+        into the source block, eliminate the source, emit onto the target) with a
+        non-square ``W`` and no control shift — a pure coupling carries no bias. So on
+        its own the downward message is a full child belief, landing in moment form on
+        ``mean = W·μ_parent`` and ``cov = W·Σ_parent·Wᵀ + Q``.
+
+        Args:
+            parent_message: the incoming belief on the p-D parent, as a
+                ``CanonicalGaussian``.
+
+        Returns:
+            A ``CanonicalGaussian`` over the c-D child.
+        """
+        coupling, coupling_noise = self.coupling, self.coupling_noise  # W, Q
+        c, p = coupling.shape  # W is (child, parent)
+
+        noise_precision = jnp.linalg.inv(coupling_noise)  # Q⁻¹
+        noise_weighted_coupling = noise_precision @ coupling  # Q⁻¹W
+
+        parent_block = (
+            coupling.T @ noise_weighted_coupling + parent_message.precision
+        )  # WᵀQ⁻¹W + message
+        child_block = noise_precision
+
+        precision = jnp.block(
+            [
+                [parent_block, -noise_weighted_coupling.T],
+                [-noise_weighted_coupling, child_block],
+            ]
+        )
+
+        potential = jnp.concatenate([parent_message.potential, jnp.zeros(c)])
+
+        joint = CanonicalGaussian._unchecked(precision, potential)
+        return joint.marginalize(over=range(p))
+
     def tree_flatten(
         self,
     ) -> tuple[tuple[Float64[Array, "c p"], Float64[Array, "c c"]], None]:

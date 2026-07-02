@@ -223,6 +223,29 @@ class TestGaussianCoupling:
         np.testing.assert_allclose(out_mean, parent_mean, atol=1e-8)
         np.testing.assert_allclose(out_cov, parent_cov, atol=1e-8)
 
+    @pytest.mark.parametrize(("p", "c"), [(1, 1), (2, 1), (1, 2), (3, 2)])
+    def test_message_to_child_matches_moment_form(self, p, c):
+        # Oracle: a parent belief pushed *down* through child = W·parent + noise(Q)
+        # lands on N(W μ_p, W Σ_p Wᵀ + Q) — the mirror of predict (fold the parent in,
+        # eliminate the parent, emit on the child), done in NumPy moment form. Unlike
+        # the upward message, the downward message is a full child belief on its own,
+        # so it moment-forms directly. Square and both non-square directions.
+        rng = np.random.default_rng(300 + 10 * p + c)
+        W = rng.standard_normal((c, p))
+        Q = _spd(rng, c)
+        mp = rng.standard_normal(p)
+        Pp = _spd(rng, p)
+
+        mean_child = W @ mp
+        cov_child = W @ Pp @ W.T + Q
+
+        parent_msg = _belief_as_canonical(mp, Pp)
+        down = GaussianCoupling(W, Q).message_to_child(parent_msg)
+        out_mean, out_cov = down.to_moment()
+
+        np.testing.assert_allclose(out_mean, mean_child, atol=1e-8)
+        np.testing.assert_allclose(out_cov, cov_child, atol=1e-8)
+
     def test_jit_and_grad_through_message_to_parent(self):
         coupling = GaussianCoupling([[1.5, -0.5]], [[0.3]])  # non-square W (1x2)
         m = CanonicalGaussian([[2.0]], [1.0])  # a message on the 1-D child

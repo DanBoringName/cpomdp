@@ -176,3 +176,61 @@ class CouplingGraph:
         # Read the accumulated root message back into moment form.
         mean, cov = acc[self.root].to_moment()  # Σ = Λ⁻¹, μ = Λ⁻¹h
         return Belief(mean=mean, cov=cov)
+
+    def infer_all(
+        self, seeds: Mapping[int, CanonicalGaussian]
+    ) -> dict[int, CanonicalGaussian]:
+        """Every node's exact marginal by two-pass belief propagation over the tree.
+
+        Where ``infer`` collects to the root and returns only that one marginal, this
+        adds a downward *distribute* pass so **every** node's marginal comes back — the
+        cheap, structure-exploiting alternative to a dense joint solve. Each seed is a
+        node's already-formed canonical message (its local prior + evidence, combined by
+        the caller); marginalisation stays in canonical form, so no node is inverted on
+        this path.
+
+        Args:
+            seeds: a canonical message per node — the node's local information. Unlike
+                ``infer``'s raw ``readings``, these are ready-made ``CanonicalGaussian``
+                messages, not observations still needing a factor.
+
+        Returns:
+            A ``CanonicalGaussian`` marginal per node index; call ``.to_moment()`` on
+            any one for its ``(mean, cov)``.
+        """
+
+        def combine(acc, key, msg):
+            """Add ``msg`` to ``acc[key]``, or start the slot with it if absent."""
+            return acc[key] + msg if key in acc else msg
+
+        def depth(node: int) -> int:
+            """The number of edges from ``node`` up to the root."""
+            hops = 0
+            while node != self.root:
+                node = parent_edge[node].parent
+                hops += 1
+            return hops
+
+        parent_edge = {edge.child: edge for edge in self.couplings}
+        order = sorted(parent_edge, key=depth, reverse=True)  # deepest-first
+
+        # Collect: fold each subtree up into its parent (as ``infer``), but cache every
+        # edge's upward message for the distribute pass. ``below[node]`` ends holding
+        # the node's own seed plus everything its children sent up.
+        below = dict(seeds)
+        up_msg = {}
+        for node in order:
+            edge = parent_edge[node]
+            up = edge.factor.message_to_parent(below[node])
+            up_msg[node] = up
+            below[edge.parent] = combine(below, edge.parent, up)
+
+        # Distribute: push each parent's finished marginal back down, shallowest-first
+        # so a parent is done before its children. Divide out the child's own upward
+        # message first (``- up_msg[node]``) so its evidence does not double-count.
+        marginals = {self.root: below[self.root]}
+        for node in reversed(order):
+            edge = parent_edge[node]
+            down = edge.factor.message_to_child(marginals[edge.parent] - up_msg[node])
+            marginals[node] = combine(below, node, down)
+        return marginals
