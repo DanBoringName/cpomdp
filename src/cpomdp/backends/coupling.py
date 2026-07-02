@@ -312,11 +312,11 @@ class CouplingGraphBackend:
             ``marginal`` / ``readout``.
         """
         precision, potential = self._assemble_posterior(observation, prior, action)
-        factored_precision, _severed = self._carry(precision)
         mean, cov = CanonicalGaussian._unchecked(
-            factored_precision, potential
-        ).to_moment()  # Σ = Λ⁻¹, μ = Λ⁻¹h
-        return Belief(mean=mean, cov=cov)
+            precision, potential
+        ).to_moment()  # exact joint: Σ = Λ⁻¹, μ = Λ⁻¹h
+        factored_cov, _severed = self._carry(cov)
+        return Belief(mean=mean, cov=factored_cov)
 
     def partition_error(
         self,
@@ -326,18 +326,20 @@ class CouplingGraphBackend:
     ) -> float:
         """The severed mass a step under this partition drops (ADR-016 diagnostic).
 
-        The norm of the between-cluster precision blocks the carry zeros — how much
-        coupling information the partition throws away at the time boundary, the
-        approximation cost of the cut. An *information-form magnitude*, not bits and not
-        a rate. ``0.0`` for the full-joint ``[[all]]`` partition (exact), growing as the
-        cut severs more coupling.
+        The norm of the between-cluster *covariance* blocks the carry zeros — how much
+        cross-cluster correlation the partition drops at the time boundary, the
+        approximation cost of the cut. A covariance magnitude, not bits and not a rate.
+        ``0.0`` for the full-joint ``[[all]]`` partition (exact), growing as the cut
+        severs more correlation. The per-node marginals this slice are unaffected — the
+        carry only drops what is *carried forward* (ADR-017).
 
         This is the eager convenience surface: it forces a host ``float`` and so is not
         itself jit-able. For a per-run profile with no host syncs, stack the
         ``_carry`` scalar inside a traced rollout instead.
         """
-        precision, _potential = self._assemble_posterior(observation, prior, action)
-        _factored, severed = self._carry(precision)
+        precision, potential = self._assemble_posterior(observation, prior, action)
+        _mean, cov = CanonicalGaussian._unchecked(precision, potential).to_moment()
+        _factored, severed = self._carry(cov)
         return float(severed)
 
     def rollout(
@@ -403,16 +405,14 @@ class CouplingGraphBackend:
     ) -> tuple[Belief, tuple[Belief, jax.Array]]:
         """One traced filter step for ``rollout``: the ``lax.scan`` body.
 
-        The pure numerical step (``_assemble_unchecked`` → ``_carry`` → ``to_moment``)
+        The pure numerical step (``_assemble_unchecked`` → ``to_moment`` → ``_carry``)
         packaged as ``(carry, output)`` for ``lax.scan``: the joint posterior is both
         the next carry and, with the severed scalar, the emitted per-step output.
         """
         precision, potential = self._assemble_unchecked(observation, belief, action)
-        factored_precision, severed = self._carry(precision)
-        mean, cov = CanonicalGaussian._unchecked(
-            factored_precision, potential
-        ).to_moment()
-        posterior = Belief(mean=mean, cov=cov)
+        mean, cov = CanonicalGaussian._unchecked(precision, potential).to_moment()
+        factored_cov, severed = self._carry(cov)
+        posterior = Belief(mean=mean, cov=factored_cov)
         return posterior, (posterior, severed)
 
     def _assemble_posterior(
@@ -454,18 +454,20 @@ class CouplingGraphBackend:
         potential = predicted.potential + obs_potential
         return precision, potential
 
-    def _carry(self, precision: jax.Array) -> tuple[jax.Array, jax.Array]:
-        """Factor the carried joint precision and measure what it severs (ADR-016).
+    def _carry(self, cov: jax.Array) -> tuple[jax.Array, jax.Array]:
+        """Factor the carried joint *covariance* and measure what it severs (ADR-016).
 
-        The pure primitive behind both surfaces: zero the between-cluster precision
+        The pure primitive behind both surfaces: zero the between-cluster covariance
         blocks (keep the mask's within-cluster ones) at the time boundary, and return
-        the factored precision alongside the severed mass as a jnp scalar (jit / grad /
-        vmap / scan safe — no host sync here). The full-joint ``[[all]]`` mask keeps
-        every block, so the factored precision is unchanged and the severed mass is
-        exactly zero (the exact endpoint stays byte-identical).
+        the factored covariance alongside the severed mass as a jnp scalar (jit / grad /
+        vmap / scan safe — no host sync here). Factoring the covariance leaves the
+        per-cluster diagonal blocks untouched, so every node's marginal this slice stays
+        exact (ADR-017); only the cross-cluster correlation carried forward is dropped.
+        The full-joint ``[[all]]`` mask keeps every block, so the carry is a no-op and
+        the severed mass is exactly zero (the exact endpoint stays byte-identical).
         """
-        severed = precision * (1.0 - self._partition_mask)
-        factored = precision - severed
+        severed = cov * (1.0 - self._partition_mask)
+        factored = cov - severed
         return factored, jnp.linalg.norm(severed)
 
     def _control_shift(self, action: jax.Array | None) -> jax.Array:

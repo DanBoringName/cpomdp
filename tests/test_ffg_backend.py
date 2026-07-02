@@ -341,6 +341,35 @@ class TestCarryPartition:
         assert full.partition_error(y, prior) == pytest.approx(0.0)
         assert cut.partition_error(y, prior) > 0.0
 
+    def test_within_slice_marginals_exact_under_any_partition(self):
+        # ADR-017: the carry factors only what crosses the *time* boundary. Within a
+        # single step every node's marginal must equal the exact full-joint marginal —
+        # a cut drops correlation carried forward, not this slice's accuracy.
+        exact = _build(
+            _CHEMOTAXIS_DIMS, _CHEMOTAXIS_EDGES, _CHEMOTAXIS_OBS, _CHEMOTAXIS_DYN
+        )
+        cut = _build(
+            _CHEMOTAXIS_DIMS,
+            _CHEMOTAXIS_EDGES,
+            _CHEMOTAXIS_OBS,
+            _CHEMOTAXIS_DYN,
+            partition=[[0, 1, 3, 4], [2]],
+        )
+        rng = np.random.default_rng(4)
+        prior = Belief(mean=np.zeros(5), cov=np.eye(5))
+        y = rng.standard_normal(3)
+        belief_exact = exact.infer_states(y, prior)
+        belief_cut = cut.infer_states(y, prior)
+        for node in range(len(_CHEMOTAXIS_DIMS)):
+            me = exact.marginal(node, belief_exact)
+            mc = cut.marginal(node, belief_cut)
+            np.testing.assert_allclose(
+                np.asarray(mc.mean), np.asarray(me.mean), atol=1e-10
+            )
+            np.testing.assert_allclose(
+                np.asarray(mc.cov), np.asarray(me.cov), atol=1e-10
+            )
+
     def test_rollout_profiles_severed_mass_over_a_run(self):
         # The per-run severed-mass profile (ADR-016): one traced pass over a sequence
         # returns the stacked posteriors and a length-T severed-mass profile. The
