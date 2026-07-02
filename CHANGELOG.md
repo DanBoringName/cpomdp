@@ -32,11 +32,17 @@ filter. `__version__` stays `0.3.0` until the v0.4 release is cut.
     at atol 1e-7 against an independent NumPy joint-precision oracle, `KalmanBackend`, and
     `RxInferBackend` on the flattened model.
   - Carry partition on `CouplingGraphBackend` (ADR-016): a `partition` of the node set
-    controls which between-cluster precision blocks survive the time boundary — `[[all]]`
-    (the default) keeps the exact full joint, singletons fully factor it. A pure
-    `partition_error` reports the severed mass a cut drops (an information-form magnitude,
+    controls which between-cluster correlations survive the time boundary — `[[all]]`
+    (the default) keeps the exact full joint, singletons fully factor it. The carry
+    factors the joint *covariance* (not the precision), so every node's marginal stays
+    exact within a slice (ADR-017); only the cross-cluster correlation carried forward is
+    dropped. A pure `partition_error` reports the severed mass (a covariance magnitude,
     not a rate), and `rollout` profiles it over a whole sequence in one traced `lax.scan`
-    pass. The exact endpoint stays byte-identical under `[[all]]`.
+    pass. A fully-factored (singleton) partition runs cheap two-pass tree belief
+    propagation (`CouplingGraph.infer_all`, plus `GaussianCoupling.message_to_child` and
+    `CanonicalGaussian.__sub__`) in place of the dense joint solve — O(tree) rather than
+    O(n³), matching the dense path to atol 1e-7. The exact endpoint stays byte-identical
+    under `[[all]]`.
 - Examples: `bacillus_uncertain_food.py`, the instrumental-epistemics flagship — the
   beacon now resolves an explicit food *latent* rather than the agent's own position
   (ADR-013), runnable on both `KalmanBackend` and `ChainBackend`; `coupling_graph_figure.py`,

@@ -1289,6 +1289,25 @@ If per-step side-effecting delivery is ever genuinely needed (e.g. live logging 
 a compiled rollout), the sanctioned mechanism is `jax.debug.callback` / `io_callback`, not
 stored state.
 
+### Carry the covariance, and solve factored partitions by tree BP (Phase 2, refined)
+
+Two refinements landed once I wired the cheap solve. First, the carry factors the joint
+**covariance**, not the precision. Masking precision blocks and then inverting changes the
+diagonal (marginal) blocks too, so it silently perturbed *this slice's* node marginals —
+violating ADR-017's "within-slice marginals exact". Masking the covariance leaves the
+per-cluster diagonal blocks untouched: every node's marginal stays exact, and only the
+cross-cluster correlation *carried forward* is dropped. So `partition_error` is now a
+covariance magnitude (correlation severed), not a precision norm, and `[[all]]` is still a
+byte-identical no-op.
+
+Second, a fully-factored (singleton) partition carries a block-diagonal belief, which makes
+the within-slice problem a tree. That path runs two-pass tree belief propagation
+(`CouplingGraph.infer_all`, on `GaussianCoupling.message_to_child` and
+`CanonicalGaussian.__sub__`) — per-node seeds up-and-down the tree — instead of forming and
+inverting the dense joint: O(tree) rather than O(n³), validated equal to the dense path at
+atol 1e-7 and measured ~2× faster on an 81-node star (more as the tree grows). Multi-node
+clusters still take the dense within-slice solve; a super-node BP for them is future work.
+
 ---
 
 ## ADR-017 — v0.4 FFG: temporal-edge composition, driven relaxation, single clock

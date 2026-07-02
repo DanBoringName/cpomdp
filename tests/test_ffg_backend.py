@@ -370,6 +370,37 @@ class TestCarryPartition:
                 np.asarray(mc.cov), np.asarray(me.cov), atol=1e-10
             )
 
+    def test_singleton_partition_marginals_via_bp_match_exact(self):
+        # A singleton partition takes the cheap two-pass BP path (_is_factored). From a
+        # block-diagonal prior its per-node marginals must equal the exact full-joint
+        # marginals — BP computes the same numbers as the dense solve, without forming
+        # or inverting the dense joint.
+        exact = _build(
+            _CHEMOTAXIS_DIMS, _CHEMOTAXIS_EDGES, _CHEMOTAXIS_OBS, _CHEMOTAXIS_DYN
+        )
+        singletons = _build(
+            _CHEMOTAXIS_DIMS,
+            _CHEMOTAXIS_EDGES,
+            _CHEMOTAXIS_OBS,
+            _CHEMOTAXIS_DYN,
+            partition=[[n] for n in range(len(_CHEMOTAXIS_DIMS))],
+        )
+        assert singletons._is_factored  # the BP path is actually engaged
+        rng = np.random.default_rng(9)
+        prior = Belief(mean=np.zeros(5), cov=np.eye(5))
+        y = rng.standard_normal(3)
+        bp_belief = singletons.infer_states(y, prior)
+        exact_belief = exact.infer_states(y, prior)
+        for node in range(len(_CHEMOTAXIS_DIMS)):
+            got = singletons.marginal(node, bp_belief)
+            want = exact.marginal(node, exact_belief)
+            np.testing.assert_allclose(
+                np.asarray(got.mean), np.asarray(want.mean), atol=1e-7
+            )
+            np.testing.assert_allclose(
+                np.asarray(got.cov), np.asarray(want.cov), atol=1e-7
+            )
+
     def test_rollout_profiles_severed_mass_over_a_run(self):
         # The per-run severed-mass profile (ADR-016): one traced pass over a sequence
         # returns the stacked posteriors and a length-T severed-mass profile. The
@@ -487,6 +518,35 @@ class TestTransforms:
         )
         grad = jax.grad(total_severed)(obs_seq)
         assert bool(jnp.all(jnp.isfinite(grad)))
+
+    def test_jit_grad_vmap_through_bp_path(self):
+        # The fully-factored (singleton) path runs two-pass BP, a static schedule over
+        # traced data, so it must jit / grad / vmap like the dense path (ADR-012 gate).
+        backend = _build(
+            _CHEMOTAXIS_DIMS,
+            _CHEMOTAXIS_EDGES,
+            _CHEMOTAXIS_OBS,
+            _CHEMOTAXIS_DYN,
+            partition=[[n] for n in range(len(_CHEMOTAXIS_DIMS))],
+        )
+        prior = Belief(mean=jnp.zeros(5), cov=jnp.eye(5) * 2.0)
+
+        def root_mean(y):
+            return backend.readout(backend.infer_states(y, prior)).mean
+
+        y = jnp.array([1.25, 1.15, 0.95])
+        np.testing.assert_allclose(
+            np.asarray(jax.jit(root_mean)(y)), np.asarray(root_mean(y)), atol=1e-10
+        )
+        grad = jax.grad(lambda yy: root_mean(yy).sum())(y)
+        assert bool(jnp.all(jnp.isfinite(grad)))
+
+        ys = jnp.array([[1.25, 1.15, 0.95], [0.1, -0.2, 0.3], [0.0, 0.0, 0.0]])
+        batched = jax.vmap(root_mean)(ys)
+        expected = jnp.stack([root_mean(one) for one in ys])
+        np.testing.assert_allclose(
+            np.asarray(batched), np.asarray(expected), atol=1e-10
+        )
 
 
 def _check_against_flat(backend, flat_backend, prior, obs_seq, *, action_seq=None):

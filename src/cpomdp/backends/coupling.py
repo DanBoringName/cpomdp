@@ -77,6 +77,10 @@ class CouplingGraphBackend:
         self.readout_node = self._resolve_readout_node(readout_node)
         self._control = self._coerce_control(control)
         self._partition = self._resolve_partition(partition)
+        # Fully-factored (every cluster a singleton) → the carry keeps the belief
+        # block-diagonal, so the within-slice solve is a tree and cheap two-pass BP
+        # (``infer_all``) replaces the dense joint solve (ADR-016 energy lever).
+        self._is_factored = all(len(cluster) == 1 for cluster in self._partition)
 
         # Front-loaded factor tier — built once, reused every step (ADR-002).
         self._transition = self._build_transition()
@@ -311,12 +315,50 @@ class CouplingGraphBackend:
             The posterior *joint* belief over all nodes; slice one node out with
             ``marginal`` / ``readout``.
         """
-        precision, potential = self._assemble_posterior(observation, prior, action)
+        observation, action = validate_step_inputs(
+            self._flat_model, observation, prior, action
+        )
+        if self._is_factored:
+            # Fully-factored carry: skip the dense joint solve, run tree BP instead.
+            return self._infer_states_factored(observation, prior, action)
+        precision, potential = self._assemble_unchecked(observation, prior, action)
         mean, cov = CanonicalGaussian._unchecked(
             precision, potential
         ).to_moment()  # exact joint: Σ = Λ⁻¹, μ = Λ⁻¹h
         factored_cov, _severed = self._carry(cov)
         return Belief(mean=mean, cov=factored_cov)
+
+    def _infer_states_factored(
+        self, observation: jax.Array, prior: Belief, action: jax.Array | None
+    ) -> Belief:
+        """One filter step via two-pass tree BP — the cheap fully-factored path.
+
+        For a singleton partition the carried belief is block-diagonal, so the
+        within-slice problem is a tree: each node is seeded per-node (its own predicted
+        block + observation) and ``CouplingGraph.infer_all`` returns every node's exact
+        marginal in O(tree) small solves, never forming or inverting the dense joint
+        (ADR-016). Only each node's own diagonal block of the prior is used, so a
+        non-block-diagonal prior is factored on ingest — consistent with the partition.
+        """
+        control_term = self._control_shift(action)  # b = B·action over the joint state
+        obs_precision, obs_potential = self._observation_messages(observation)
+        seeds = {}
+        for node in range(len(self.dims)):
+            block = self._block(node)
+            node_precision = jnp.linalg.inv(prior.cov[block, block])  # Λ_i = Σ_i⁻¹
+            node_prior = CanonicalGaussian._unchecked(
+                node_precision, node_precision @ prior.mean[block]
+            )
+            predicted = self.transitions[node].predict(node_prior, control_term[block])
+            seeds[node] = CanonicalGaussian._unchecked(
+                predicted.precision + obs_precision[block, block],
+                predicted.potential + obs_potential[block],
+            )
+        marginals = self.graph.infer_all(seeds)
+        moments = [marginals[node].to_moment() for node in range(len(self.dims))]
+        mean = jnp.concatenate([node_mean for node_mean, _ in moments])
+        cov = jax.scipy.linalg.block_diag(*[node_cov for _, node_cov in moments])
+        return Belief(mean=mean, cov=cov)
 
     def partition_error(
         self,
