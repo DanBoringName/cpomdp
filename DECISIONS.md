@@ -1276,6 +1276,19 @@ not always the root — issue #25) is exposed as a pure *slice* of the joint
   distribute-pass tree BP those need is not built in Phase 1 (it is not the exact recursive
   filter — ADR-017).
 
+### Diagnostic surface — a pure surface, not a stored field (Phase 2)
+
+The severed-mass diagnostic is exposed as a pure, traceable surface, never a mutable
+per-step attribute: `_carry` returns the severed mass as a jnp scalar next to the factored
+precision, `partition_error()` is the eager `float` wrapper, and `rollout` stacks the
+scalar inside one `lax.scan` for the per-run profile. I rejected a stored per-step field —
+it can't be read inside `scan`/`vmap`, so it can't deliver the per-run summary, and it
+would hold stale / last-of-batch values under exactly the transforms this library targets.
+So `infer_states` stays a pure query, which reaffirms ADR-012's jit/grad/vmap discipline.
+If per-step side-effecting delivery is ever genuinely needed (e.g. live logging from inside
+a compiled rollout), the sanctioned mechanism is `jax.debug.callback` / `io_callback`, not
+stored state.
+
 ---
 
 ## ADR-017 — v0.4 FFG: temporal-edge composition, driven relaxation, single clock

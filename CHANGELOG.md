@@ -31,6 +31,12 @@ filter. `__version__` stays `0.3.0` until the v0.4 release is cut.
     `to_flat_model` (structural couplings as within-slice pseudo-observations). Validated
     at atol 1e-7 against an independent NumPy joint-precision oracle, `KalmanBackend`, and
     `RxInferBackend` on the flattened model.
+  - Carry partition on `CouplingGraphBackend` (ADR-016): a `partition` of the node set
+    controls which between-cluster precision blocks survive the time boundary — `[[all]]`
+    (the default) keeps the exact full joint, singletons fully factor it. A pure
+    `partition_error` reports the severed mass a cut drops (an information-form magnitude,
+    not a rate), and `rollout` profiles it over a whole sequence in one traced `lax.scan`
+    pass. The exact endpoint stays byte-identical under `[[all]]`.
 - Examples: `bacillus_uncertain_food.py`, the instrumental-epistemics flagship — the
   beacon now resolves an explicit food *latent* rather than the agent's own position
   (ADR-013), runnable on both `KalmanBackend` and `ChainBackend`; `coupling_graph_figure.py`,

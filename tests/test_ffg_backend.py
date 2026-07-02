@@ -434,6 +434,31 @@ class TestTransforms:
             np.asarray(batched), np.asarray(expected), atol=1e-10
         )
 
+    def test_jit_grad_through_rollout_scan(self):
+        # The traced scan path: the severed-mass profile is produced *inside* the trace
+        # (no host syncs), so rollout must jit and be differentiable (ADR-012 gate).
+        cut = _build(
+            _CHEMOTAXIS_DIMS,
+            _CHEMOTAXIS_EDGES,
+            _CHEMOTAXIS_OBS,
+            _CHEMOTAXIS_DYN,
+            partition=[[0, 1, 3, 4], [2]],
+        )
+        prior = Belief(mean=jnp.zeros(5), cov=jnp.eye(5) * 2.0)
+        obs_seq = jnp.array([[1.25, 1.15, 0.95], [0.1, -0.2, 0.3], [0.0, 0.0, 0.0]])
+
+        def total_severed(ys):
+            _beliefs, severed = cut.rollout(prior, ys)
+            return severed.sum()
+
+        np.testing.assert_allclose(
+            np.asarray(jax.jit(total_severed)(obs_seq)),
+            np.asarray(total_severed(obs_seq)),
+            atol=1e-10,
+        )
+        grad = jax.grad(total_severed)(obs_seq)
+        assert bool(jnp.all(jnp.isfinite(grad)))
+
 
 def _check_against_flat(backend, flat_backend, prior, obs_seq, *, action_seq=None):
     """Drive the backend and a flat backend on ``to_flat_model`` in lockstep.
