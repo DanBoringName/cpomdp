@@ -356,6 +356,91 @@ class TestCouplingGraphInfer:
         )
 
 
+# --- CouplingGraph.infer_all: collect + distribute vs the dense joint solve -------
+
+
+def _joint_all_marginals_oracle(dims, edges, seeds):
+    """Every node's marginal via one dense joint solve — independent of the BP maths.
+
+    Assemble the joint precision (block-diagonal seed precisions + each coupling's
+    canonical block) and joint potential (stacked seed potentials), invert once, and
+    slice each node's block. Pure NumPy — shares nothing with the two-pass messages.
+    """
+    offs = np.cumsum([0, *dims])
+    dim = int(offs[-1])
+
+    def blk(i):
+        return slice(int(offs[i]), int(offs[i + 1]))
+
+    lam = np.zeros((dim, dim))
+    h = np.zeros(dim)
+    for node, (precision, potential) in seeds.items():
+        lam[blk(node), blk(node)] += np.asarray(precision, float)
+        h[blk(node)] += np.asarray(potential, float)
+    for parent, child, w, q in edges:
+        w, q = np.asarray(w, float), np.asarray(q, float)
+        q_inv = np.linalg.inv(q)
+        weighted = q_inv @ w  # Q⁻¹W
+        lam[blk(parent), blk(parent)] += w.T @ weighted
+        lam[blk(child), blk(child)] += q_inv
+        lam[blk(parent), blk(child)] += -weighted.T
+        lam[blk(child), blk(parent)] += -weighted
+    sig = np.linalg.inv(lam)
+    mu = sig @ h
+    return {n: (mu[blk(n)], sig[blk(n), blk(n)]) for n in range(len(dims))}
+
+
+def _check_infer_all(dims, edges, seeds, atol=1e-8):
+    """Build the graph, run infer_all, check *every* node's marginal vs the oracle."""
+    couplings = tuple(
+        Coupling(parent, child, GaussianCoupling(w, q), 1.0)
+        for parent, child, w, q in edges
+    )
+    graph = CouplingGraph(root=0, dims=dims, couplings=couplings, observations={})
+    seed_msgs = {
+        n: CanonicalGaussian(precision, h) for n, (precision, h) in seeds.items()
+    }
+    marginals = graph.infer_all(seed_msgs)
+    oracle = _joint_all_marginals_oracle(dims, edges, seeds)
+    for node in range(len(dims)):
+        out_mean, out_cov = marginals[node].to_moment()
+        np.testing.assert_allclose(np.asarray(out_mean), oracle[node][0], atol=atol)
+        np.testing.assert_allclose(np.asarray(out_cov), oracle[node][1], atol=atol)
+
+
+class TestCouplingGraphInferAll:
+    """The distribute pass: infer_all returns *every* node's marginal (collect alone
+    gives only the root), matching an independent dense joint solve.
+    """
+
+    def test_depth1_two_branches_all_marginals(self):
+        # Root 0 -> children 1, 2, every node seeded. The children come only from the
+        # downward pass — collect leaves them holding just their own seed.
+        rng = np.random.default_rng(500)
+        dims = (1, 1, 1)
+        edges = [
+            (0, 1, rng.standard_normal((1, 1)), _spd(rng, 1)),
+            (0, 2, rng.standard_normal((1, 1)), _spd(rng, 1)),
+        ]
+        seeds = {n: (_spd(rng, 1), rng.standard_normal(1)) for n in range(3)}
+        _check_infer_all(dims, edges, seeds)
+
+    def test_depth2_mixed_dims_nonsquare(self):
+        # 0 -> 1 -> 2 and 0 -> 3: an internal node with a child, non-square couplings,
+        # mixed node dims — the downward message must thread through node 1 to node 2.
+        rng = np.random.default_rng(501)
+        dims = (2, 1, 2, 1)
+        edges = [
+            (0, 1, rng.standard_normal((1, 2)), _spd(rng, 1)),
+            (1, 2, rng.standard_normal((2, 1)), _spd(rng, 2)),
+            (0, 3, rng.standard_normal((1, 2)), _spd(rng, 1)),
+        ]
+        seeds = {
+            n: (_spd(rng, dims[n]), rng.standard_normal(dims[n])) for n in range(4)
+        }
+        _check_infer_all(dims, edges, seeds)
+
+
 class TestCouplingGraphValidation:
     def _w(self, c, p):
         return GaussianCoupling(np.zeros((c, p)) + 0.5, np.eye(c) * 0.3)

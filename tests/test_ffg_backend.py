@@ -121,7 +121,9 @@ def _driven_relaxation_oracle(
     return states, offs
 
 
-def _build(dims, edges, obs_specs, dyn, *, control=None, readout_node=None):
+def _build(
+    dims, edges, obs_specs, dyn, *, control=None, readout_node=None, partition=None
+):
     """Build a ``CouplingGraphBackend`` (graph + per-node transitions) for a spec."""
     couplings = tuple(
         Coupling(parent, child, GaussianCoupling(w, q), 1.0)
@@ -132,9 +134,10 @@ def _build(dims, edges, obs_specs, dyn, *, control=None, readout_node=None):
         root=0, dims=dims, couplings=couplings, observations=observations
     )
     transitions = tuple(GaussianTransition(a, q) for a, q in dyn)
-    return CouplingGraphBackend(
-        graph, transitions, control=control, readout_node=readout_node
-    )
+    kwargs = {"control": control, "readout_node": readout_node}
+    if partition is not None:
+        kwargs["partition"] = partition
+    return CouplingGraphBackend(graph, transitions, **kwargs)
 
 
 # The Phase-5 demo tree, now dynamic: shared CheA (root, 0) feeds fast CheY-P (1, the
@@ -284,6 +287,161 @@ class TestKeystoneDrivenRelaxation:
         _check_sequence(backend, dims, edges, obs, dyn, prior, obs_seq)
 
 
+class TestCarryPartition:
+    """The carry partition (ADR-016): the off-diagonal precision block-sparsity kept
+    across the time boundary. The safety-net gate first — the trivial single-cluster
+    partition ``[[all nodes]]`` must reproduce the exact #25 path byte-for-byte, so
+    adding the ``partition`` axis cannot perturb the exact endpoint.
+    """
+
+    def test_full_joint_partition_matches_unpartitioned(self):
+        # [[all nodes]] zeros no between-cluster blocks -> identical to no partition.
+        all_nodes = [list(range(len(_CHEMOTAXIS_DIMS)))]
+        partitioned = _build(
+            _CHEMOTAXIS_DIMS,
+            _CHEMOTAXIS_EDGES,
+            _CHEMOTAXIS_OBS,
+            _CHEMOTAXIS_DYN,
+            partition=all_nodes,
+        )
+        exact = _build(
+            _CHEMOTAXIS_DIMS, _CHEMOTAXIS_EDGES, _CHEMOTAXIS_OBS, _CHEMOTAXIS_DYN
+        )
+        rng = np.random.default_rng(0)
+        prior = Belief(mean=np.zeros(5), cov=np.eye(5))
+        obs_seq = [rng.standard_normal(3) for _ in range(4)]
+        belief_p, belief_e = prior, prior
+        for y in obs_seq:
+            belief_p = partitioned.infer_states(y, belief_p)
+            belief_e = exact.infer_states(y, belief_e)
+            np.testing.assert_array_equal(
+                np.asarray(belief_p.mean), np.asarray(belief_e.mean)
+            )
+            np.testing.assert_array_equal(
+                np.asarray(belief_p.cov), np.asarray(belief_e.cov)
+            )
+
+    def test_partition_error_zero_for_full_joint_positive_for_cut(self):
+        # The severed-mass diagnostic (ADR-016): the full-joint carry drops no coupling
+        # (0.0), a singleton carry severs every between-node block (positive mass).
+        full = _build(
+            _CHEMOTAXIS_DIMS, _CHEMOTAXIS_EDGES, _CHEMOTAXIS_OBS, _CHEMOTAXIS_DYN
+        )
+        singletons = [[n] for n in range(len(_CHEMOTAXIS_DIMS))]
+        cut = _build(
+            _CHEMOTAXIS_DIMS,
+            _CHEMOTAXIS_EDGES,
+            _CHEMOTAXIS_OBS,
+            _CHEMOTAXIS_DYN,
+            partition=singletons,
+        )
+        rng = np.random.default_rng(1)
+        prior = Belief(mean=np.zeros(5), cov=np.eye(5))
+        y = rng.standard_normal(3)
+        assert full.partition_error(y, prior) == pytest.approx(0.0)
+        assert cut.partition_error(y, prior) > 0.0
+
+    def test_within_slice_marginals_exact_under_any_partition(self):
+        # ADR-017: the carry factors only what crosses the *time* boundary. Within a
+        # single step every node's marginal must equal the exact full-joint marginal —
+        # a cut drops correlation carried forward, not this slice's accuracy.
+        exact = _build(
+            _CHEMOTAXIS_DIMS, _CHEMOTAXIS_EDGES, _CHEMOTAXIS_OBS, _CHEMOTAXIS_DYN
+        )
+        cut = _build(
+            _CHEMOTAXIS_DIMS,
+            _CHEMOTAXIS_EDGES,
+            _CHEMOTAXIS_OBS,
+            _CHEMOTAXIS_DYN,
+            partition=[[0, 1, 3, 4], [2]],
+        )
+        rng = np.random.default_rng(4)
+        prior = Belief(mean=np.zeros(5), cov=np.eye(5))
+        y = rng.standard_normal(3)
+        belief_exact = exact.infer_states(y, prior)
+        belief_cut = cut.infer_states(y, prior)
+        for node in range(len(_CHEMOTAXIS_DIMS)):
+            me = exact.marginal(node, belief_exact)
+            mc = cut.marginal(node, belief_cut)
+            np.testing.assert_allclose(
+                np.asarray(mc.mean), np.asarray(me.mean), atol=1e-10
+            )
+            np.testing.assert_allclose(
+                np.asarray(mc.cov), np.asarray(me.cov), atol=1e-10
+            )
+
+    def test_singleton_partition_marginals_via_bp_match_exact(self):
+        # A singleton partition takes the cheap two-pass BP path (_is_factored). From a
+        # block-diagonal prior its per-node marginals must equal the exact full-joint
+        # marginals — BP computes the same numbers as the dense solve, without forming
+        # or inverting the dense joint.
+        exact = _build(
+            _CHEMOTAXIS_DIMS, _CHEMOTAXIS_EDGES, _CHEMOTAXIS_OBS, _CHEMOTAXIS_DYN
+        )
+        singletons = _build(
+            _CHEMOTAXIS_DIMS,
+            _CHEMOTAXIS_EDGES,
+            _CHEMOTAXIS_OBS,
+            _CHEMOTAXIS_DYN,
+            partition=[[n] for n in range(len(_CHEMOTAXIS_DIMS))],
+        )
+        assert singletons._is_factored  # the BP path is actually engaged
+        rng = np.random.default_rng(9)
+        prior = Belief(mean=np.zeros(5), cov=np.eye(5))
+        y = rng.standard_normal(3)
+        bp_belief = singletons.infer_states(y, prior)
+        exact_belief = exact.infer_states(y, prior)
+        for node in range(len(_CHEMOTAXIS_DIMS)):
+            got = singletons.marginal(node, bp_belief)
+            want = exact.marginal(node, exact_belief)
+            np.testing.assert_allclose(
+                np.asarray(got.mean), np.asarray(want.mean), atol=1e-7
+            )
+            np.testing.assert_allclose(
+                np.asarray(got.cov), np.asarray(want.cov), atol=1e-7
+            )
+
+    def test_rollout_profiles_severed_mass_over_a_run(self):
+        # The per-run severed-mass profile (ADR-016): one traced pass over a sequence
+        # returns the stacked posteriors and a length-T severed-mass profile. The
+        # full-joint run severs nothing at every step; a singleton cut severs at each.
+        full = _build(
+            _CHEMOTAXIS_DIMS, _CHEMOTAXIS_EDGES, _CHEMOTAXIS_OBS, _CHEMOTAXIS_DYN
+        )
+        singletons = [[n] for n in range(len(_CHEMOTAXIS_DIMS))]
+        cut = _build(
+            _CHEMOTAXIS_DIMS,
+            _CHEMOTAXIS_EDGES,
+            _CHEMOTAXIS_OBS,
+            _CHEMOTAXIS_DYN,
+            partition=singletons,
+        )
+        rng = np.random.default_rng(2)
+        prior = Belief(mean=np.zeros(5), cov=np.eye(5))
+        obs_seq = np.stack([rng.standard_normal(3) for _ in range(4)])  # (T=4, 3)
+
+        beliefs, severed = cut.rollout(prior, obs_seq)
+        assert np.asarray(severed).shape == (4,)
+        assert np.asarray(beliefs.mean).shape == (4, 5)
+        assert np.asarray(beliefs.cov).shape == (4, 5, 5)
+        assert np.all(np.asarray(severed) > 0.0)
+
+        _beliefs_full, severed_full = full.rollout(prior, obs_seq)
+        np.testing.assert_allclose(np.asarray(severed_full), 0.0, atol=1e-12)
+
+        # The trajectory must equal iterating infer_states by hand — the rollout can't
+        # compute anything the single-step path doesn't.
+        belief = prior
+        for step, y in enumerate(obs_seq):
+            belief = cut.infer_states(y, belief)
+            np.testing.assert_allclose(
+                np.asarray(beliefs.mean[step]), np.asarray(belief.mean), atol=1e-10
+            )
+            np.testing.assert_allclose(
+                np.asarray(beliefs.cov[step]), np.asarray(belief.cov), atol=1e-10
+            )
+
+
 class TestProtocolAndReadout:
     def test_is_inference_backend(self):
         backend = _build(
@@ -316,6 +474,60 @@ class TestTransforms:
     def test_jit_grad_vmap_through_infer_states(self):
         backend = _build(
             _CHEMOTAXIS_DIMS, _CHEMOTAXIS_EDGES, _CHEMOTAXIS_OBS, _CHEMOTAXIS_DYN
+        )
+        prior = Belief(mean=jnp.zeros(5), cov=jnp.eye(5) * 2.0)
+
+        def root_mean(y):
+            return backend.readout(backend.infer_states(y, prior)).mean
+
+        y = jnp.array([1.25, 1.15, 0.95])
+        np.testing.assert_allclose(
+            np.asarray(jax.jit(root_mean)(y)), np.asarray(root_mean(y)), atol=1e-10
+        )
+        grad = jax.grad(lambda yy: root_mean(yy).sum())(y)
+        assert bool(jnp.all(jnp.isfinite(grad)))
+
+        ys = jnp.array([[1.25, 1.15, 0.95], [0.1, -0.2, 0.3], [0.0, 0.0, 0.0]])
+        batched = jax.vmap(root_mean)(ys)
+        expected = jnp.stack([root_mean(one) for one in ys])
+        np.testing.assert_allclose(
+            np.asarray(batched), np.asarray(expected), atol=1e-10
+        )
+
+    def test_jit_grad_through_rollout_scan(self):
+        # The traced scan path: the severed-mass profile is produced *inside* the trace
+        # (no host syncs), so rollout must jit and be differentiable (ADR-012 gate).
+        cut = _build(
+            _CHEMOTAXIS_DIMS,
+            _CHEMOTAXIS_EDGES,
+            _CHEMOTAXIS_OBS,
+            _CHEMOTAXIS_DYN,
+            partition=[[0, 1, 3, 4], [2]],
+        )
+        prior = Belief(mean=jnp.zeros(5), cov=jnp.eye(5) * 2.0)
+        obs_seq = jnp.array([[1.25, 1.15, 0.95], [0.1, -0.2, 0.3], [0.0, 0.0, 0.0]])
+
+        def total_severed(ys):
+            _beliefs, severed = cut.rollout(prior, ys)
+            return severed.sum()
+
+        np.testing.assert_allclose(
+            np.asarray(jax.jit(total_severed)(obs_seq)),
+            np.asarray(total_severed(obs_seq)),
+            atol=1e-10,
+        )
+        grad = jax.grad(total_severed)(obs_seq)
+        assert bool(jnp.all(jnp.isfinite(grad)))
+
+    def test_jit_grad_vmap_through_bp_path(self):
+        # The fully-factored (singleton) path runs two-pass BP, a static schedule over
+        # traced data, so it must jit / grad / vmap like the dense path (ADR-012 gate).
+        backend = _build(
+            _CHEMOTAXIS_DIMS,
+            _CHEMOTAXIS_EDGES,
+            _CHEMOTAXIS_OBS,
+            _CHEMOTAXIS_DYN,
+            partition=[[n] for n in range(len(_CHEMOTAXIS_DIMS))],
         )
         prior = Belief(mean=jnp.zeros(5), cov=jnp.eye(5) * 2.0)
 

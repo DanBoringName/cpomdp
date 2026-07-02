@@ -1276,6 +1276,38 @@ not always the root — issue #25) is exposed as a pure *slice* of the joint
   distribute-pass tree BP those need is not built in Phase 1 (it is not the exact recursive
   filter — ADR-017).
 
+### Diagnostic surface — a pure surface, not a stored field (Phase 2)
+
+The severed-mass diagnostic is exposed as a pure, traceable surface, never a mutable
+per-step attribute: `_carry` returns the severed mass as a jnp scalar next to the factored
+precision, `partition_error()` is the eager `float` wrapper, and `rollout` stacks the
+scalar inside one `lax.scan` for the per-run profile. I rejected a stored per-step field —
+it can't be read inside `scan`/`vmap`, so it can't deliver the per-run summary, and it
+would hold stale / last-of-batch values under exactly the transforms this library targets.
+So `infer_states` stays a pure query, which reaffirms ADR-012's jit/grad/vmap discipline.
+If per-step side-effecting delivery is ever genuinely needed (e.g. live logging from inside
+a compiled rollout), the sanctioned mechanism is `jax.debug.callback` / `io_callback`, not
+stored state.
+
+### Carry the covariance, and solve factored partitions by tree BP (Phase 2, refined)
+
+Two refinements landed once I wired the cheap solve. First, the carry factors the joint
+**covariance**, not the precision. Masking precision blocks and then inverting changes the
+diagonal (marginal) blocks too, so it silently perturbed *this slice's* node marginals —
+violating ADR-017's "within-slice marginals exact". Masking the covariance leaves the
+per-cluster diagonal blocks untouched: every node's marginal stays exact, and only the
+cross-cluster correlation *carried forward* is dropped. So `partition_error` is now a
+covariance magnitude (correlation severed), not a precision norm, and `[[all]]` is still a
+byte-identical no-op.
+
+Second, a fully-factored (singleton) partition carries a block-diagonal belief, which makes
+the within-slice problem a tree. That path runs two-pass tree belief propagation
+(`CouplingGraph.infer_all`, on `GaussianCoupling.message_to_child` and
+`CanonicalGaussian.__sub__`) — per-node seeds up-and-down the tree — instead of forming and
+inverting the dense joint: O(tree) rather than O(n³), validated equal to the dense path at
+atol 1e-7 and measured ~2× faster on an 81-node star (more as the tree grows). Multi-node
+clusters still take the dense within-slice solve; a super-node BP for them is future work.
+
 ---
 
 ## ADR-017 — v0.4 FFG: temporal-edge composition, driven relaxation, single clock

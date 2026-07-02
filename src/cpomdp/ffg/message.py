@@ -107,6 +107,33 @@ class CanonicalGaussian:
             self.precision + other.precision, potential=self.potential + other.potential
         )
 
+    def __sub__(self, other: "CanonicalGaussian") -> "CanonicalGaussian":
+        """Belief division: divide one message out of another on the same variable.
+
+        The inverse of the factor product (``__add__``): in canonical form
+        dividing two Gaussian potentials is the elementwise difference of their
+        parameters::
+
+            (Λ1, h1) − (Λ2, h2) = (Λ1 − Λ2, h1 − h2)
+
+        The distribute pass uses this to divide a child's back-message out of a
+        parent's belief before sending down the edge, so the child's own evidence
+        is not counted twice. Unlike the product, the result is **not** validated
+        (built via ``_unchecked``): dividing out evidence legally leaves an
+        indefinite — even negative — precision, a valid raw message with no moment
+        form. Both operands must share the same dimension; a shape mismatch raises
+        ``ValueError`` (the message mentions "shape").
+        """
+        if self.precision.shape != other.precision.shape:
+            raise ValueError(
+                f"cannot subtract messages of shape {self.precision.shape} "
+                f"and {other.precision.shape}"
+            )
+
+        return CanonicalGaussian._unchecked(
+            self.precision - other.precision, potential=self.potential - other.potential
+        )
+
     def to_moment(self) -> tuple[Float64[Array, "n"], Float64[Array, "n n"]]:
         """Read out moment form ``(mean, cov)`` from canonical (information) form.
 

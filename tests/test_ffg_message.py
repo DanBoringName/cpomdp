@@ -177,6 +177,47 @@ class TestFactorProduct:
         np.testing.assert_array_equal(c.precision, [[4.0, 0.0], [0.0, 3.0]])
 
 
+# --- Belief division (__sub__) -------------------------------------------------
+
+
+class TestBeliefDivision:
+    """Division is the inverse of the factor product — the distribute pass divides
+    out a child's back-message before sending down. Unlike ``__add__`` it must *not*
+    validate: dividing out evidence legally leaves an indefinite precision.
+    """
+
+    def test_sub_is_exact_elementwise_difference(self):
+        a = CanonicalGaussian(precision=[[4.0, 0.0], [0.0, 3.0]], potential=[1.0, 2.0])
+        b = CanonicalGaussian(precision=[[3.0, 0.0], [0.0, 1.0]], potential=[0.0, 2.0])
+        c = a - b
+        np.testing.assert_array_equal(c.precision, [[1.0, 0.0], [0.0, 2.0]])
+        np.testing.assert_array_equal(c.potential, [1.0, 0.0])
+
+    def test_sub_inverts_add(self):
+        # Division undoes the factor product: (a + b) - b == a.
+        rng = np.random.default_rng(3)
+        _, _, p1, h1 = _random_system(rng, 3)
+        _, _, p2, h2 = _random_system(rng, 3)
+        a, b = CanonicalGaussian(p1, h1), CanonicalGaussian(p2, h2)
+        back = (a + b) - b
+        np.testing.assert_allclose(back.precision, a.precision, rtol=1e-12)
+        np.testing.assert_allclose(back.potential, a.potential, rtol=1e-12)
+
+    def test_sub_allows_indefinite_result(self):
+        # Belief division is unvalidated by design: dividing out a larger precision
+        # leaves an indefinite result, a legal raw message. ``__sub__`` must not raise.
+        a = CanonicalGaussian(precision=[[1.0, 0.0], [0.0, 1.0]], potential=[0.0, 0.0])
+        b = CanonicalGaussian(precision=[[3.0, 0.0], [0.0, 3.0]], potential=[0.0, 0.0])
+        diff = a - b  # precision = -2·I, indefinite
+        np.testing.assert_array_equal(diff.precision, [[-2.0, 0.0], [0.0, -2.0]])
+
+    def test_sub_rejects_shape_mismatch(self):
+        a = CanonicalGaussian(precision=[[1.0]], potential=[0.0])
+        b = CanonicalGaussian(precision=[[1.0, 0.0], [0.0, 1.0]], potential=[0.0, 0.0])
+        with pytest.raises(ValueError, match="shape"):
+            a - b
+
+
 # --- Marginalize (Schur complement vs. a literal dense slice) -----------------
 
 
