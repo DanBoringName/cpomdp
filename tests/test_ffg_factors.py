@@ -134,6 +134,34 @@ class TestGaussianTransition:
         np.testing.assert_allclose(out_mean, mean_pred, atol=1e-7)
         np.testing.assert_allclose(out_cov, cov_pred, atol=1e-7)
 
+    @pytest.mark.parametrize(
+        ("tau", "var", "dt"), [(0.05, 1.0, 0.01), (9.9, 2.0, 0.01), (0.05, 0.5, 0.2)]
+    )
+    def test_from_ou_exact_discretisation(self, tau, var, dt):
+        # Exact OU discretisation (ADR-017): A_i = exp(-dt/τ), Q_i = Σ_stat (1 − A²).
+        t = GaussianTransition.from_ou(tau, var, dt)
+        a = np.exp(-dt / tau)
+        np.testing.assert_allclose(np.asarray(t.dynamics), [[a]], atol=1e-12)
+        np.testing.assert_allclose(
+            np.asarray(t.dynamics_noise), [[var * (1.0 - a * a)]], atol=1e-12
+        )
+
+    def test_from_ou_preserves_stationary_variance(self):
+        # The property oracle: the discrete stationary variance P = Q/(1−A²) must equal
+        # the requested Σ_stat at any τ, dt (a wrong Q, e.g. Σ(1−A), fails this).
+        for tau, var, dt in [(0.05, 1.7, 0.01), (9.9, 0.4, 0.01), (9.9, 0.4, 2.0)]:
+            t = GaussianTransition.from_ou(tau, var, dt)
+            a = float(np.asarray(t.dynamics)[0, 0])
+            q = float(np.asarray(t.dynamics_noise)[0, 0])
+            np.testing.assert_allclose(q / (1.0 - a * a), var, atol=1e-10)
+
+    def test_from_ou_well_conditioned_across_stiff_timescales(self):
+        # Fast (τ=0.05s) and slow (τ=9.9s) on ONE dt both give A∈(0,1) and a PD Q (it
+        # constructs) — no blow-up at the stiff slow mode (exact, not Euler; ADR-017).
+        for tau in (0.05, 9.9):
+            t = GaussianTransition.from_ou(tau, 1.0, dt=0.01)  # builds ⇒ Q is PD
+            assert 0.0 < float(np.asarray(t.dynamics)[0, 0]) < 1.0
+
     def test_predict_applies_control_term(self):
         # The control shifts the predicted mean by b; the covariance is unchanged.
         rng = np.random.default_rng(7)

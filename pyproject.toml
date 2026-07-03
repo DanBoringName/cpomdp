@@ -124,6 +124,7 @@ convention = "google"
 
 [tool.ty.environment]
 python-version = "3.10"
+extra-paths = ["examples"]
 
 [tool.ty.src]
 include = ["src", "tests"]
