@@ -150,6 +150,36 @@ class GaussianTransition:
                 f"got shape {dynamics_noise.shape}"
             )
 
+    @classmethod
+    def from_ou(
+        cls, tau: float, stationary_var: float, dt: float
+    ) -> "GaussianTransition":
+        """Build a 1-D transition from Ornstein–Uhlenbeck (OU) parameters.
+
+        An Ornstein–Uhlenbeck process is a scalar state that relaxes toward zero on a
+        timescale ``tau`` while random noise keeps it wobbling with a stationary
+        variance ``stationary_var`` (Σ_stat). Exactly discretising it over a step ``dt``
+        gives the linear-Gaussian transition ``x' = A·x + noise(Q)`` (ADR-017):
+
+            A = exp(−dt / tau)             — the fraction of the state surviving a step
+            Q = stationary_var · (1 − A²)  — the kick that holds the stationary variance
+
+        Scalar (1-D) only: the vector OU would need a matrix exponential and a Lyapunov
+        solve, which no cpomdp node needs.
+
+        Args:
+            tau: the relaxation timescale τ (same time unit as ``dt``).
+            stationary_var: the steady-state variance Σ_stat the node settles to; A
+                (dynamics) and Q (dynamics_noise) are set so it holds this spread.
+            dt: the discretisation step.
+
+        Returns:
+            A ``GaussianTransition`` with 1×1 ``dynamics`` (A), ``dynamics_noise`` (Q).
+        """
+        a = jnp.exp(-dt / tau)  # A = e^(−dt/τ)
+        q = stationary_var * (1.0 - a * a)  # Q = Σ_stat (1 − A²)
+        return cls(jnp.reshape(a, (1, 1)), jnp.reshape(q, (1, 1)))
+
     def predict(
         self,
         message: CanonicalGaussian,
