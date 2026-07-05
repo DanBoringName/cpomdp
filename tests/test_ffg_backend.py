@@ -21,16 +21,21 @@ import numpy as np
 import pytest
 
 from cpomdp.backends.base import InferenceBackend
-from cpomdp.backends.coupling import CouplingGraphBackend
+from cpomdp.backends.coupling import (
+    CouplingGraphBackend,
+    IncompatibleLinearizationError,
+)
 from cpomdp.backends.kalman import KalmanBackend
 from cpomdp.backends.rxinfer import RxInferBackend
 from cpomdp.ffg.factors.linear_gaussian import (
+    CallableGaussianObservation,
     GaussianCoupling,
     GaussianObservation,
     GaussianTransition,
 )
 from cpomdp.ffg.graph import Coupling, CouplingGraph
-from cpomdp.types import Belief
+from cpomdp.observation import CallableSensor
+from cpomdp.types import Belief, LinearGaussianModel
 
 
 def _spd(rng, n):
@@ -682,3 +687,392 @@ class TestFlatModelCrossCheck:
         prior = Belief(mean=np.zeros(5), cov=np.eye(5) * 2.0)
         obs_seq = [rng.standard_normal(3) for _ in range(3)]
         _check_against_flat(backend, flat, prior, obs_seq)
+
+
+# --- State-dependent sensing R(x) on the FFG backend (issue #27, Phase 2) -------
+
+
+def _rx_noise(x, params):
+    """Node-local ``R(x) = R0·(1 + gain·xᵀx)`` — PD, sharpens as the node nears 0.
+
+    Shared model spec (like ``obs_specs``' C/R), not part of the filter algebra under
+    test — the oracles below drive an independent NumPy recursion around it.
+    """
+    return params["R0"] * (1.0 + params["gain"] * jnp.dot(x, x))
+
+
+def _rx_relaxation_oracle(
+    dims, edges, rx_obs, dyn, prior_mean, prior_cov, control, obs_seq, action_seq
+):
+    """Exact N-step driven-relaxation filter with state-dependent ``R(μ⁺)`` — NumPy.
+
+    Like ``_driven_relaxation_oracle``, but each observed node's noise is evaluated at
+    that node's block of the *coupling-included* predicted mean μ⁺ — the FFG
+    linearization point (issue #27, ADR-003 broke here) — and only then folded like a
+    fixed R. So each step is predict -> couplings -> μ⁺ -> R(μ⁺) -> update.
+    ``rx_obs[node] = (C, noise_fn, params)``.
+    """
+    offs = np.cumsum([0, *dims])
+    dim = int(offs[-1])
+
+    def blk(i):
+        return slice(int(offs[i]), int(offs[i + 1]))
+
+    force = _block_diag([np.asarray(a, float) for a, _ in dyn])  # F = blkdiag(A_i)
+    proc = _block_diag([np.asarray(q, float) for _, q in dyn])  # Q = blkdiag(Q_i)
+
+    lam_struct = np.zeros((dim, dim))
+    for parent, child, w, qs in edges:
+        w = np.asarray(w, float)
+        qs_inv = np.linalg.inv(np.asarray(qs, float))
+        lam_struct[blk(parent), blk(parent)] += w.T @ qs_inv @ w
+        lam_struct[blk(child), blk(child)] += qs_inv
+        lam_struct[blk(parent), blk(child)] += -w.T @ qs_inv
+        lam_struct[blk(child), blk(parent)] += -qs_inv @ w
+
+    mu = np.asarray(prior_mean, float).copy()
+    sig = np.asarray(prior_cov, float).copy()
+    observed = sorted(rx_obs)
+    states = []
+    for step, y_stacked in enumerate(obs_seq):
+        shift = np.zeros(dim)
+        if control is not None:
+            shift = np.asarray(control, float) @ np.asarray(action_seq[step], float)
+        mu_pred = force @ mu + shift
+        sig_pred = force @ sig @ force.T + proc
+        pred_precision = np.linalg.inv(sig_pred)
+
+        # μ⁺ = predict + structural couplings, BEFORE observing (the R eval point).
+        lam_plus = pred_precision + lam_struct
+        h_plus = pred_precision @ mu_pred
+        mu_plus = np.linalg.inv(lam_plus) @ h_plus
+
+        lam = lam_plus.copy()
+        h = h_plus.copy()
+        cursor = 0
+        for node in observed:
+            c_mat, noise_fn, params = rx_obs[node]
+            c_mat = np.asarray(c_mat, float)
+            m = c_mat.shape[0]
+            y = np.asarray(y_stacked, float)[cursor : cursor + m]
+            cursor += m
+            r_mat = np.asarray(noise_fn(mu_plus[blk(node)], params), float)  # R(μ⁺)
+            r_inv = np.linalg.inv(r_mat)
+            lam[blk(node), blk(node)] += c_mat.T @ r_inv @ c_mat
+            h[blk(node)] += c_mat.T @ r_inv @ y
+
+        sig = np.linalg.inv(lam)
+        mu = sig @ h
+        states.append((mu.copy(), sig.copy()))
+    return states, offs
+
+
+def _build_rx(dims, edges, rx_obs, dyn, *, control=None, partition=None):
+    """Build a ``CouplingGraphBackend`` with state-dependent (callable) observations."""
+    couplings = tuple(
+        Coupling(parent, child, GaussianCoupling(w, q), 1.0)
+        for parent, child, w, q in edges
+    )
+    observations = {
+        node: CallableGaussianObservation(c, fn, prm)
+        for node, (c, fn, prm) in rx_obs.items()
+    }
+    graph = CouplingGraph(
+        root=0, dims=dims, couplings=couplings, observations=observations
+    )
+    transitions = tuple(GaussianTransition(a, q) for a, q in dyn)
+    kwargs = {"control": control}
+    if partition is not None:
+        kwargs["partition"] = partition
+    return CouplingGraphBackend(graph, transitions, **kwargs)
+
+
+# A branching R(x) spec: the chemotaxis tree, but the three observed nodes each sense
+# through a state-dependent (node-local) noise. The action drives the root (CheA).
+_RX_OBS = {
+    2: (np.eye(1), _rx_noise, {"R0": np.array([[0.10]]), "gain": 0.4}),
+    3: (np.eye(1), _rx_noise, {"R0": np.array([[0.10]]), "gain": 0.4}),
+    4: (np.eye(1), _rx_noise, {"R0": np.array([[0.10]]), "gain": 0.4}),
+}
+_RX_CONTROL = [[1.0], [0.0], [0.0], [0.0], [0.0]]  # B: action drives CheA (root)
+
+
+class TestStateDependentSensing:
+    """R(x) on the FFG backend: the chosen action moves the covariance (dual effect).
+
+    The gate is two-sided. The fixed path must stay byte-identical (a constant noise_fn
+    reproduces the fixed backend); the R(x) path must fold ``R`` evaluated at the
+    coupling-included predicted mean μ⁺ — checked single-node against the trusted flat
+    ``KalmanBackend(CallableSensor)`` and branching against an independent NumPy filter.
+    """
+
+    def test_constant_noise_reduces_to_fixed_backend(self):
+        # The reduction: gain=0 (R ≡ R0) must reproduce the fixed-R backend step for
+        # step, so nothing downstream can tell a constant R(x) from a fixed sensor.
+        rng = np.random.default_rng(0)
+        const = {
+            n: (c, _rx_noise, {"R0": np.asarray(r), "gain": 0.0})
+            for n, (c, r) in _CHEMOTAXIS_OBS.items()
+        }
+        rx = _build_rx(
+            _CHEMOTAXIS_DIMS,
+            _CHEMOTAXIS_EDGES,
+            const,
+            _CHEMOTAXIS_DYN,
+            control=_RX_CONTROL,
+        )
+        fixed = _build(
+            _CHEMOTAXIS_DIMS,
+            _CHEMOTAXIS_EDGES,
+            _CHEMOTAXIS_OBS,
+            _CHEMOTAXIS_DYN,
+            control=_RX_CONTROL,
+        )
+        prior = Belief(mean=np.zeros(5), cov=np.eye(5) * 2.0)
+        belief_rx = belief_fixed = prior
+        for _ in range(5):
+            y = rng.standard_normal(3)
+            a = rng.standard_normal(1)
+            belief_rx = rx.infer_states(y, belief_rx, a)
+            belief_fixed = fixed.infer_states(y, belief_fixed, a)
+            np.testing.assert_allclose(
+                np.asarray(belief_rx.mean), np.asarray(belief_fixed.mean), atol=1e-10
+            )
+            np.testing.assert_allclose(
+                np.asarray(belief_rx.cov), np.asarray(belief_fixed.cov), atol=1e-10
+            )
+
+    def test_single_node_rx_matches_kalman_callable_sensor(self):
+        # Single node, no couplings: μ⁺ = the predict mean, so the FFG's R(μ⁺) coincides
+        # with the trusted flat KalmanBackend(CallableSensor)'s R(μ⁻). atol 1e-7.
+        rng = np.random.default_rng(1)
+        A = np.array([[1.0, 0.1], [0.0, 1.0]])
+        Q = np.eye(2) * 0.1
+        C = np.array([[1.0, 0.0]])
+        B = np.array([[1.0], [0.0]])
+        params = {"R0": np.array([[0.5]]), "gain": 0.3}
+        rx = _build_rx((2,), [], {0: (C, _rx_noise, params)}, [(A, Q)], control=B)
+        model = LinearGaussianModel(
+            dynamics=A,
+            sensor_model=C,
+            dynamics_noise=Q,
+            sensor_noise=params["R0"],  # placeholder; overridden by observation
+            prior=Belief(mean=np.zeros(2), cov=np.eye(2)),
+            control=B,
+            observation=CallableSensor(C, _rx_noise, params),
+        )
+        flat = KalmanBackend(model)
+        belief_rx = belief_flat = Belief(mean=np.zeros(2), cov=np.eye(2))
+        for _ in range(6):
+            y = rng.standard_normal(1)
+            a = rng.standard_normal(1)
+            belief_rx = rx.infer_states(y, belief_rx, a)
+            belief_flat = flat.infer_states(y, belief_flat, a)
+            np.testing.assert_allclose(
+                np.asarray(belief_rx.mean), np.asarray(belief_flat.mean), atol=1e-7
+            )
+            np.testing.assert_allclose(
+                np.asarray(belief_rx.cov), np.asarray(belief_flat.cov), atol=1e-7
+            )
+
+    def test_branching_rx_matches_numpy_oracle(self):
+        # Couplings + R(x) together: the branching backend must match the independent
+        # NumPy filter evaluating R at the coupling-included μ⁺ each step. atol 1e-7.
+        rng = np.random.default_rng(2)
+        rx = _build_rx(
+            _CHEMOTAXIS_DIMS,
+            _CHEMOTAXIS_EDGES,
+            _RX_OBS,
+            _CHEMOTAXIS_DYN,
+            control=_RX_CONTROL,
+        )
+        prior = Belief(mean=np.zeros(5), cov=np.eye(5) * 2.0)
+        obs_seq = [rng.standard_normal(3) for _ in range(6)]
+        action_seq = [rng.standard_normal(1) for _ in range(6)]
+        states, offs = _rx_relaxation_oracle(
+            _CHEMOTAXIS_DIMS,
+            _CHEMOTAXIS_EDGES,
+            _RX_OBS,
+            _CHEMOTAXIS_DYN,
+            prior.mean,
+            prior.cov,
+            _RX_CONTROL,
+            obs_seq,
+            action_seq,
+        )
+        belief = prior
+        for step, y in enumerate(obs_seq):
+            belief = rx.infer_states(y, belief, action_seq[step])
+            mu_o, sig_o = states[step]
+            for node in range(5):
+                nb = rx.marginal(node, belief)
+                lo, hi = int(offs[node]), int(offs[node + 1])
+                np.testing.assert_allclose(np.asarray(nb.mean), mu_o[lo:hi], atol=1e-7)
+                np.testing.assert_allclose(
+                    np.asarray(nb.cov), sig_o[lo:hi, lo:hi], atol=1e-7
+                )
+
+    def test_predicted_belief_is_R_independent(self):
+        # μ⁺/Σ⁺ are the pre-observation joint: R never enters the predict, so the R(x)
+        # backend's predicted_belief equals the independent predict+couplings oracle.
+        rx = _build_rx(
+            _CHEMOTAXIS_DIMS,
+            _CHEMOTAXIS_EDGES,
+            _RX_OBS,
+            _CHEMOTAXIS_DYN,
+            control=_RX_CONTROL,
+        )
+        prior = Belief(mean=np.arange(5, dtype=float), cov=np.eye(5) * 1.5)
+        action = np.array([0.7])
+        mu_o, sig_o = _predicted_joint_oracle(
+            _CHEMOTAXIS_DIMS,
+            _CHEMOTAXIS_EDGES,
+            _CHEMOTAXIS_DYN,
+            prior.mean,
+            prior.cov,
+            _RX_CONTROL,
+            action,
+        )
+        got = rx.predicted_belief(prior, action)
+        np.testing.assert_allclose(np.asarray(got.mean), mu_o, atol=1e-7)
+        np.testing.assert_allclose(np.asarray(got.cov), sig_o, atol=1e-7)
+
+    def test_rx_infer_states_is_jittable(self):
+        rx = _build_rx(
+            (2,),
+            [],
+            {
+                0: (
+                    np.array([[1.0, 0.0]]),
+                    _rx_noise,
+                    {"R0": np.array([[0.5]]), "gain": 0.3},
+                )
+            },
+            [(np.array([[1.0, 0.1], [0.0, 1.0]]), np.eye(2) * 0.1)],
+            control=[[1.0], [0.0]],
+        )
+        prior = Belief(mean=np.zeros(2), cov=np.eye(2))
+        eager = rx.infer_states(np.array([0.3]), prior, np.array([0.5]))
+        jitted = jax.jit(rx.infer_states)(jnp.array([0.3]), prior, jnp.array([0.5]))
+        np.testing.assert_allclose(
+            np.asarray(jitted.mean), np.asarray(eager.mean), atol=1e-10
+        )
+
+    def test_predicted_belief_vmaps_over_actions(self):
+        # Phase 3 needs Σ⁺/μ⁺ vmapped over a candidate-action grid; the R(x) backend's
+        # predicted_belief must ride vmap (predict is R-independent, so this is safe).
+        rx = _build_rx(
+            _CHEMOTAXIS_DIMS,
+            _CHEMOTAXIS_EDGES,
+            _RX_OBS,
+            _CHEMOTAXIS_DYN,
+            control=_RX_CONTROL,
+        )
+        prior = Belief(mean=np.zeros(5), cov=np.eye(5))
+        actions = jnp.linspace(-2.0, 2.0, 7)[:, None]
+        means = jax.vmap(lambda a: rx.predicted_belief(prior, a).mean)(actions)
+        assert means.shape == (7, 5)
+        assert bool(jnp.all(jnp.isfinite(means)))
+
+    def test_factored_rx_matches_numpy_oracle_one_step(self):
+        # Factored (singleton) partition + R(x): the two-pass linearization (pass 1
+        # reads μ⁺ marginals, pass 2 folds R(μ⁺)) must match the NumPy R(μ⁺) filter.
+        # Single step from a block-diagonal prior (factored marginals exact), atol 1e-7.
+        singletons = [[0], [1], [2], [3], [4]]
+        rx = _build_rx(
+            _CHEMOTAXIS_DIMS,
+            _CHEMOTAXIS_EDGES,
+            _RX_OBS,
+            _CHEMOTAXIS_DYN,
+            control=_RX_CONTROL,
+            partition=singletons,
+        )
+        prior = Belief(mean=np.zeros(5), cov=np.eye(5))  # block-diagonal
+        y, a = np.array([0.4, -0.2, 0.3]), np.array([0.6])
+        states, offs = _rx_relaxation_oracle(
+            _CHEMOTAXIS_DIMS,
+            _CHEMOTAXIS_EDGES,
+            _RX_OBS,
+            _CHEMOTAXIS_DYN,
+            prior.mean,
+            prior.cov,
+            _RX_CONTROL,
+            [y],
+            [a],
+        )
+        belief = rx.infer_states(y, prior, a)
+        mu_o, sig_o = states[0]
+        for node in range(5):
+            nb = rx.marginal(node, belief)
+            lo, hi = int(offs[node]), int(offs[node + 1])
+            np.testing.assert_allclose(np.asarray(nb.mean), mu_o[lo:hi], atol=1e-7)
+            np.testing.assert_allclose(
+                np.asarray(nb.cov), sig_o[lo:hi, lo:hi], atol=1e-7
+            )
+
+    def test_factored_constant_noise_is_a_no_op_extra_pass(self):
+        # The affine no-op invariant: with a constant noise_fn (constant Jacobian) the
+        # extra μ⁺ pass changes nothing, so the factored R(x) path reproduces the
+        # factored fixed path bit-for-bit — the pass is free when R doesn't vary.
+        rng = np.random.default_rng(3)
+        singletons = [[0], [1], [2], [3], [4]]
+        const = {
+            n: (c, _rx_noise, {"R0": np.asarray(r), "gain": 0.0})
+            for n, (c, r) in _CHEMOTAXIS_OBS.items()
+        }
+        rx = _build_rx(
+            _CHEMOTAXIS_DIMS,
+            _CHEMOTAXIS_EDGES,
+            const,
+            _CHEMOTAXIS_DYN,
+            control=_RX_CONTROL,
+            partition=singletons,
+        )
+        fixed = _build(
+            _CHEMOTAXIS_DIMS,
+            _CHEMOTAXIS_EDGES,
+            _CHEMOTAXIS_OBS,
+            _CHEMOTAXIS_DYN,
+            control=_RX_CONTROL,
+            partition=singletons,
+        )
+        belief_rx = belief_fixed = Belief(mean=np.zeros(5), cov=np.eye(5))
+        for _ in range(4):
+            y, a = rng.standard_normal(3), rng.standard_normal(1)
+            belief_rx = rx.infer_states(y, belief_rx, a)
+            belief_fixed = fixed.infer_states(y, belief_fixed, a)
+            np.testing.assert_allclose(
+                np.asarray(belief_rx.mean), np.asarray(belief_fixed.mean), atol=1e-10
+            )
+            np.testing.assert_allclose(
+                np.asarray(belief_rx.cov), np.asarray(belief_fixed.cov), atol=1e-10
+            )
+
+    def test_to_flat_model_rejects_coupled_state_dependent_sensor(self):
+        # The theorem: with couplings, R(x) at μ⁺ is unreachable by the pseudo-obs flat
+        # route (flat Kalman linearizes at μ⁻). It must raise the typed category error,
+        # never silently freeze R — the guard that stops a future "make it return
+        # something" edit from reintroducing a wrong oracle.
+        rx = _build_rx(
+            _CHEMOTAXIS_DIMS,
+            _CHEMOTAXIS_EDGES,
+            _RX_OBS,
+            _CHEMOTAXIS_DYN,
+            control=_RX_CONTROL,
+        )
+        with pytest.raises(IncompatibleLinearizationError):
+            rx.to_flat_model()
+
+    def test_rx_backend_still_shape_checks_observations(self):
+        # The shared validator stays wired: a wrong-length reading is rejected, R(x) or
+        # not (the state-dependent path must not bypass validate_step_inputs).
+        rx = _build_rx(
+            _CHEMOTAXIS_DIMS,
+            _CHEMOTAXIS_EDGES,
+            _RX_OBS,
+            _CHEMOTAXIS_DYN,
+            control=_RX_CONTROL,
+        )
+        prior = Belief(mean=np.zeros(5), cov=np.eye(5))
+        with pytest.raises(ValueError, match="observation"):
+            rx.infer_states(np.zeros(2), prior, np.array([0.0]))  # need 3 readings

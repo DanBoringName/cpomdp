@@ -18,13 +18,26 @@ from collections.abc import Sequence
 import jax
 import jax.numpy as jnp
 import numpy as np
+from jaxtyping import Float64
 from numpy.typing import ArrayLike
 
 from cpomdp.backends.base import validate_step_inputs
-from cpomdp.ffg.factors.linear_gaussian import GaussianTransition
-from cpomdp.ffg.graph import CouplingGraph
+from cpomdp.ffg.factors.linear_gaussian import GaussianTransition, ObservationFactor
+from cpomdp.ffg.graph import Coupling, CouplingGraph
 from cpomdp.ffg.message import CanonicalGaussian
 from cpomdp.types import Belief, LinearGaussianModel
+
+
+class IncompatibleLinearizationError(ValueError):
+    """The flattened-Kalman oracle route cannot reproduce this backend's linearization.
+
+    A theorem, not a TODO: ``to_flat_model`` encodes couplings as pseudo-observations,
+    so the flat Kalman linearizes ``R`` at the pre-coupling predicted mean μ⁻, while the
+    FFG linearizes at the coupling-resolved μ⁺ (issue #27, ADR-019). With a
+    state-dependent ``R(x)`` *and* a mean-shifting coupling, μ⁻ ≠ μ⁺ and no fixed flat
+    model reproduces the filter. The R(x) oracle is the standalone NumPy R(μ⁺) filter
+    (in the backend tests) plus the single-node ``CallableSensor`` cross-check.
+    """
 
 
 class CouplingGraphBackend:
@@ -88,6 +101,13 @@ class CouplingGraphBackend:
         self._obs_layout, self.n_observations = self._build_observation_layout()
         self._flat_model = self._build_validation_model()
         self._partition_mask = self._build_partition_mask()
+        self._sensor_is_fixed = all(
+            o.is_fixed for o in self.graph.observations.values()
+        )
+        # node -> its partition cluster index (ADR-018 admissibility diagnostic).
+        self._cluster_of = {
+            node: cid for cid, cluster in enumerate(self._partition) for node in cluster
+        }
 
     @staticmethod
     def _validate_transitions(
@@ -188,15 +208,31 @@ class CouplingGraphBackend:
         Row-block ``k`` reads observed node ``self._obs_layout[k]`` out of the joint
         state (its C placed at the node's columns) with that node's R. Shared by the
         validation model and ``to_flat_model``.
+
+        For a state-dependent sensor the noise block is a *representative* ``R(0)`` — it
+        feeds only the validation model's shape checks (its values never enter the
+        filter); ``to_flat_model`` guards against relying on it for a coupled R(x) case.
         """
         rows, noise_blocks = [], []
         for node, _lo, _hi in self._obs_layout:
-            observation = self.graph.observations[node]
-            embedded = jnp.zeros((observation.sensor_model.shape[0], self.n_total))
-            embedded = embedded.at[:, self._block(node)].set(observation.sensor_model)
+            obs = self.graph.observations[node]
+            embedded = jnp.zeros((obs.sensor_model.shape[0], self.n_total))
+            embedded = embedded.at[:, self._block(node)].set(obs.sensor_model)
             rows.append(embedded)
-            noise_blocks.append(observation.sensor_noise)
+            noise_blocks.append(self._representative_noise(obs))
         return rows, noise_blocks
+
+    @staticmethod
+    def _representative_noise(obs: ObservationFactor) -> jax.Array:
+        """An ``(m, m)`` noise block for the validation/flat model.
+
+        The constant ``R`` for a fixed sensor; a representative ``R(0)`` for a
+        state-dependent one — used only to size and shape-check the validation model,
+        never as a filter value (the filter linearizes ``R`` at μ⁺ per step). Reads it
+        through the shared ``linearize`` seam, so no per-type branch.
+        """
+        node_dim = obs.sensor_model.shape[1]
+        return obs.linearize(jnp.zeros(node_dim))[1]  # R (fixed) or R(0) (state-dep.)
 
     def _build_validation_model(self) -> LinearGaussianModel:
         """A flat model so ``validate_step_inputs`` shape-checks inputs identically.
@@ -271,6 +307,47 @@ class CouplingGraphBackend:
             potential = potential.at[block].add(message.potential)
         return precision, potential
 
+    def _observation_messages_at(
+        self, observation: jax.Array, predicted_mean: jax.Array
+    ) -> tuple[jax.Array, jax.Array]:
+        """Scatter each node's observation message, ``R`` linearized at μ⁺ (issue #27).
+
+        The state-dependent twin of ``_observation_messages``: a node with a
+        state-dependent sensor evaluates its ``R`` at that node's block of the predicted
+        mean ``μ⁺`` (``obs.message(y_node, μ⁺[block])``); a fixed sensor ignores it
+        (``obs.message(y_node)``), so a mixed graph works. This is where the chosen
+        action reaches the covariance — ``μ⁺`` moves with the action, so ``R(μ⁺)`` does
+        too, and the epistemic term stops being action-invariant (ADR-003).
+        """
+        precision = jnp.zeros((self.n_total, self.n_total))
+        potential = jnp.zeros(self.n_total)
+        for node, lo, hi in self._obs_layout:
+            block = self._block(node)
+            # Uniform call: a fixed factor ignores the state, a state-dependent one
+            # evaluates R at μ⁺[block] — no type branch (shared message interface).
+            message = self.graph.observations[node].message(
+                observation[lo:hi], predicted_mean[block]
+            )
+            precision = precision.at[block, block].add(message.precision)
+            potential = potential.at[block].add(message.potential)
+        return precision, potential
+
+    def observation_noise_at(self, mean: ArrayLike) -> Float64[jax.Array, "m m"]:
+        """The stacked observation noise R at a predicted mean.
+
+        Each observed node's R is linearized at ``mean[node_block]`` (fixed sensors
+        ignore the mean and return their constant R); the block-diagonal stack is the
+        action-dependent ``R(μ⁺)`` the EFE selector folds per candidate (issue #27).
+        """
+        mean = jnp.asarray(mean, dtype=float)
+        blocks = [
+            self.graph.observations[node].linearize(mean[self._block(node)])[1]
+            for node, _lo, _hi in self._obs_layout
+        ]
+        if not blocks:
+            return jnp.zeros((0, 0))
+        return jax.scipy.linalg.block_diag(*blocks)
+
     def _build_partition_mask(self) -> jax.Array:
         """The carry mask: 1 on within-cluster precision blocks, 0 between clusters.
 
@@ -331,7 +408,7 @@ class CouplingGraphBackend:
     def _infer_states_factored(
         self, observation: jax.Array, prior: Belief, action: jax.Array | None
     ) -> Belief:
-        """One filter step via two-pass tree BP — the cheap fully-factored path.
+        """One filter step via tree BP — the cheap fully-factored path.
 
         For a singleton partition the carried belief is block-diagonal, so the
         within-slice problem is a tree: each node is seeded per-node (its own predicted
@@ -339,20 +416,51 @@ class CouplingGraphBackend:
         marginal in O(tree) small solves, never forming or inverting the dense joint
         (ADR-016). Only each node's own diagonal block of the prior is used, so a
         non-block-diagonal prior is factored on ingest — consistent with the partition.
+
+        A factor whose linearization point is a coupling-resolved marginal — a
+        state-dependent ``R(x)`` today, a nonlinear sensor ``C(x)`` later — needs it
+        evaluated at the predicted mean μ⁺, which the per-node predicted seeds do not
+        yet carry (couplings only resolve inside BP). So it takes one extra pass: run
+        ``infer_all`` on the *R-free* predicted seeds to read each node's μ⁺ marginal,
+        linearize there, then seed and BP again (ADR-019). The pass-1 seeds carry no
+        likelihood, so every point is the R-free predictive prior — non-circular, and
+        exact in exactly two passes (not a truncated fixed point). Still O(tree), no
+        dense solve — the extra pass is the attributable dual-effect cost (RFC-001).
         """
         control_term = self._control_shift(action)  # b = B·action over the joint state
-        obs_precision, obs_potential = self._observation_messages(observation)
-        seeds = {}
+        predicted = {}
         for node in range(len(self.dims)):
             block = self._block(node)
             node_precision = jnp.linalg.inv(prior.cov[block, block])  # Λ_i = Σ_i⁻¹
             node_prior = CanonicalGaussian._unchecked(
                 node_precision, node_precision @ prior.mean[block]
             )
-            predicted = self.transitions[node].predict(node_prior, control_term[block])
+            predicted[node] = self.transitions[node].predict(
+                node_prior, control_term[block]
+            )
+
+        if self._sensor_is_fixed:
+            obs_precision, obs_potential = self._observation_messages(observation)
+        else:
+            # Pass 1: μ⁺ marginals from the R-free predicted seeds (couplings via BP, no
+            # observation) — the frozen point every R(μ⁺) is linearized at (ADR-019).
+            predicted_marginals = self.graph.infer_all(predicted)
+            mu_plus = jnp.concatenate(
+                [
+                    predicted_marginals[node].to_moment()[0]
+                    for node in range(len(self.dims))
+                ]
+            )
+            obs_precision, obs_potential = self._observation_messages_at(
+                observation, mu_plus
+            )
+
+        seeds = {}
+        for node in range(len(self.dims)):
+            block = self._block(node)
             seeds[node] = CanonicalGaussian._unchecked(
-                predicted.precision + obs_precision[block, block],
-                predicted.potential + obs_potential[block],
+                predicted[node].precision + obs_precision[block, block],
+                predicted[node].potential + obs_potential[block],
             )
         marginals = self.graph.infer_all(seeds)
         moments = [marginals[node].to_moment() for node in range(len(self.dims))]
@@ -484,8 +592,18 @@ class CouplingGraphBackend:
         the per-node observation messages (the within-slice update). ChainBackend sums
         two terms; the tree's within-slice couplings are the third.
         """
+        if self._sensor_is_fixed:
+            precision, potential = self._predicted_precision(prior, action)
+            obs_precision, obs_potential = self._observation_messages(observation)
+            return precision + obs_precision, potential + obs_potential
+        # state-dependent: need μ⁺ to linearize R
         precision, potential = self._predicted_precision(prior, action)
-        obs_precision, obs_potential = self._observation_messages(observation)
+        predicted_mean, _ = CanonicalGaussian._unchecked(
+            precision, potential
+        ).to_moment()  # μ⁺
+        obs_precision, obs_potential = self._observation_messages_at(
+            observation, predicted_mean
+        )
         return precision + obs_precision, potential + obs_potential
 
     def _predicted_precision(
@@ -555,6 +673,23 @@ class CouplingGraphBackend:
         """
         return range(self._offsets[node], self._offsets[node + 1])
 
+    def severed_efe_edges(self) -> tuple[Coupling, ...]:
+        """The EFE-relevant edges this carry partition cuts (ADR-018 diagnostic).
+
+        Each ``efe_relevant`` coupling whose parent and child fall in different clusters
+        — so the carry drops the cross-temporal covariance it holds, breaking the
+        integration of that information about the targeted latent. Non-empty means the
+        EFE selector must refuse this partition; empty for the exact ``[[all]]`` carry
+        and for any cut that only severs unflagged edges (e.g. the methylation cut). A
+        structural read, not a filter step — no covariance is formed here.
+        """
+        return tuple(
+            edge
+            for edge in self.graph.couplings
+            if edge.efe_relevant
+            and self._cluster_of[edge.parent] != self._cluster_of[edge.child]
+        )
+
     @property
     def model(self) -> LinearGaussianModel:
         """The flat ``LinearGaussianModel`` of the *real* interface (the backend model).
@@ -606,7 +741,29 @@ class CouplingGraphBackend:
         exactly — the independent cross-check, and what the Phase-3 demo contrasts the
         native FFG against. Pad a step's readings with ``flat_observation`` first; the
         returned prior is an unused placeholder (pass the real prior per step).
+
+        Fixed sensors only. With couplings present a state-dependent ``R(x)`` is a
+        *category error* for this route (``IncompatibleLinearizationError`` — the flat
+        Kalman linearizes at μ⁻, the FFG at μ⁺); a coupling-free ``R(x)`` would be
+        faithful (μ⁻ = μ⁺) but wants a ``CallableSensor`` flat model not emitted here.
         """
+        if not self._sensor_is_fixed:
+            if self.graph.couplings:
+                # Theorem: a mean-shifting coupling makes μ⁺ ≠ μ⁻, so no fixed flat
+                # model reproduces R(μ⁺).
+                raise IncompatibleLinearizationError(
+                    "to_flat_model cannot flatten a state-dependent R(x) with "
+                    "couplings (see IncompatibleLinearizationError). Its oracle is the "
+                    "NumPy R-at-mu-plus filter (backend tests) or the single-node "
+                    "CallableSensor cross-check."
+                )
+            # Coupling-free: μ⁺ = μ⁻, so a CallableSensor flat model *would* be faithful
+            # — that emission is simply not wired (build KalmanBackend(CallableSensor)
+            # directly, as the single-node oracle test does).
+            raise NotImplementedError(
+                "to_flat_model does not emit a CallableSensor flat model yet; for a "
+                "coupling-free R(x) backend build KalmanBackend(CallableSensor) direct."
+            )
         rows, noise_blocks = self._real_observation_blocks()
         for edge in self.graph.couplings:  # child − W·parent ~ N(0, Q_struct)
             coupling = edge.factor.coupling  # W

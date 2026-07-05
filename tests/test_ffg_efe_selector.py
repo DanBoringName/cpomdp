@@ -5,17 +5,22 @@ anchor: on a single-node model (no structural couplings) with the whole-state ta
 must pick the same action as the existing ``EFESelector`` on the equivalent flat model.
 """
 
+import jax
+import jax.numpy as jnp
 import numpy as np
 
 from cpomdp.agent import Agent
 from cpomdp.backends.coupling import CouplingGraphBackend
 from cpomdp.backends.kalman import KalmanBackend
+from cpomdp.efe import _ffg_efe_step
 from cpomdp.ffg.factors.linear_gaussian import (
+    CallableGaussianObservation,
     GaussianCoupling,
     GaussianObservation,
     GaussianTransition,
 )
 from cpomdp.ffg.graph import Coupling, CouplingGraph
+from cpomdp.observation import CallableSensor
 from cpomdp.selection import (
     EFESelector,
     FfgEfeSelector,
@@ -23,6 +28,22 @@ from cpomdp.selection import (
     Preference,
 )
 from cpomdp.types import Belief, LinearGaussianModel
+
+
+def _rx_noise(x, params):
+    """Node-local R(x) = R0·(1 + gain·xᵀx) — sharpest as the node nears 0."""
+    return params["R0"] * (1.0 + params["gain"] * jnp.dot(x, x))
+
+
+def _decoupled_noise(s, params):
+    """Two channels: a fixed-R goal channel and a state-dependent info channel.
+
+    ``diag([R_goal, R0·(1 + gain·sᵀs)])`` — the goal channel's noise is constant (it
+    carries the pragmatic pull), the info channel sharpens near ``s = 0`` (it carries
+    the action-dependent epistemic). The block-diagonal keeps them independent.
+    """
+    r_info = params["R0"] * (1.0 + params["gain"] * jnp.dot(s, s))
+    return jnp.diag(jnp.stack([jnp.asarray(params["R_goal"], dtype=float), r_info]))
 
 
 def test_ffg_selector_reduces_to_efe_selector_single_node():
@@ -170,4 +191,136 @@ def test_ffg_agent_matches_kalman_efe_agent_end_to_end():
             np.asarray(ffg_agent.sample_action()),
             np.asarray(ref_agent.sample_action()),
             atol=1e-7,
+        )
+
+
+# --- Action-driven epistemic: state-dependent sensing in the selector (Phase 3) -
+
+
+def _score_components(backend, belief, preference, candidates, target):
+    """``(pragmatic, epistemic)`` per candidate — the selector's kernel, exposed.
+
+    Mirrors ``FfgEfeSelector.select``'s per-candidate work (predict → ``R(μ⁺)`` →
+    ``_ffg_efe_step``) but returns the two ``G`` components, so a test can compare the
+    full-``G`` argmin against a pragmatic-only one at the *same* ``R(μ⁺)``.
+    """
+    sensor_model, _ = backend.observation_model  # C (constant)
+
+    def comp(action):
+        predicted = backend.predicted_belief(belief, action)  # μ⁺, Σ⁺
+        sensor_noise = backend.observation_noise_at(predicted.mean)  # R(μ⁺)
+        _, parts = _ffg_efe_step(
+            predicted.mean,
+            predicted.cov,
+            sensor_model,
+            sensor_noise,
+            preference.goal,
+            preference.precision,
+            target,
+        )
+        return parts["pragmatic"], parts["epistemic"]
+
+    return jax.vmap(comp)(candidates)
+
+
+def _single_node_rx_backend(params):
+    A = np.array([[1.0, 0.1], [0.0, 1.0]])  # drives state[0], which C observes
+    Q = np.eye(2) * 0.1
+    C = np.array([[1.0, 0.0]])
+    B = np.array([[1.0], [0.0]])
+    graph = CouplingGraph(
+        root=0,
+        dims=(2,),
+        couplings=(),
+        observations={0: CallableGaussianObservation(C, _rx_noise, params)},
+    )
+    backend = CouplingGraphBackend(graph, (GaussianTransition(A, Q),), control=B)
+    return backend, A, Q, C, B
+
+
+class TestStateDependentSelection:
+    """The dual effect in the selector: ``R(μ⁺)`` moves with the action, so the
+    epistemic term is action-dependent and bends the choice (ADR-003 broke, ADR-019)."""
+
+    def test_rx_epistemic_is_action_dependent(self):
+        # R(μ⁺) moves with the action, so the epistemic term varies across candidates —
+        # the dual effect. A fixed sensor's epistemic is flat across actions (ADR-003).
+        params = {"R0": np.array([[0.5]]), "gain": 2.0}
+        rx, A, Q, C, B = _single_node_rx_backend(params)
+        belief = Belief(mean=[0.5, -0.2], cov=[[0.7, 0.1], [0.1, 0.4]])
+        pref = Preference(goal=[1.0], precision=[[2.0]])
+        cands = jnp.linspace(-2.0, 2.0, 9)[:, None]
+        _, epi = _score_components(rx, belief, pref, cands, range(2))
+        assert float(jnp.max(epi) - jnp.min(epi)) > 1e-6  # varies with action
+
+        graph_fx = CouplingGraph(
+            root=0,
+            dims=(2,),
+            couplings=(),
+            observations={0: GaussianObservation(C, params["R0"])},
+        )
+        fx = CouplingGraphBackend(graph_fx, (GaussianTransition(A, Q),), control=B)
+        _, epi_fx = _score_components(fx, belief, pref, cands, range(2))
+        np.testing.assert_allclose(np.asarray(epi_fx), float(epi_fx[0]), atol=1e-9)
+
+    def test_single_node_rx_selector_matches_flat_efe_selector(self):
+        # Trusted oracle: single node (no couplings, so μ⁺ = μ⁻), whole-state target.
+        # The FFG R(x) selector must pick the same action as EFESelector on the
+        # equivalent flat CallableSensor model, atol 1e-7 (the R(x) analogue of B4).
+        params = {"R0": np.array([[0.5]]), "gain": 0.4}
+        rx, A, Q, C, B = _single_node_rx_backend(params)
+        model = LinearGaussianModel(
+            dynamics=A,
+            sensor_model=C,
+            dynamics_noise=Q,
+            sensor_noise=params["R0"],  # placeholder; overridden by observation
+            prior=Belief(mean=np.zeros(2), cov=np.eye(2)),
+            control=B,
+            observation=CallableSensor(C, _rx_noise, params),
+        )
+        belief = Belief(mean=[0.3, -0.2], cov=[[0.7, 0.1], [0.1, 0.4]])
+        pref = Preference(goal=[1.0], precision=[[2.0]])
+        bounds, k = (-2.0, 2.0), 21
+        ffg = FfgEfeSelector(rx, target=range(2), n_candidates=k, action_bounds=bounds)
+        efe = EFESelector(model, n_candidates=k, action_bounds=bounds)
+        np.testing.assert_allclose(
+            np.asarray(ffg.select(belief, pref)),
+            np.asarray(efe.select(belief, pref)),
+            atol=1e-7,
+        )
+
+    def test_rx_selector_bends_the_choice(self):
+        # The T-Maze-shaped decoupling (ADR-014 #3): a *fixed-R goal channel* carries
+        # the pragmatic pull (toward the goal) and a *separate R(x) info channel* holds
+        # the action-dependent epistemic (sharpest near 0). With the goal precision
+        # zeroed on the info channel the two un-entangle, so the epistemic genuinely
+        # moves the decision: the full-G argmin differs from the pragmatic-only one, and
+        # the selector returns the full-G action. (A single entangled channel would not:
+        # the pragmatic risk and the epistemic there share one covariance.)
+        params = {"R_goal": 5.0, "R0": 0.15, "gain": 8.0}  # noisy goal, sharp info
+        graph = CouplingGraph(
+            root=0,
+            dims=(1,),
+            couplings=(),
+            observations={
+                0: CallableGaussianObservation([[1.0], [1.0]], _decoupled_noise, params)
+            },  # both channels read s
+        )
+        rx = CouplingGraphBackend(
+            graph, (GaussianTransition([[1.0]], [[0.1]]),), control=[[1.0]]
+        )
+        belief = Belief(mean=[0.0], cov=[[1.0]])
+        # goal 3.0 on the fixed channel, ~0 weight on the info channel (decoupling).
+        pref = Preference(goal=[3.0, 0.0], precision=[[0.15, 0.0], [0.0, 1e-4]])
+        bounds, k = (-4.0, 4.0), 41
+        cands = jnp.linspace(-4.0, 4.0, k)[:, None]
+        prag, epi = _score_components(rx, belief, pref, cands, range(1))
+        full_action = cands[int(jnp.argmin(prag - epi))]
+        prag_action = cands[int(jnp.argmin(prag))]
+        assert not np.isclose(
+            float(full_action[0]), float(prag_action[0])
+        )  # the epistemic genuinely moved the decision, away from the pragmatic goal
+        sel = FfgEfeSelector(rx, target=range(1), n_candidates=k, action_bounds=bounds)
+        np.testing.assert_allclose(
+            np.asarray(sel.select(belief, pref)), np.asarray(full_action), atol=1e-7
         )

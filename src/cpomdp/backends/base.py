@@ -6,9 +6,33 @@ import jax.numpy as jnp
 from jaxtyping import Array, Float64
 from numpy.typing import ArrayLike
 
+from cpomdp.ffg.graph import Coupling
 from cpomdp.types import Belief, LinearGaussianModel
 
-__all__ = ["EfeBackend", "InferenceBackend", "validate_step_inputs"]
+__all__ = [
+    "EfeBackend",
+    "InadmissiblePartitionError",
+    "InferenceBackend",
+    "validate_step_inputs",
+]
+
+
+class InadmissiblePartitionError(ValueError):
+    """A carry partition severs an edge the model declares EFE-load-bearing (ADR-018).
+
+    The carry drops the cross-cluster covariance that edge holds across the time
+    boundary (the ADR-016 severed mass). That cross-temporal correlation is how
+    information about a slow latent integrates from weak per-step observations of the
+    fast nodes it couples to; severing an edge on the covariance path from the sensed
+    nodes to the targeted latent breaks that integration. The one-step epistemic and the
+    behavioural drift can still look right while the *accumulated* information about the
+    latent — what the instrumental epistemic rides on — degrades, up to collapse for an
+    integration-limited latent. Whether the degradation is mild or total is
+    model-specific (measure it with the severed-mass diagnostic ``partition_error``), so
+    the guard refuses conservatively rather than sever and hope. Keep the flagged edge's
+    endpoints in one cluster, or, if a check shows the cut is safe, drop its
+    ``efe_relevant`` flag.
+    """
 
 
 @runtime_checkable
@@ -75,6 +99,19 @@ class EfeBackend(InferenceBackend, Protocol):
 
     def block(self, node: int) -> range:
         """The joint-state indices node ``node`` occupies (``info_target`` → block)."""
+        ...
+
+    def observation_noise_at(self, mean: ArrayLike) -> Float64[Array, "m m"]:
+        """The stacked observation noise R at a predicted mean (fixed → constant)."""
+        ...
+
+    def severed_efe_edges(self) -> tuple[Coupling, ...]:
+        """The EFE-relevant edges this carry partition cuts (ADR-018 diagnostic).
+
+        Non-empty means the partition drops a covariance path the epistemic integrates
+        over, so the EFE selector refuses it; empty for the exact ``[[all]]`` carry and
+        for any cut that only severs unflagged edges.
+        """
         ...
 
 

@@ -1418,3 +1418,179 @@ while quietly killing the epistemic term.
 Recorded now because it shapes the partition API from the start. The concrete guard wiring
 lands with the factored-EFE work (issue #26); Phase 1's exact `[[all]]` endpoint severs
 nothing, so it is trivially admissible.
+
+## ADR-019 — v0.4 FFG: state-dependent sensing R(x) linearized at the predictive prior μ⁺
+
+**Date:** 2026-07-05
+**Status:** Accepted
+**Phase:** v0.4, closed-loop active inference on the FFG (issue #27)
+**Extends:** ADR-003 (whose fixed-sensor EFE collapse this breaks), ADR-005 (the EFE kernel
+that reads R), ADR-016/017 (the carry-partition backend R(x) threads through)
+
+### Decision
+
+A `CouplingGraphBackend` observation node may carry a state-dependent sensor,
+`CallableGaussianObservation` with `noise_fn(x, params) -> R(x)` — the FFG twin of the flat
+`CallableSensor`. This is the dual effect (ADR-014 finding #1): with R depending on the
+predicted state (and so on the action), the epistemic term is no longer action-invariant,
+so the chosen action can seek states where the sensor is sharper. Without it the FFG EFE
+collapses to LQR (ADR-003).
+
+**Linearization point — the predictive prior μ⁺, not the temporal predict μ⁻.** R(x) is
+evaluated at μ⁺ = `predicted_belief().mean` (temporal predict **plus** the structural
+couplings), the pre-observation joint the epistemic's Σ⁺ already uses. The structural
+couplings are part of the generative prior over the slice, so μ⁺ is the mean of the
+predictive q(x) — and R's EFE term is an expectation under exactly that q(x). R and Σ⁺
+share one linearization point, the FFG analogue of the flat path taking both at μ⁻.
+
+**Two passes, exact, not iterated.** On the factored (singleton-partition) path the
+per-node predicted seeds do not yet carry μ⁺ (couplings only resolve inside BP), so R(x)
+takes one extra pass: run `infer_all` on the *R-free* predicted seeds to read each node's
+μ⁺ marginal, evaluate R(μ⁺) there, then seed and BP again. Because pass 1 carries no
+likelihood, every R(μⱼ⁺) is linearized at the R-free coupling-resolved prior — non-circular
+by construction, and *exact in exactly two passes*, not a truncated fixed point. Pass 2's
+marginals move (R_i propagates through the couplings to j) but the linearization points stay
+frozen at pass-1 μ⁺. This is the EKF "linearize at the prior mean, then update" structure
+lifted onto the tree. Iterating would silently switch to *posterior* linearization — a
+different estimator — and reintroduce the circularity; do not add an iterate-to-stable loop
+unless deliberately changing the estimator. The dense `[[all]]` path gets μ⁺ for free from
+the joint predicted precision (one extra `to_moment`), so it needs no second BP.
+
+**Abstraction: linearization-point-dependence, not "R".** The pre-pass fires for any factor
+whose linearization point is a coupling-resolved marginal — a state-dependent R(x) today, a
+nonlinear sensor C(x) later. The fixed-sensor exemption is the *constant Jacobian* (μ⁻ and
+μ⁺ linearizations coincide), not the sensor-ness; `is_fixed` marks that. A future
+`NonlinearSensor` slots into the identical pre-pass with no rework.
+
+**Gradients: μ⁺ is differentiated through, not `stop_gradient`'d — consistently in both
+paths.** Rationale: the dense and factored paths must agree in value *and* derivative; for
+sensor learning (∂/∂params) μ⁺ is independent of params anyway; the planner gradient
+(∂/∂action) case belongs to multi-step differentiable planning (issue #20), where the choice
+is revisited. A future iterated/posterior scheme should reconsider this deliberately.
+
+**`to_flat_model` on a coupled R(x) is a category error, encoded as a typed exception.** The
+flattened-Kalman oracle route encodes couplings as pseudo-observations, so the flat Kalman
+linearizes R at μ⁻ (pre-coupling); with a mean-shifting coupling μ⁻ ≠ μ⁺, and Σ⁺ =
+(Σ⁻⁻¹ + Λ_struct)⁻¹ is not `A'ΣA'ᵀ + Q'` for any constant A',Q', so no fixed flat model
+reproduces the filter. `to_flat_model` raises `IncompatibleLinearizationError(ValueError)`
+— a theorem, not a TODO — signposting the real R(x) oracle (the standalone NumPy R(μ⁺)
+filter plus the single-node `CallableSensor` cross-check). The guard fires on
+*nonlinear-R ∧ mean-shifting-coupling*, not on "has R": a coupling-free R(x) has μ⁻ = μ⁺ and
+*would* be a faithful oracle via a `CallableSensor` flat model, so it raises the honest
+`NotImplementedError` ("could be done, unbuilt") instead — a different truth, a different
+type.
+
+### Validation
+
+- Reduction: a constant `noise_fn` reproduces the fixed `GaussianObservation` message and
+  the fixed backend step-for-step (dense and factored) — the affine no-op guarantee, so the
+  extra pass is free when R does not vary.
+- Single-node R(x) matches the flat `KalmanBackend(CallableSensor)` at atol 1e-7 (couplings
+  absent, so μ⁺ = μ⁻ and the trusted flat path is a valid oracle).
+- Branching R(x) (dense and factored one-step) matches an independent NumPy R(μ⁺) filter at
+  atol 1e-7 — couplings and the μ⁺ linearization together.
+- `predicted_belief` is R-independent (R never enters the predict), so it rides `vmap` over
+  a candidate-action grid — the Phase-3 selector seam.
+- `to_flat_model` raises `IncompatibleLinearizationError` on a coupled R(x) backend.
+
+### Consequences / deferred
+
+- The extra μ⁺ pass (factored) / extra `to_moment` (dense) is the attributable dual-effect
+  cost (RFC-001) — paid only on the state-dependent path, the fixed hot path stays
+  byte-identical. Caching the shared pass-1 μ⁺ across policy prefixes in a rollout is a
+  deferred throughput lever, not built.
+- The Koudahl–Kouw–de Vries epistemic-drift-magnitude regression against the RxInfer oracle
+  is the Phase-3/4 gate (it needs the EFE term wired to the selector); the filter-level R(μ⁺)
+  oracle match above is what proves the linearization fix here.
+
+## ADR-020 — v0.4 FFG: Mattingly's η does not fall out of cpomdp; the certified-regret reframe
+
+**Date:** 2026-07-05
+**Status:** Accepted
+**Phase:** v0.4, closed-loop active inference on the FFG (issue #27) — scope/honesty
+**Extends:** RFC-001 (corrects its §8 "upper bound" framing), ADR-005 (the EFE terms),
+ADR-003/ADR-014 (the dual effect), ADR-019 (R(x))
+
+### The question
+
+Does *E. coli* chemotaxis efficiency η = 0.65 ± 0.05 (Mattingly, Kamino, Machta, Emonet,
+Nat. Phys. 2021, "E. coli chemotaxis is information limited") fall faithfully out of
+cpomdp with honest AIF math? Verified adversarially — four independent analyses plus a
+red-team, checked against source and the paper's exact equations.
+
+### Decision (the verdict)
+
+**No — FALSE as a derivation, MISLEADING if the EFE epistemic term is narrated as an
+information rate.** η is a *behavioural* efficiency: achieved swimming drift over a bound
+
+    v_d / v_0  ≤  f(θ) · sqrt( ln2 · İ_{s→a} / (12 · D_r) )
+
+built from swimming physics (v_0 = 22.6 µm/s, rotational diffusion D_r, behavioural
+function f(θ) = 0.531) and two *directed* trajectory information rates (İ_{s→a}, signal →
+kinase activity; İ_{s→m*}, relevant-and-communicated-to-motor; η² = İ_{s→m*}/İ_{s→a} ≈
+0.42). cpomdp as built has none of the behavioural quantities and neither rate. The
+structural gaps, each verified against source:
+
+- No spatial state / swimming / drift `v_d` — no y-coordinate exists to plot.
+- The EFE epistemic term ½(ln det S − ln det R) = I(latent; obs) is a **symmetric,
+  per-step, nats** mutual information on the pair (latent, sensor obs). Mattingly's
+  İ_{s→a} is a **directed, continuous-time, bits/s** rate on (external signal, kinase
+  activity) — a different object, not merely different units. No data-processing chain
+  links the two variable pairs and the units differ, so the epistemic term is **not** a
+  rigorous upper bound on İ_{s→a} (this corrects RFC-001 §8); a "bound" whose value scales
+  with the discretisation `dt` is not a bound.
+- No f(θ), D_r, v_0; no length scale, no gradient `g` — the curve's constants and the
+  İ ∝ g² dependence are absent; the epistemic magnitude is set by placeholder OU knobs.
+- `CouplingGraph` is a rooted **tree**: it structurally cannot represent the CheB →
+  receptor demethylation **feedback loop** that Mattingly identifies as the *cause* of
+  η < 1. The example model copies node labels and the τ₂ = 9.9 s scalar, not the feedback
+  that matters; CheB is a gradient-blind dead-end leaf.
+- Observed/hidden roles are inverted vs the experiment (kinase activity is *measured* by
+  FRET there; the CheA analogue is *hidden* at the root here).
+
+The single defensible sentence (everything past it overclaims): *cpomdp computes, in
+closed form for the linear-Gaussian shallow-gradient regime — which is Mattingly's regime
+— the per-step perceptual information gain I(target latent; observation) in nats, including
+about a hidden hub inferred through its children, on an OU graph that copies chemotaxis
+node labels and one timescale but not its feedback topology.* Drop "upper bound", "bits/s
+rate", and "topology matches".
+
+### The reframe (what IS faithful)
+
+The honest quantity is not "İ off the EFE" but a **certified regret** against a provably-
+optimal reference computed from the true world p*(which the experimenter owns in a
+built world): F_rel = F_achieved − F_optimal ≥ 0, with η the normalised readout. In the
+linear-Gaussian regime the Kalman/LQG solution is that certified optimum — the boundary-
+theorem framing: a certified regret exists iff a provably-optimal reference exists. The
+faithful *curve* — the in-regime analogue of Mattingly's √-law ceiling — is the **LQG
+sequential-rate-distortion bound**: control cost lower-bounded by the *directed*
+information rate through the sensing channel (Tatikonda–Mitter; Nair–Evans;
+Silva–Derpich–Østergaard). A cpomdp agent could be placed under *that* curve at efficiency
+η_LG, reproducing Mattingly's *structure* (information-limited, near-optimal) in cpomdp's
+native regime with no swimming — but it still needs (a) a directed-information bits/s rate
+(not the symmetric per-step nat-gain), (b) the derived bound, (c) an LQ performance metric,
+(d) F_optimal from p*.
+
+### The boundary connection
+
+Koudahl–Kouw–de Vries (Entropy 2021): in **fixed-noise** LGSSM the EFE reduces to KL
+control plus a constant and the epistemic term does not drive action — the certifiable
+regime. The #27 state-dependent R(x) work is the deliberate minimal departure
+(Bar-Shalom–Tse dual effect; certainty-equivalence fails): it revives the epistemic term
+precisely where the LQG certification gives way. #27 is thus the *coded boundary crossing*,
+not a Mattingly reproduction. (KKdV's "under any circumstances" is scoped to their fixed-
+covariance model class; R(x) is outside it by construction — worth verifying against KKdV
+directly when the paper leans on it.)
+
+### Consequences
+
+- The *E. coli* / Mattingly reproduction is a model built **on top of** cpomdp — a swimming
+  simulator (RFC-002) + a directed-information rate estimator + the relevance/policy
+  projection + M26's internal-noise `Q(µ⁺)` placement — not a cpomdp-core feature. It is
+  **paused, not abandoned**: AIF is universal, so the witness is buildable atop the
+  toolbox; it is simply not a v0.4 deliverable and its numbers must never be implied by the
+  current example model.
+- Any demo on the chemotaxis-shaped FFG is *illustrative of instrumental epistemics*, not a
+  biophysical chemotaxis model; it must not display or imply η, β, or the drift bound.
+- The certified-regret credibility suite (F_rel on known-p* worlds) is the honest north-star
+  flagship direction; deferred beyond the small-work v0.4 close.
