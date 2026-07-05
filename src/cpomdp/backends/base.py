@@ -77,6 +77,10 @@ class EfeBackend(InferenceBackend, Protocol):
         """The joint-state indices node ``node`` occupies (``info_target`` → block)."""
         ...
 
+    def observation_noise_at(self, mean: ArrayLike) -> Float64[Array, "m m"]:
+        """The stacked observation noise R at a predicted mean (fixed → constant)."""
+        ...
+
 
 def validate_step_inputs(
     model: LinearGaussianModel,

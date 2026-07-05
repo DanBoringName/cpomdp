@@ -237,10 +237,13 @@ class FfgEfeSelector:
             raise ValueError(
                 f"n_candidates must be at least 2 to search, got {n_candidates}"
             )
-        # Front-load (ADR-002): the candidate grid, the target block, the real (C, R).
+        # Front-load (ADR-002): the candidate grid, the target block, the constant C.
+        # R is *not* front-loaded — it may be state-dependent, so it is read per
+        # candidate at μ⁺ via ``observation_noise_at`` (issue #27); a fixed sensor
+        # returns the same constant each time.
         self._backend = backend
         self._target = tuple(target)
-        self._sensor_model, self._sensor_noise = backend.observation_model
+        self._sensor_model, _ = backend.observation_model  # C (constant)
         self._candidates = jnp.linspace(lo, hi, n_candidates)[:, None]
 
     @staticmethod
@@ -255,18 +258,21 @@ class FfgEfeSelector:
         ``Σ⁺``), score it with ``_ffg_efe_step``, then ``argmin`` over the grid.
 
         TODO(energy): the ``vmap`` recomputes ``Σ⁺`` per candidate, though ``Σ⁺`` is
-        action-independent (and under a fixed sensor so is the epistemic). A follow-up
-        can hoist ``Σ⁺``/epistemic out of the loop and vary only the pragmatic mean —
-        this is the RFC-001 per-cycle hot path, flagged not to balloon it silently.
+        action-independent. Under a fixed sensor so is ``R`` and the epistemic, so a
+        follow-up can hoist them out and vary only the pragmatic mean. Under a
+        state-dependent ``R(x)`` the epistemic genuinely varies per candidate (that is
+        the dual effect), so ``R(μ⁺)`` must be re-evaluated — the intended per-cycle
+        cost, not waste. This is the RFC-001 per-cycle hot path, flagged not to balloon.
         """
 
         def g_of(action: Float64[Array, "p"]) -> Float64[Array, ""]:
             predicted = self._backend.predicted_belief(belief, action)  # μ⁺, Σ⁺
+            sensor_noise = self._backend.observation_noise_at(predicted.mean)  # R(μ⁺)
             g, _ = _ffg_efe_step(
                 predicted.mean,
                 predicted.cov,
                 self._sensor_model,
-                self._sensor_noise,
+                sensor_noise,
                 preference.goal,
                 preference.precision,
                 self._target,

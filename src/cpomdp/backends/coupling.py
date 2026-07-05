@@ -18,6 +18,7 @@ from collections.abc import Sequence
 import jax
 import jax.numpy as jnp
 import numpy as np
+from jaxtyping import Float64
 from numpy.typing import ArrayLike
 
 from cpomdp.backends.base import validate_step_inputs
@@ -326,6 +327,22 @@ class CouplingGraphBackend:
             precision = precision.at[block, block].add(message.precision)
             potential = potential.at[block].add(message.potential)
         return precision, potential
+
+    def observation_noise_at(self, mean: ArrayLike) -> Float64[jax.Array, "m m"]:
+        """The stacked observation noise R at a predicted mean.
+
+        Each observed node's R is linearized at ``mean[node_block]`` (fixed sensors
+        ignore the mean and return their constant R); the block-diagonal stack is the
+        action-dependent ``R(μ⁺)`` the EFE selector folds per candidate (issue #27).
+        """
+        mean = jnp.asarray(mean, dtype=float)
+        blocks = [
+            self.graph.observations[node].linearize(mean[self._block(node)])[1]
+            for node, _lo, _hi in self._obs_layout
+        ]
+        if not blocks:
+            return jnp.zeros((0, 0))
+        return jax.scipy.linalg.block_diag(*blocks)
 
     def _build_partition_mask(self) -> jax.Array:
         """The carry mask: 1 on within-cluster precision blocks, 0 between clusters.
