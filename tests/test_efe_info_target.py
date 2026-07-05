@@ -10,7 +10,7 @@ number), then the node-restricted case.
 import jax.numpy as jnp
 import numpy as np
 
-from cpomdp.efe import _state_info_gain, expected_free_energy
+from cpomdp.efe import _ffg_efe_step, _state_info_gain, expected_free_energy
 from cpomdp.selection import Preference
 from cpomdp.types import Belief, LinearGaussianModel
 
@@ -99,3 +99,47 @@ def test_full_state_gain_matches_expected_free_energy_epistemic():
         target=range(2),
     )
     np.testing.assert_allclose(float(got), float(parts["epistemic"]), atol=1e-9)
+
+
+def test_ffg_efe_step_reduces_to_expected_free_energy():
+    # B2 (issue #26): with no structural couplings and target = the whole state, the
+    # FFG EFE step must reproduce expected_free_energy — same pragmatic, epistemic, G.
+    dynamics = np.array([[1.0, 0.1], [0.0, 1.0]])  # A
+    dynamics_noise = np.array([[0.1, 0.0], [0.0, 0.1]])  # Q
+    sensor_model = np.array([[1.0, 0.0]])  # C
+    sensor_noise = np.array([[0.5]])  # R
+    control = np.array([[0.0], [1.0]])  # B
+    model = LinearGaussianModel(
+        dynamics=dynamics,
+        sensor_model=sensor_model,
+        dynamics_noise=dynamics_noise,
+        sensor_noise=sensor_noise,
+        prior=Belief(mean=[0.0, 0.0], cov=np.eye(2)),
+        control=control,
+    )
+    belief = Belief(mean=[0.3, -0.2], cov=[[0.7, 0.1], [0.1, 0.4]])
+    action = jnp.array([0.5])
+    preference = Preference(goal=[1.0], precision=[[2.0]])
+
+    g_ref, parts_ref = expected_free_energy(model, belief, action, preference)
+
+    # The predicted moments the FFG step is handed (no couplings: μ⁺ = Aμ + Ba,
+    # Σ⁺ = AΣAᵀ + Q).
+    mu_plus = dynamics @ np.asarray(belief.mean) + control @ action
+    sigma_plus = dynamics @ np.asarray(belief.cov) @ dynamics.T + dynamics_noise
+    g, parts = _ffg_efe_step(
+        jnp.asarray(mu_plus),
+        jnp.asarray(sigma_plus),
+        jnp.asarray(sensor_model),
+        jnp.asarray(sensor_noise),
+        preference.goal,
+        preference.precision,
+        target=range(2),
+    )
+    np.testing.assert_allclose(float(g), float(g_ref), atol=1e-9)
+    np.testing.assert_allclose(
+        float(parts["pragmatic"]), float(parts_ref["pragmatic"]), atol=1e-9
+    )
+    np.testing.assert_allclose(
+        float(parts["epistemic"]), float(parts_ref["epistemic"]), atol=1e-9
+    )
