@@ -22,6 +22,7 @@ import numpy as np
 import pytest
 
 from cpomdp.ffg.factors.linear_gaussian import (
+    CallableGaussianObservation,
     GaussianCoupling,
     GaussianObservation,
     GaussianTransition,
@@ -33,6 +34,22 @@ def _spd(rng, n):
     """A random n x n symmetric positive-definite matrix (NumPy, independent)."""
     a = rng.standard_normal((n, n))
     return a @ a.T + n * np.eye(n)
+
+
+# Module-level noise_fns for the callable-observation tests: a closure/lambda is
+# hashable only by identity and would defeat jit caching (mirrors CallableSensor's
+# contract — all tunables live in params, the function stays static aux).
+
+
+def _constant_noise(x, params):
+    """R(x) = R0 for every x — the reduction back to a fixed sensor noise."""
+    return params["R0"]
+
+
+def _scaled_noise(x, params):
+    """R(x) = R0·(1 + gain·xᵀx): a PD noise that sharpens/blurs with |x|."""
+    scale = 1.0 + params["gain"] * jnp.dot(x, x)
+    return params["R0"] * scale
 
 
 def _belief_as_canonical(mean, cov):
@@ -98,6 +115,148 @@ class TestGaussianObservation:
         np.testing.assert_allclose(jitted, eager, atol=1e-12)
         grad = jax.grad(lambda yy: fac.message(yy).potential.sum())(y)
         assert bool(jnp.all(jnp.isfinite(grad)))
+
+
+# --- Callable observation factor: state-dependent R(x) (issue #27, Phase 1) ----
+
+
+class TestCallableGaussianObservation:
+    """The FFG twin of ``CallableSensor``: constant C, ``noise_fn(x, params) -> R(x)``.
+
+    Oracle-first, and the *fixed* factor is the oracle: a constant ``noise_fn`` must
+    reproduce ``GaussianObservation`` exactly (the reduction), and the state-dependent
+    case is pinned against the moment-form Kalman update at the plug-in ``R(x)``. This
+    is the primitive that lets the chosen action move the covariance (the dual effect,
+    ADR-014 finding #1); without it the FFG epistemic is action-invariant (ADR-003).
+    """
+
+    def test_stores_coerced_arrays(self):
+        params = {"R0": jnp.array([[2.0]]), "gain": 0.5}
+        fac = CallableGaussianObservation([[1.0, 0.0]], _scaled_noise, params)
+        assert isinstance(fac.sensor_model, jax.Array)
+        np.testing.assert_array_equal(fac.sensor_model, [[1.0, 0.0]])
+        assert fac.noise_fn is _scaled_noise
+
+    def test_rejects_non_pd_noise_at_probe(self):
+        # noise_fn is probed once at construction; a singular R(x) is rejected there —
+        # the construction-time analogue of the fixed factor's positive-definite check.
+        params = {"R0": jnp.array([[0.0]]), "gain": 0.0}
+        with pytest.raises(ValueError, match="positive-definite"):
+            CallableGaussianObservation([[1.0]], _constant_noise, params)
+
+    def test_rejects_noise_shape_mismatch(self):
+        # C is 1xn (m=1) but noise_fn returns 2x2 — R(x) must be m x m.
+        params = {"R0": jnp.eye(2), "gain": 0.0}
+        with pytest.raises(ValueError, match="covariance"):
+            CallableGaussianObservation([[1.0, 0.0]], _constant_noise, params)
+
+    def test_constant_noise_fn_matches_fixed_observation(self):
+        # The reduction: with noise_fn ≡ R0 the message equals the fixed factor's, at
+        # ANY plug-in state — the "reduces to fixed" gate the whole feature rides on.
+        rng = np.random.default_rng(0)
+        n, m = 3, 2
+        C = rng.standard_normal((m, n))
+        R0 = _spd(rng, m)
+        y = rng.standard_normal(m)
+        params = {"R0": jnp.asarray(R0), "gain": 0.0}
+        callable_fac = CallableGaussianObservation(C, _constant_noise, params)
+        fixed = GaussianObservation(C, R0)
+        states = (np.zeros(n), rng.standard_normal(n), 3.0 * rng.standard_normal(n))
+        for state in states:
+            msg = callable_fac.message(y, jnp.asarray(state))
+            ref = fixed.message(y)
+            np.testing.assert_allclose(msg.precision, ref.precision, atol=1e-10)
+            np.testing.assert_allclose(msg.potential, ref.potential, atol=1e-10)
+
+    def test_message_is_information_form_at_plugin_state(self):
+        # Λ = CᵀR(x)⁻¹C, h = CᵀR(x)⁻¹y with R evaluated at the given plug-in state.
+        rng = np.random.default_rng(1)
+        n, m = 2, 2
+        C = rng.standard_normal((m, n))
+        R0 = _spd(rng, m)
+        y = rng.standard_normal(m)
+        state = rng.standard_normal(n)
+        params = {"R0": jnp.asarray(R0), "gain": 0.3}
+        fac = CallableGaussianObservation(C, _scaled_noise, params)
+        r_at = R0 * (1.0 + 0.3 * float(state @ state))
+        r_inv = np.linalg.inv(r_at)
+        msg = fac.message(y, jnp.asarray(state))
+        np.testing.assert_allclose(msg.precision, C.T @ r_inv @ C, atol=1e-9)
+        np.testing.assert_allclose(msg.potential, C.T @ r_inv @ y, atol=1e-9)
+
+    @pytest.mark.parametrize(("n", "m"), [(1, 1), (2, 1), (3, 2)])
+    def test_update_matches_moment_form_measurement_update(self, n, m):
+        # Oracle: the Kalman *update* (no prediction) at the plug-in R(x), moment form.
+        rng = np.random.default_rng(n * 10 + m)
+        C = rng.standard_normal((m, n))
+        R0 = _spd(rng, m)
+        mean = rng.standard_normal(n)
+        cov = _spd(rng, n)
+        y = rng.standard_normal(m)
+        state = rng.standard_normal(n)  # where R is evaluated (the predicted mean μ⁺)
+        r_at = R0 * (1.0 + 0.2 * float(state @ state))
+        gain = cov @ C.T @ np.linalg.inv(C @ cov @ C.T + r_at)
+        mean_post = mean + gain @ (y - C @ mean)
+        cov_post = (np.eye(n) - gain @ C) @ cov
+
+        params = {"R0": jnp.asarray(R0), "gain": 0.2}
+        fac = CallableGaussianObservation(C, _scaled_noise, params)
+        post = _belief_as_canonical(mean, cov) + fac.message(y, jnp.asarray(state))
+        out_mean, out_cov = post.to_moment()
+        np.testing.assert_allclose(out_mean, mean_post, atol=1e-8)
+        np.testing.assert_allclose(out_cov, cov_post, atol=1e-8)
+
+    def test_message_varies_with_state(self):
+        # The dual effect in the primitive: a state-dependent noise_fn gives a
+        # *different* message precision at two states — the covariance the action moves
+        # (which ADR-003 broke for a fixed sensor).
+        C = np.array([[1.0, 0.0]])
+        params = {"R0": jnp.array([[1.0]]), "gain": 0.5}
+        fac = CallableGaussianObservation(C, _scaled_noise, params)
+        near = fac.message(np.array([0.0]), jnp.zeros(2)).precision  # R small ⇒ sharp
+        far = fac.message(np.array([0.0]), jnp.array([3.0, 0.0])).precision  # R big
+        assert float(near[0, 0]) > float(far[0, 0])
+
+    def test_linearize_returns_C_and_R_at_state(self):
+        # The seam the backend/selector reads R(μ⁺) from: linearize(x) -> (C, R(x)).
+        C = np.array([[1.0, 0.0], [0.0, 1.0]])
+        params = {"R0": jnp.eye(2), "gain": 0.25}
+        fac = CallableGaussianObservation(C, _scaled_noise, params)
+        state = jnp.array([1.0, -1.0])
+        out_C, out_R = fac.linearize(state)
+        np.testing.assert_allclose(out_C, C, atol=1e-12)
+        np.testing.assert_allclose(out_R, np.eye(2) * (1.0 + 0.25 * 2.0), atol=1e-12)
+
+    def test_pytree_roundtrip_keeps_params_as_leaf(self):
+        # noise_params is a traced leaf (so EFE is grad-able w.r.t. it — sensor
+        # learning); noise_fn is static aux. Flatten/unflatten must preserve both.
+        params = {"R0": jnp.array([[2.0]]), "gain": 0.5}
+        fac = CallableGaussianObservation([[1.0, 0.0]], _scaled_noise, params)
+        leaves, treedef = jax.tree_util.tree_flatten(fac)
+        assert any(np.asarray(leaf).shape == (1, 1) for leaf in leaves)  # R0 is a leaf
+        rebuilt = jax.tree_util.tree_unflatten(treedef, leaves)
+        assert rebuilt.noise_fn is _scaled_noise
+        np.testing.assert_array_equal(rebuilt.sensor_model, fac.sensor_model)
+
+    def test_jit_and_grad_through_message(self):
+        params = {"R0": jnp.array([[1.0]]), "gain": 0.5}
+        fac = CallableGaussianObservation([[1.0, 0.0]], _scaled_noise, params)
+        y = jnp.array([0.7])
+        state = jnp.array([1.2, -0.3])
+        eager = fac.message(y, state).potential
+        jitted = jax.jit(lambda s: fac.message(y, s).potential)(state)
+        np.testing.assert_allclose(jitted, eager, atol=1e-12)
+        # grad w.r.t. the noise params (the sensor-learning gradient must be finite).
+        grad = jax.grad(
+            lambda g: (
+                CallableGaussianObservation(
+                    [[1.0, 0.0]], _scaled_noise, {"R0": params["R0"], "gain": g}
+                )
+                .message(y, state)
+                .potential.sum()
+            )
+        )(0.5)
+        assert bool(jnp.isfinite(grad))
 
 
 # --- Transition factor: the predict step --------------------------------------
