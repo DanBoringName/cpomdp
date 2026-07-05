@@ -17,7 +17,10 @@ from dataclasses import dataclass
 import jax.numpy as jnp
 from numpy.typing import ArrayLike
 
-from cpomdp.ffg.factors.linear_gaussian import GaussianCoupling, GaussianObservation
+from cpomdp.ffg.factors.linear_gaussian import (
+    GaussianCoupling,
+    ObservationFactor,
+)
 from cpomdp.ffg.message import CanonicalGaussian
 from cpomdp.types import Belief
 
@@ -46,14 +49,15 @@ class CouplingGraph:
 
     The ``N`` nodes are indexed ``0..N-1`` with dimensions ``dims``. ``couplings`` are
     the tree edges, directed away from ``root``, and ``observations`` maps a node index
-    to the ``GaussianObservation`` attached to it. Construction validates the wiring and
-    raises if it is malformed.
+    to the observation factor attached to it (fixed ``GaussianObservation`` or
+    state-dependent ``CallableGaussianObservation``). Construction validates the wiring
+    and raises if it is malformed.
 
     Args:
         root: index of the node the tree is rooted at.
         dims: ``dims[i]`` is the dimension of node ``i``; its length is the node count.
         couplings: the tree edges — one per non-root node, each that node's only parent.
-        observations: maps a node index to the ``GaussianObservation`` on it.
+        observations: maps a node index to its ``ObservationFactor`` (fixed or R(x)).
 
     Raises:
         ValueError: if ``dims`` is empty or non-positive; if ``root``, an edge, or an
@@ -68,7 +72,7 @@ class CouplingGraph:
         root: int,
         dims: Sequence[int],
         couplings: Sequence[Coupling],
-        observations: Mapping[int, GaussianObservation],
+        observations: Mapping[int, ObservationFactor],
     ) -> None:
         self.root = int(root)
         self.dims = tuple(int(d) for d in dims)
@@ -129,7 +133,8 @@ class CouplingGraph:
         Args:
             prior: the belief on the root node, taken as its prior.
             readings: maps a node index to that node's observation; each such node must
-                carry a ``GaussianObservation``.
+                carry a fixed ``GaussianObservation`` (static inference has no predicted
+                mean to linearize a state-dependent ``R(x)`` at).
 
         Returns:
             The marginal belief at the root.

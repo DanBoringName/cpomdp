@@ -1418,3 +1418,87 @@ while quietly killing the epistemic term.
 Recorded now because it shapes the partition API from the start. The concrete guard wiring
 lands with the factored-EFE work (issue #26); Phase 1's exact `[[all]]` endpoint severs
 nothing, so it is trivially admissible.
+
+## ADR-019 — v0.4 FFG: state-dependent sensing R(x) linearized at the predictive prior μ⁺
+
+**Date:** 2026-07-05
+**Status:** Accepted
+**Phase:** v0.4, closed-loop active inference on the FFG (issue #27)
+**Extends:** ADR-003 (whose fixed-sensor EFE collapse this breaks), ADR-005 (the EFE kernel
+that reads R), ADR-016/017 (the carry-partition backend R(x) threads through)
+
+### Decision
+
+A `CouplingGraphBackend` observation node may carry a state-dependent sensor,
+`CallableGaussianObservation` with `noise_fn(x, params) -> R(x)` — the FFG twin of the flat
+`CallableSensor`. This is the dual effect (ADR-014 finding #1): with R depending on the
+predicted state (and so on the action), the epistemic term is no longer action-invariant,
+so the chosen action can seek states where the sensor is sharper. Without it the FFG EFE
+collapses to LQR (ADR-003).
+
+**Linearization point — the predictive prior μ⁺, not the temporal predict μ⁻.** R(x) is
+evaluated at μ⁺ = `predicted_belief().mean` (temporal predict **plus** the structural
+couplings), the pre-observation joint the epistemic's Σ⁺ already uses. The structural
+couplings are part of the generative prior over the slice, so μ⁺ is the mean of the
+predictive q(x) — and R's EFE term is an expectation under exactly that q(x). R and Σ⁺
+share one linearization point, the FFG analogue of the flat path taking both at μ⁻.
+
+**Two passes, exact, not iterated.** On the factored (singleton-partition) path the
+per-node predicted seeds do not yet carry μ⁺ (couplings only resolve inside BP), so R(x)
+takes one extra pass: run `infer_all` on the *R-free* predicted seeds to read each node's
+μ⁺ marginal, evaluate R(μ⁺) there, then seed and BP again. Because pass 1 carries no
+likelihood, every R(μⱼ⁺) is linearized at the R-free coupling-resolved prior — non-circular
+by construction, and *exact in exactly two passes*, not a truncated fixed point. Pass 2's
+marginals move (R_i propagates through the couplings to j) but the linearization points stay
+frozen at pass-1 μ⁺. This is the EKF "linearize at the prior mean, then update" structure
+lifted onto the tree. Iterating would silently switch to *posterior* linearization — a
+different estimator — and reintroduce the circularity; do not add an iterate-to-stable loop
+unless deliberately changing the estimator. The dense `[[all]]` path gets μ⁺ for free from
+the joint predicted precision (one extra `to_moment`), so it needs no second BP.
+
+**Abstraction: linearization-point-dependence, not "R".** The pre-pass fires for any factor
+whose linearization point is a coupling-resolved marginal — a state-dependent R(x) today, a
+nonlinear sensor C(x) later. The fixed-sensor exemption is the *constant Jacobian* (μ⁻ and
+μ⁺ linearizations coincide), not the sensor-ness; `is_fixed` marks that. A future
+`NonlinearSensor` slots into the identical pre-pass with no rework.
+
+**Gradients: μ⁺ is differentiated through, not `stop_gradient`'d — consistently in both
+paths.** Rationale: the dense and factored paths must agree in value *and* derivative; for
+sensor learning (∂/∂params) μ⁺ is independent of params anyway; the planner gradient
+(∂/∂action) case belongs to multi-step differentiable planning (issue #20), where the choice
+is revisited. A future iterated/posterior scheme should reconsider this deliberately.
+
+**`to_flat_model` on a coupled R(x) is a category error, encoded as a typed exception.** The
+flattened-Kalman oracle route encodes couplings as pseudo-observations, so the flat Kalman
+linearizes R at μ⁻ (pre-coupling); with a mean-shifting coupling μ⁻ ≠ μ⁺, and Σ⁺ =
+(Σ⁻⁻¹ + Λ_struct)⁻¹ is not `A'ΣA'ᵀ + Q'` for any constant A',Q', so no fixed flat model
+reproduces the filter. `to_flat_model` raises `IncompatibleLinearizationError(ValueError)`
+— a theorem, not a TODO — signposting the real R(x) oracle (the standalone NumPy R(μ⁺)
+filter plus the single-node `CallableSensor` cross-check). The guard fires on
+*nonlinear-R ∧ mean-shifting-coupling*, not on "has R": a coupling-free R(x) has μ⁻ = μ⁺ and
+*would* be a faithful oracle via a `CallableSensor` flat model, so it raises the honest
+`NotImplementedError` ("could be done, unbuilt") instead — a different truth, a different
+type.
+
+### Validation
+
+- Reduction: a constant `noise_fn` reproduces the fixed `GaussianObservation` message and
+  the fixed backend step-for-step (dense and factored) — the affine no-op guarantee, so the
+  extra pass is free when R does not vary.
+- Single-node R(x) matches the flat `KalmanBackend(CallableSensor)` at atol 1e-7 (couplings
+  absent, so μ⁺ = μ⁻ and the trusted flat path is a valid oracle).
+- Branching R(x) (dense and factored one-step) matches an independent NumPy R(μ⁺) filter at
+  atol 1e-7 — couplings and the μ⁺ linearization together.
+- `predicted_belief` is R-independent (R never enters the predict), so it rides `vmap` over
+  a candidate-action grid — the Phase-3 selector seam.
+- `to_flat_model` raises `IncompatibleLinearizationError` on a coupled R(x) backend.
+
+### Consequences / deferred
+
+- The extra μ⁺ pass (factored) / extra `to_moment` (dense) is the attributable dual-effect
+  cost (RFC-001) — paid only on the state-dependent path, the fixed hot path stays
+  byte-identical. Caching the shared pass-1 μ⁺ across policy prefixes in a rollout is a
+  deferred throughput lever, not built.
+- The Koudahl–Kouw–de Vries epistemic-drift-magnitude regression against the RxInfer oracle
+  is the Phase-3/4 gate (it needs the EFE term wired to the selector); the filter-level R(μ⁺)
+  oracle match above is what proves the linearization fix here.

@@ -38,6 +38,7 @@ __all__ = [
     "GaussianCoupling",
     "GaussianObservation",
     "GaussianTransition",
+    "ObservationFactor",
 ]
 
 
@@ -55,6 +56,7 @@ class GaussianObservation:
 
     sensor_model: Float64[Array, "m n"]
     sensor_noise: Float64[Array, "m m"]
+    is_fixed = True  # constant (C, R) — lets the backend keep its byte-identical path
 
     def __init__(self, sensor_model: ArrayLike, sensor_noise: ArrayLike) -> None:
         object.__setattr__(self, "sensor_model", jnp.asarray(sensor_model, dtype=float))
@@ -76,7 +78,9 @@ class GaussianObservation:
                 f"got shape {sensor_noise.shape}"
             )
 
-    def message(self, observation: ArrayLike) -> CanonicalGaussian:
+    def message(
+        self, observation: ArrayLike, state: ArrayLike | None = None
+    ) -> CanonicalGaussian:
         """The likelihood's message into x: ``Λ = CᵀR⁻¹C``, ``h = CᵀR⁻¹y``.
 
         The information form of the reading — the evidence the observation injects
@@ -86,6 +90,9 @@ class GaussianObservation:
 
         Args:
             observation: the reading y, shape ``(m,)``.
+            state: ignored — a fixed sensor's noise does not depend on the state. It is
+                accepted so the fixed and state-dependent factors share one ``message``
+                interface (the backend can call either without a type branch).
 
         Returns:
             A ``CanonicalGaussian`` over the n-D state — precision ``(n, n)``,
@@ -98,6 +105,16 @@ class GaussianObservation:
         precision = sensor_model.T @ noise_weighted_model  # CᵀR⁻¹C
         potential = sensor_model.T @ jnp.linalg.solve(sensor_noise, reading)  # CᵀR⁻¹y
         return CanonicalGaussian._unchecked(precision, potential)
+
+    def linearize(
+        self, state: ArrayLike | None = None
+    ) -> tuple[Float64[Array, "m n"], Float64[Array, "m m"]]:
+        """Local ``(C, R)`` — both constant; ``state`` is ignored (fixed sensor).
+
+        The shared seam with ``CallableGaussianObservation.linearize``, so a caller can
+        read ``(C, R)`` off either factor without a type branch.
+        """
+        return self.sensor_model, self.sensor_noise
 
     def tree_flatten(
         self,
@@ -144,6 +161,7 @@ class CallableGaussianObservation:
     sensor_model: Float64[Array, "m n"]  # C (constant) — leaf
     noise_fn: Callable[[Float64[Array, "n"], PyTree], Float64[Array, "m m"]]  # aux
     noise_params: PyTree  # grad-able sensor parameters — leaf
+    is_fixed = False  # R varies with the state — the backend takes its R(μ⁺) path
 
     def __init__(
         self,
@@ -175,7 +193,9 @@ class CallableGaussianObservation:
         # R(x) is inverted in the message, so it must be positive-definite.
         validate_covariance(r0, "noise_fn(x, params)", require_definite=True)
 
-    def message(self, observation: ArrayLike, state: ArrayLike) -> CanonicalGaussian:
+    def message(
+        self, observation: ArrayLike, state: ArrayLike | None = None
+    ) -> CanonicalGaussian:
         """The likelihood's message into x, with ``R`` evaluated at the plug-in state.
 
         Identical to ``GaussianObservation.message`` (``Λ = CᵀR⁻¹C``, ``h = CᵀR⁻¹y``)
@@ -188,11 +208,20 @@ class CallableGaussianObservation:
         Args:
             observation: the reading y, shape ``(m,)``.
             state: the state R is evaluated at (the predicted mean μ⁺), shape ``(n,)``.
+                Required here (the shared interface makes it optional): without a
+                linearization point ``R(x)`` is undefined, so a static/factored
+                inference context — which has no ``μ⁺`` — is rejected.
 
         Returns:
             A ``CanonicalGaussian`` over the n-D state — precision ``(n, n)``,
             potential ``(n,)``.
         """
+        if state is None:
+            raise ValueError(
+                "CallableGaussianObservation.message needs the plug-in state (the "
+                "predicted mean μ⁺) to evaluate R(x); a static or factored inference "
+                "context has no such linearization point."
+            )
         sensor_model = self.sensor_model  # C
         reading = jnp.asarray(observation, dtype=float)  # y
         state = jnp.asarray(state, dtype=float)
@@ -545,3 +574,9 @@ class GaussianCoupling:
         object.__setattr__(obj, "coupling", coupling)
         object.__setattr__(obj, "coupling_noise", coupling_noise)
         return obj
+
+
+# A node's likelihood factor is either fixed or state-dependent; both share the
+# ``message(observation, state=None)`` interface, so the graph and backend hold them
+# uniformly (the fixed factor ignores ``state``).
+ObservationFactor = GaussianObservation | CallableGaussianObservation
