@@ -87,8 +87,7 @@ def test_agent_on_ffg_backend_acts_via_ffg_selector():
     # perceive -> act cycle completes.
     backend = _two_node_backend()
     agent = Agent(
-        backend.flat_model,
-        ObservationGoal([0.5], (-2.0, 2.0), info_target=0),  # seek info about CheA
+        objective=ObservationGoal([0.5], (-2.0, 2.0), info_target=0),  # info about CheA
         backend=backend,
     )
     agent.infer_states([0.3])  # observe CheY
@@ -103,8 +102,7 @@ def test_agent_ffg_whole_state_when_info_target_none():
     # whole state (the default epistemic).
     backend = _two_node_backend()
     agent = Agent(
-        backend.flat_model,
-        ObservationGoal([0.5], (-2.0, 2.0)),  # no info_target
+        objective=ObservationGoal([0.5], (-2.0, 2.0)),  # no info_target
         backend=backend,
     )
     assert isinstance(agent._selector, FfgEfeSelector)
@@ -155,8 +153,7 @@ def test_ffg_agent_matches_kalman_efe_agent_end_to_end():
     bounds, k = (-2.0, 2.0), 21
 
     ffg_agent = Agent(
-        backend.flat_model,
-        ObservationGoal([0.5], bounds, n_candidates=k),
+        objective=ObservationGoal([0.5], bounds, n_candidates=k),
         backend=backend,
     )
     ref_agent = Agent(

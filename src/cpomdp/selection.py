@@ -10,7 +10,7 @@ from jaxtyping import Array, Float64
 from numpy.typing import ArrayLike
 
 from cpomdp._validation import validate_covariance
-from cpomdp.backends.coupling import CouplingGraphBackend
+from cpomdp.backends.base import EfeBackend
 from cpomdp.control import LQRController
 from cpomdp.efe import _ffg_efe_step, expected_free_energy, policy_efe
 from cpomdp.types import Belief, LinearGaussianModel
@@ -222,7 +222,7 @@ class FfgEfeSelector:
 
     def __init__(
         self,
-        backend: CouplingGraphBackend,
+        backend: EfeBackend,
         *,
         target: Sequence[int],
         n_candidates: int,

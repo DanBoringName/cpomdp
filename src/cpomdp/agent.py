@@ -4,8 +4,7 @@ import jax.numpy as jnp
 from jaxtyping import Array, Float64
 from numpy.typing import ArrayLike
 
-from cpomdp.backends.base import InferenceBackend
-from cpomdp.backends.coupling import CouplingGraphBackend
+from cpomdp.backends.base import EfeBackend, InferenceBackend
 from cpomdp.backends.kalman import KalmanBackend
 from cpomdp.control import LQRController
 from cpomdp.selection import (
@@ -66,7 +65,7 @@ class Agent:
 
     def __init__(
         self,
-        model: LinearGaussianModel,
+        model: LinearGaussianModel | None = None,
         objective: ObservationGoal | StateGoal | None = None,
         *,
         selector: ActionSelector | None = None,
@@ -83,7 +82,8 @@ class Agent:
         Args:
             model: The linear-Gaussian generative model the agent perceives and
                 (with an objective) acts under. Its ``prior`` becomes the starting
-                belief.
+                belief. Optional if a ``backend`` is given — the model is then taken
+                from ``backend.model`` (so a custom backend need not be passed twice).
             objective: What the agent pursues — a ``StateGoal`` (a state to reach,
                 carrying the LQR weights) or an ``ObservationGoal`` (an observation
                 to prefer, carrying the action-search config). ``None`` builds a
@@ -104,9 +104,18 @@ class Agent:
             TypeError: If ``objective`` is neither a ``StateGoal`` nor an
                 ``ObservationGoal``.
         """
+        # A backend is built from a model and carries it, so either input determines the
+        # other: pass a model (default KalmanBackend), a backend (its model is used), or
+        # both. Passing the same object twice is no longer required.
+        if backend is None:
+            if model is None:
+                raise ValueError("Agent needs a model or a backend to infer with.")
+            backend = KalmanBackend(model)
+        elif model is None:
+            model = backend.model
         self.model = model
         self.belief = model.prior
-        self._backend = backend if backend is not None else KalmanBackend(model)
+        self._backend = backend
         sensor_is_fixed = model.observation is None or model.observation.is_fixed
 
         if objective is None:
@@ -147,7 +156,7 @@ class Agent:
                 raise ValueError(
                     "an ObservationGoal needs a model with a control matrix to act."
                 )
-            is_ffg = isinstance(self._backend, CouplingGraphBackend)
+            is_ffg = isinstance(self._backend, EfeBackend)
             if sensor_is_fixed and selector is None and not is_ffg:
                 raise ValueError(
                     "an ObservationGoal on a fixed sensor is output regulation "
@@ -196,7 +205,7 @@ class Agent:
         its joint-state block and hand it to the ``FfgEfeSelector``.
         """
         backend = self._backend
-        assert isinstance(backend, CouplingGraphBackend)  # only built for the FFG path
+        assert isinstance(backend, EfeBackend)  # only built for the FFG path
         if objective.horizon != 1:
             raise ValueError(
                 "H-step EFE on the FFG backend is deferred; ObservationGoal.horizon "

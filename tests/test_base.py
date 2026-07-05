@@ -14,7 +14,11 @@ from cpomdp.types import Belief, LinearGaussianModel
 
 class _PassthroughBackend:
     """A trivial fake backend: returns the prior unchanged. It inherits nothing
-    and knows nothing about InferenceBackend — it conforms by structure alone."""
+    and knows nothing about InferenceBackend — it conforms by structure alone
+    (a matching ``infer_states`` and the ``model`` it was built from)."""
+
+    def __init__(self, model: LinearGaussianModel) -> None:
+        self.model = model
 
     def infer_states(
         self,
@@ -36,7 +40,7 @@ def _scalar_model():
 
 
 def test_fake_backend_satisfies_protocol():
-    assert isinstance(_PassthroughBackend(), InferenceBackend)
+    assert isinstance(_PassthroughBackend(_scalar_model()), InferenceBackend)
 
 
 def test_kalman_backend_satisfies_protocol():
