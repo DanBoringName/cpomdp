@@ -1,5 +1,6 @@
 """Action selection: the seam between a belief+preference and an action."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
@@ -9,13 +10,15 @@ from jaxtyping import Array, Float64
 from numpy.typing import ArrayLike
 
 from cpomdp._validation import validate_covariance
+from cpomdp.backends.coupling import CouplingGraphBackend
 from cpomdp.control import LQRController
-from cpomdp.efe import expected_free_energy, policy_efe
+from cpomdp.efe import _ffg_efe_step, expected_free_energy, policy_efe
 from cpomdp.types import Belief, LinearGaussianModel
 
 __all__ = [
     "ActionSelector",
     "EFESelector",
+    "FfgEfeSelector",
     "LQRSelector",
     "ObservationGoal",
     "Preference",
@@ -203,6 +206,75 @@ class EFESelector:
     def cost_per_cycle(self) -> int:
         """Per-cycle step-evals = n_candidates * horizon."""
         return self.n_candidates * self._horizon
+
+
+class FfgEfeSelector:
+    """EFE action selection over a branching FFG backend (issue #26).
+
+    The FFG counterpart of ``EFESelector``: instead of ``_efe_step`` on a flat model it
+    ``vmap``s ``_ffg_efe_step`` over the candidate action grid, reading ``μ⁺``/``Σ⁺``
+    from the backend's ``predicted_belief`` (structural couplings folded in) and aiming
+    the epistemic term at ``target`` — a joint-state block (a node's block via
+    ``backend.block`` for ``info_target``, or the whole state). One-step
+    (``horizon = 1``); the H-step FFG rollout is a later seam. Conforms to
+    ``ActionSelector``.
+    """
+
+    def __init__(
+        self,
+        backend: CouplingGraphBackend,
+        *,
+        target: Sequence[int],
+        n_candidates: int,
+        action_bounds: tuple[float, float],
+    ) -> None:
+        lo, hi = action_bounds
+        if not lo < hi:
+            raise ValueError(
+                f"action_bounds must be (lo, hi) with lo < hi, got {action_bounds}"
+            )
+        if n_candidates < 2:
+            raise ValueError(
+                f"n_candidates must be at least 2 to search, got {n_candidates}"
+            )
+        # Front-load (ADR-002): the candidate grid, the target block, the real (C, R).
+        self._backend = backend
+        self._target = tuple(target)
+        self._sensor_model, self._sensor_noise = backend.observation_model
+        self._candidates = jnp.linspace(lo, hi, n_candidates)[:, None]
+
+    @staticmethod
+    def _argmin(g: Float64[Array, "k"]) -> Array:
+        # A NaN-scoring candidate must not silently win: map NaN -> +inf so it loses.
+        return jnp.argmin(jnp.where(jnp.isnan(g), jnp.inf, g))
+
+    def select(self, belief: Belief, preference: Preference) -> Float64[Array, "p"]:
+        """The grid action minimising ``G`` (the per-cycle work).
+
+        For each candidate action, predict the joint (``predicted_belief`` → ``μ⁺``,
+        ``Σ⁺``), score it with ``_ffg_efe_step``, then ``argmin`` over the grid.
+
+        TODO(energy): the ``vmap`` recomputes ``Σ⁺`` per candidate, though ``Σ⁺`` is
+        action-independent (and under a fixed sensor so is the epistemic). A follow-up
+        can hoist ``Σ⁺``/epistemic out of the loop and vary only the pragmatic mean —
+        this is the RFC-001 per-cycle hot path, flagged not to balloon it silently.
+        """
+
+        def g_of(action: Float64[Array, "p"]) -> Float64[Array, ""]:
+            predicted = self._backend.predicted_belief(belief, action)  # μ⁺, Σ⁺
+            g, _ = _ffg_efe_step(
+                predicted.mean,
+                predicted.cov,
+                self._sensor_model,
+                self._sensor_noise,
+                preference.goal,
+                preference.precision,
+                self._target,
+            )
+            return g
+
+        g = jax.vmap(g_of)(self._candidates)
+        return self._candidates[self._argmin(g)]
 
 
 @dataclass(frozen=True, init=False)

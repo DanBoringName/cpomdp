@@ -547,6 +547,25 @@ class CouplingGraphBackend:
         """The marginal at ``readout_node`` (the root by default)."""
         return self.marginal(self.readout_node, belief)
 
+    def block(self, node: int) -> range:
+        """The state indices node ``node`` occupies in the joint (a public ``_block``).
+
+        Lets a caller (e.g. the EFE selector) turn a node index into the joint-state
+        block the epistemic term targets — ``info_target`` node → ``block`` (issue #26).
+        """
+        return range(self._offsets[node], self._offsets[node + 1])
+
+    @property
+    def observation_model(self) -> tuple[jax.Array, jax.Array]:
+        """The real sensor ``(C, R)`` embedded in the joint state — what the EFE reads.
+
+        ``C`` (shape ``(n_observations, n_total)``) reads the observed nodes out of the
+        joint state, ``R`` their noise. The *real* sensors, not the structural pseudo-
+        observations ``to_flat_model`` adds; the EFE pragmatic and epistemic terms
+        both read them.
+        """
+        return self._flat_model.sensor_model, self._flat_model.sensor_noise
+
     def predicted_belief(
         self, prior: Belief, action: ArrayLike | None = None
     ) -> Belief:
