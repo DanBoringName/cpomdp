@@ -258,9 +258,12 @@ class ObservationGoal:
     The complete spec for the information-seeking path - the preferred observation,
     how sharply it is preferred (``precision``), and the action-search config the
     EFESelector front-loads: ``action_bounds`` is the action box, ``n_candidates``
-    its resolution, ``horizon`` its lookahead depth. The Agent dispatches an
-    ObservationGoal to an EFESelector. Not a pytree - construction-time only; the
-    Agent extracts a Preference.
+    its resolution, ``horizon`` its lookahead depth. ``info_target`` optionally aims the
+    epistemic term at a single latent *node* (info gain about that node's marginal, the
+    factored-EFE regime on a branching backend, issue #26); ``None`` = whole-state info
+    gain (the default, unchanged behaviour). The Agent dispatches an ObservationGoal to
+    an EFESelector. Not a pytree - construction-time only; the Agent extracts a
+    Preference.
     """
 
     target: Float64[Array, "m"]
@@ -268,9 +271,17 @@ class ObservationGoal:
     action_bounds: tuple[float, float]
     n_candidates: int
     horizon: int
+    info_target: int | None
 
     def __init__(
-        self, target, action_bounds, *, precision=None, n_candidates=21, horizon=1
+        self,
+        target,
+        action_bounds,
+        *,
+        precision=None,
+        n_candidates=21,
+        horizon=1,
+        info_target=None,
     ) -> None:
         target = jnp.asarray(target, dtype=float)
         object.__setattr__(self, "target", target)
@@ -283,6 +294,9 @@ class ObservationGoal:
         object.__setattr__(self, "action_bounds", action_bounds)
         object.__setattr__(self, "n_candidates", n_candidates)
         object.__setattr__(self, "horizon", horizon)
+        object.__setattr__(
+            self, "info_target", None if info_target is None else int(info_target)
+        )
         self._validate()
 
     def _validate(self) -> None:
@@ -308,3 +322,8 @@ class ObservationGoal:
             )
         if self.horizon < 1:
             raise ValueError(f"horizon must be >= 1, got {self.horizon}")
+        if self.info_target is not None and self.info_target < 0:
+            raise ValueError(
+                f"info_target must be a non-negative node index or None, "
+                f"got {self.info_target}"
+            )

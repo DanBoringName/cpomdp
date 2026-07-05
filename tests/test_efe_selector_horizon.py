@@ -135,6 +135,19 @@ class TestObservationGoalHorizon:
             ObservationGoal([0.0], (-2.0, 2.0), horizon=0)
 
 
+class TestObservationGoalInfoTarget:
+    def test_default_info_target_is_none(self):
+        # None = whole-state info gain, the unchanged default (issue #26).
+        assert ObservationGoal([0.0], (-2.0, 2.0)).info_target is None
+
+    def test_carries_info_target_node_index(self):
+        assert ObservationGoal([0.0], (-2.0, 2.0), info_target=2).info_target == 2
+
+    def test_negative_info_target_raises(self):
+        with np.testing.assert_raises(ValueError):
+            ObservationGoal([0.0], (-2.0, 2.0), info_target=-1)
+
+
 class TestAgentThreadsHorizon:
     def test_agent_builds_selector_with_goal_horizon(self):
         model = _model()
