@@ -121,6 +121,44 @@ def _driven_relaxation_oracle(
     return states, offs
 
 
+def _predicted_joint_oracle(dims, edges, dyn, prior_mean, prior_cov, control, action):
+    """The joint after predict + structural couplings, BEFORE observing — plain NumPy.
+
+    The pre-observation ``(mu+, Sig+)`` the EFE reads (issue #26): predict each node by
+    its own dynamics, then fold in the structural-coupling precision, but add no
+    observation. Independent of the canonical-form backend.
+    """
+    offs = np.cumsum([0, *dims])
+    dim = int(offs[-1])
+
+    def blk(i):
+        return slice(int(offs[i]), int(offs[i + 1]))
+
+    force = _block_diag([np.asarray(a, float) for a, _ in dyn])  # F = blkdiag(A_i)
+    proc = _block_diag([np.asarray(q, float) for _, q in dyn])  # Q = blkdiag(Q_i)
+
+    lam_struct = np.zeros((dim, dim))
+    for parent, child, w, qs in edges:
+        w = np.asarray(w, float)
+        qs_inv = np.linalg.inv(np.asarray(qs, float))
+        lam_struct[blk(parent), blk(parent)] += w.T @ qs_inv @ w
+        lam_struct[blk(child), blk(child)] += qs_inv
+        lam_struct[blk(parent), blk(child)] += -w.T @ qs_inv
+        lam_struct[blk(child), blk(parent)] += -qs_inv @ w
+
+    shift = np.zeros(dim)
+    if control is not None:
+        shift = np.asarray(control, float) @ np.asarray(action, float)
+    mu_pred = force @ np.asarray(prior_mean, float) + shift
+    sig_pred = force @ np.asarray(prior_cov, float) @ force.T + proc
+    pred_precision = np.linalg.inv(sig_pred)
+
+    lam = pred_precision + lam_struct  # predict + structural couplings, NO observation
+    sig = np.linalg.inv(lam)
+    mu = sig @ (pred_precision @ mu_pred)
+    return mu, sig
+
+
 def _build(
     dims, edges, obs_specs, dyn, *, control=None, readout_node=None, partition=None
 ):
@@ -440,6 +478,37 @@ class TestCarryPartition:
             np.testing.assert_allclose(
                 np.asarray(beliefs.cov[step]), np.asarray(belief.cov), atol=1e-10
             )
+
+
+class TestPredictedBelief:
+    """B1 (issue #26): the pre-observation joint the EFE reads — predict + structural
+    couplings, before the real observation. Checked against an independent NumPy oracle.
+    """
+
+    def test_predicted_belief_matches_pre_observation_oracle(self):
+        control = np.array([[1.0], [0.0], [0.0], [0.0], [0.0]])  # action drives CheA
+        backend = _build(
+            _CHEMOTAXIS_DIMS,
+            _CHEMOTAXIS_EDGES,
+            _CHEMOTAXIS_OBS,
+            _CHEMOTAXIS_DYN,
+            control=control,
+        )
+        prior = Belief(mean=np.array([0.2, -0.1, 0.3, 0.0, 0.1]), cov=np.eye(5) * 1.5)
+        action = np.array([0.7])
+
+        predicted = backend.predicted_belief(prior, action)
+        mu_o, sig_o = _predicted_joint_oracle(
+            _CHEMOTAXIS_DIMS,
+            _CHEMOTAXIS_EDGES,
+            _CHEMOTAXIS_DYN,
+            prior.mean,
+            prior.cov,
+            control,
+            action,
+        )
+        np.testing.assert_allclose(np.asarray(predicted.mean), mu_o, atol=1e-7)
+        np.testing.assert_allclose(np.asarray(predicted.cov), sig_o, atol=1e-7)
 
 
 class TestProtocolAndReadout:

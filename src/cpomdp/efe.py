@@ -92,6 +92,7 @@ THE DATA FLOW  (top → bottom: what goes in → what comes out)
 
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -224,6 +225,98 @@ def policy_efe(
 
     _, (gs, prags, epis) = lax.scan(step, (belief.mean, belief.cov), policy)
     return jnp.sum(gs), {"pragmatic": jnp.sum(prags), "epistemic": jnp.sum(epis)}
+
+
+def _state_info_gain(
+    sigma_pred: Float64[Array, "n n"],
+    sensor_model: Float64[Array, "m n"],
+    sensor_noise: Float64[Array, "m m"],
+    target: Sequence[int],
+) -> Float64[Array, ""]:
+    """Information gain about a target block of the state from one observation.
+
+    The entropy drop of the target latent's marginal — how much observing sharpens the
+    belief about *those* state indices (issue #26). Unlike the whole-state
+    observation-space shortcut in ``_efe_step`` (``½(ln det S − ln det R)``), this forms
+    the posterior covariance explicitly so a sub-block can be read out::
+
+        Σ_post = (Σ⁺⁻¹ + Cᵀ·R⁻¹·C)⁻¹   # prior info + observation info, inverted back
+        gain   = ½·(ln det Σ⁺[target] − ln det Σ_post[target])
+
+    With ``target`` the whole state this equals the observation-space epistemic (via
+    Sylvester's identity); restricting ``target`` to a node's indices gives info gain
+    about that latent — the factored epistemics ADR-014 finding #3 needs.
+
+    Args:
+        sigma_pred: Σ⁺, the predicted joint state covariance (n x n).
+        sensor_model: C, the observation matrix (m x n).
+        sensor_noise: R, the observation noise covariance (m x m).
+        target: the state indices whose marginal the info gain is about.
+
+    Returns:
+        The scalar information gain (nats), ≥ 0 for nested target/observation.
+    """
+    prior_info = jnp.linalg.inv(sigma_pred)  # Σ⁺⁻¹
+    obs_info = sensor_model.T @ jnp.linalg.inv(sensor_noise) @ sensor_model  # Cᵀ R⁻¹ C
+    sigma_post = jnp.linalg.inv(prior_info + obs_info)
+
+    idx = jnp.asarray(list(target))
+    pred_block = sigma_pred[jnp.ix_(idx, idx)]
+    post_block = sigma_post[jnp.ix_(idx, idx)]
+    _, logdet_pred = jnp.linalg.slogdet(pred_block)
+    _, logdet_post = jnp.linalg.slogdet(post_block)
+    return 0.5 * (logdet_pred - logdet_post)
+
+
+def _ffg_efe_step(
+    mu_plus: Float64[Array, "n"],
+    sigma_plus: Float64[Array, "n n"],
+    sensor_model: Float64[Array, "m n"],
+    sensor_noise: Float64[Array, "m m"],
+    goal: Float64[Array, "m"],
+    precision: Float64[Array, "m m"],
+    target: Sequence[int],
+) -> tuple[Float64[Array, ""], dict[str, Float64[Array, ""]]]:
+    """One EFE step over the FFG's predicted joint, with a node-targeted epistemic.
+
+    The FFG counterpart of ``_efe_step`` (issue #26). It takes the predicted joint
+    moments directly — ``μ⁺``/``Σ⁺`` from ``CouplingGraphBackend.predicted_belief``,
+    which already fold in the structural couplings — rather than recomputing
+    ``Σ⁺ = A·Σ·Aᵀ + Q`` from a flat model (that route mistakes the couplings for
+    observations). The ``pragmatic`` term is identical to ``_efe_step``
+    (observation-space cross-entropy); the ``epistemic`` term is the only change — info
+    gain about the ``target`` latent's marginal (``_state_info_gain``) instead of the
+    whole-state observation-space determinant.
+
+    With no couplings and ``target`` the whole state, this reproduces ``_efe_step`` /
+    ``expected_free_energy`` exactly; a node's block targets the epistemic at that
+    latent — the factored analogue of the T-Maze cue (ADR-014 finding #3). Pure
+    ``jnp``, so it rides ``jit``/``vmap`` over a grid of candidate actions (which vary
+    ``μ⁺``; ``Σ⁺`` is action-independent, ADR-003).
+
+    Args:
+        mu_plus: μ⁺, the predicted joint mean under the candidate action (n-D).
+        sigma_plus: Σ⁺, the predicted joint covariance (n x n) — couplings included.
+        sensor_model: C, the real observation matrix over the joint state (m x n).
+        sensor_noise: R, the observation noise covariance (m x m).
+        goal: g, the preferred observation (m-D).
+        precision: Λ, how sharply the goal is preferred (m x m).
+        target: the state indices whose info gain is the epistemic value (a node's
+            block, or the whole state).
+
+    Returns:
+        ``(G, {"pragmatic": ..., "epistemic": ...})`` — the scalar EFE ``G = pragmatic −
+        epistemic`` (minimised) and its two parts.
+    """
+    o_pred = sensor_model @ mu_plus  # o⁺ = C·μ⁺
+    s = sensor_model @ sigma_plus @ sensor_model.T + sensor_noise  # S = C·Σ⁺·Cᵀ + R
+
+    residual = o_pred - goal
+    pragmatic = 0.5 * residual @ precision @ residual + 0.5 * jnp.trace(precision @ s)
+
+    epistemic = _state_info_gain(sigma_plus, sensor_model, sensor_noise, target)
+
+    return pragmatic - epistemic, {"pragmatic": pragmatic, "epistemic": epistemic}
 
 
 def _efe_step(

@@ -22,6 +22,7 @@ from chemotaxis_model import (
 from cpomdp.backends.coupling import CouplingGraphBackend
 from cpomdp.backends.kalman import KalmanBackend
 from cpomdp.backends.rxinfer import RxInferBackend
+from cpomdp.efe import _state_info_gain
 from cpomdp.types import Belief
 
 
@@ -117,3 +118,25 @@ def test_methylation_is_the_cheapest_node_to_sever():
     assert cheb > 0.0
     for faster in (CHEA, CHEY, MOTOR_A, MOTOR_B):
         assert cheb < sever_one(faster)
+
+
+def test_epistemic_can_target_the_hidden_hub():
+    # #26 Phase C (ADR-014 #3): the factored epistemic can aim at a *hidden* latent.
+    # CheA (the hub) is never directly observed — the sensors read the motors and CheB —
+    # yet observing those downstream children reduces CheA's uncertainty through the
+    # couplings. That info gain is positive, isolable, and distinct from the whole-state
+    # info gain the flat observation-space EFE is limited to.
+    graph, transitions = chemotaxis_ffg(dt=0.01)
+    backend = CouplingGraphBackend(graph, transitions)
+    sensor_model, sensor_noise = backend.observation_model
+    prior = Belief(mean=np.zeros(5), cov=np.eye(5))
+    sigma_pred = backend.predicted_belief(prior).cov  # Σ⁺
+
+    def info_gain(target):
+        return float(_state_info_gain(sigma_pred, sensor_model, sensor_noise, target))
+
+    assert CHEA not in backend.graph.observations  # the hub is a hidden latent
+    chea = info_gain(backend.block(CHEA))
+    whole = info_gain(range(5))
+    assert chea > 0.0  # learnable through the couplings, though never observed directly
+    assert not np.isclose(chea, whole)  # targeting restricts to that node's marginal

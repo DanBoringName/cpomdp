@@ -484,6 +484,22 @@ class CouplingGraphBackend:
         the per-node observation messages (the within-slice update). ChainBackend sums
         two terms; the tree's within-slice couplings are the third.
         """
+        precision, potential = self._predicted_precision(prior, action)
+        obs_precision, obs_potential = self._observation_messages(observation)
+        return precision + obs_precision, potential + obs_potential
+
+    def _predicted_precision(
+        self, prior: Belief, action: jax.Array | None
+    ) -> tuple[jax.Array, jax.Array]:
+        """The joint (Λ, h) after dynamics + structural couplings, *before* observing.
+
+        The predict side of a step: lift the joint prior to canonical, ``predict``
+        through the block-diagonal per-node dynamics under ``action`` (the temporal
+        edges), then add the structural coupling precision — but no observation.
+        ``_assemble_unchecked`` folds the observation on top; ``predicted_belief``
+        moment-forms it as Σ⁺ (the EFE reads the info gain as the drop from this to the
+        post-observation covariance).
+        """
         control_term = self._control_shift(action)
         prior_precision = jnp.linalg.inv(prior.cov)  # Λ₀ = Σ⁻¹
         prior_msg = CanonicalGaussian._unchecked(
@@ -491,10 +507,7 @@ class CouplingGraphBackend:
             prior_precision @ prior.mean,  # h₀ = Λ₀μ
         )
         predicted = self._transition.predict(prior_msg, control_term)  # → Λ⁻, h⁻
-        obs_precision, obs_potential = self._observation_messages(observation)
-        precision = predicted.precision + self._structural_precision + obs_precision
-        potential = predicted.potential + obs_potential
-        return precision, potential
+        return predicted.precision + self._structural_precision, predicted.potential
 
     def _carry(self, cov: jax.Array) -> tuple[jax.Array, jax.Array]:
         """Factor the carried joint *covariance* and measure what it severs (ADR-016).
@@ -533,6 +546,55 @@ class CouplingGraphBackend:
     def readout(self, belief: Belief) -> Belief:
         """The marginal at ``readout_node`` (the root by default)."""
         return self.marginal(self.readout_node, belief)
+
+    def block(self, node: int) -> range:
+        """The state indices node ``node`` occupies in the joint (a public ``_block``).
+
+        Lets a caller (e.g. the EFE selector) turn a node index into the joint-state
+        block the epistemic term targets — ``info_target`` node → ``block`` (issue #26).
+        """
+        return range(self._offsets[node], self._offsets[node + 1])
+
+    @property
+    def model(self) -> LinearGaussianModel:
+        """The flat ``LinearGaussianModel`` of the *real* interface (the backend model).
+
+        Block-diagonal dynamics (F, Q), the real sensors (C, R), and the control — the
+        joint state as one linear-Gaussian model, carrying the metadata an ``Agent``
+        reads (``n_observations``, ``control``, ``n_controls``). The ``Agent`` derives
+        its own ``model`` from this, so passing the backend is enough (issue #26).
+        Distinct from ``to_flat_model()``, which *augments* this with the structural
+        couplings as pseudo-observations for the oracle cross-check.
+        """
+        return self._flat_model
+
+    @property
+    def observation_model(self) -> tuple[jax.Array, jax.Array]:
+        """The real sensor ``(C, R)`` embedded in the joint state — what the EFE reads.
+
+        ``C`` (shape ``(n_observations, n_total)``) reads the observed nodes out of the
+        joint state, ``R`` their noise. The *real* sensors, not the structural pseudo-
+        observations ``to_flat_model`` adds; the EFE pragmatic and epistemic terms
+        both read them.
+        """
+        return self._flat_model.sensor_model, self._flat_model.sensor_noise
+
+    def predicted_belief(
+        self, prior: Belief, action: ArrayLike | None = None
+    ) -> Belief:
+        """The joint belief after dynamics + structural couplings, before observing.
+
+        The predict side of one step (Σ⁺, μ⁺): push the joint ``prior`` through the
+        per-node dynamics under ``action`` and fold in the structural couplings, but add
+        no observation. This is the covariance the EFE reads — a candidate action's
+        epistemic value is the info gain from this Σ⁺ to the post-observation covariance
+        (issue #26). Pure (no host-side validation), so it rides ``jit`` / ``vmap`` over
+        a grid of candidate actions.
+        """
+        coerced = None if action is None else jnp.asarray(action, dtype=float)
+        precision, potential = self._predicted_precision(prior, coerced)
+        mean, cov = CanonicalGaussian._unchecked(precision, potential).to_moment()
+        return Belief(mean=mean, cov=cov)
 
     def to_flat_model(self) -> LinearGaussianModel:
         """The tree flattened into one dense ``LinearGaussianModel`` (the oracle route).

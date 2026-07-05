@@ -1,5 +1,6 @@
 """Action selection: the seam between a belief+preference and an action."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
@@ -9,13 +10,15 @@ from jaxtyping import Array, Float64
 from numpy.typing import ArrayLike
 
 from cpomdp._validation import validate_covariance
+from cpomdp.backends.base import EfeBackend
 from cpomdp.control import LQRController
-from cpomdp.efe import expected_free_energy, policy_efe
+from cpomdp.efe import _ffg_efe_step, expected_free_energy, policy_efe
 from cpomdp.types import Belief, LinearGaussianModel
 
 __all__ = [
     "ActionSelector",
     "EFESelector",
+    "FfgEfeSelector",
     "LQRSelector",
     "ObservationGoal",
     "Preference",
@@ -205,6 +208,75 @@ class EFESelector:
         return self.n_candidates * self._horizon
 
 
+class FfgEfeSelector:
+    """EFE action selection over a branching FFG backend (issue #26).
+
+    The FFG counterpart of ``EFESelector``: instead of ``_efe_step`` on a flat model it
+    ``vmap``s ``_ffg_efe_step`` over the candidate action grid, reading ``μ⁺``/``Σ⁺``
+    from the backend's ``predicted_belief`` (structural couplings folded in) and aiming
+    the epistemic term at ``target`` — a joint-state block (a node's block via
+    ``backend.block`` for ``info_target``, or the whole state). One-step
+    (``horizon = 1``); the H-step FFG rollout is a later seam. Conforms to
+    ``ActionSelector``.
+    """
+
+    def __init__(
+        self,
+        backend: EfeBackend,
+        *,
+        target: Sequence[int],
+        n_candidates: int,
+        action_bounds: tuple[float, float],
+    ) -> None:
+        lo, hi = action_bounds
+        if not lo < hi:
+            raise ValueError(
+                f"action_bounds must be (lo, hi) with lo < hi, got {action_bounds}"
+            )
+        if n_candidates < 2:
+            raise ValueError(
+                f"n_candidates must be at least 2 to search, got {n_candidates}"
+            )
+        # Front-load (ADR-002): the candidate grid, the target block, the real (C, R).
+        self._backend = backend
+        self._target = tuple(target)
+        self._sensor_model, self._sensor_noise = backend.observation_model
+        self._candidates = jnp.linspace(lo, hi, n_candidates)[:, None]
+
+    @staticmethod
+    def _argmin(g: Float64[Array, "k"]) -> Array:
+        # A NaN-scoring candidate must not silently win: map NaN -> +inf so it loses.
+        return jnp.argmin(jnp.where(jnp.isnan(g), jnp.inf, g))
+
+    def select(self, belief: Belief, preference: Preference) -> Float64[Array, "p"]:
+        """The grid action minimising ``G`` (the per-cycle work).
+
+        For each candidate action, predict the joint (``predicted_belief`` → ``μ⁺``,
+        ``Σ⁺``), score it with ``_ffg_efe_step``, then ``argmin`` over the grid.
+
+        TODO(energy): the ``vmap`` recomputes ``Σ⁺`` per candidate, though ``Σ⁺`` is
+        action-independent (and under a fixed sensor so is the epistemic). A follow-up
+        can hoist ``Σ⁺``/epistemic out of the loop and vary only the pragmatic mean —
+        this is the RFC-001 per-cycle hot path, flagged not to balloon it silently.
+        """
+
+        def g_of(action: Float64[Array, "p"]) -> Float64[Array, ""]:
+            predicted = self._backend.predicted_belief(belief, action)  # μ⁺, Σ⁺
+            g, _ = _ffg_efe_step(
+                predicted.mean,
+                predicted.cov,
+                self._sensor_model,
+                self._sensor_noise,
+                preference.goal,
+                preference.precision,
+                self._target,
+            )
+            return g
+
+        g = jax.vmap(g_of)(self._candidates)
+        return self._candidates[self._argmin(g)]
+
+
 @dataclass(frozen=True, init=False)
 class StateGoal:
     """A state-space objective: reach a target state (the LQR / fixed-sensor regime).
@@ -258,9 +330,12 @@ class ObservationGoal:
     The complete spec for the information-seeking path - the preferred observation,
     how sharply it is preferred (``precision``), and the action-search config the
     EFESelector front-loads: ``action_bounds`` is the action box, ``n_candidates``
-    its resolution, ``horizon`` its lookahead depth. The Agent dispatches an
-    ObservationGoal to an EFESelector. Not a pytree - construction-time only; the
-    Agent extracts a Preference.
+    its resolution, ``horizon`` its lookahead depth. ``info_target`` optionally aims the
+    epistemic term at a single latent *node* (info gain about that node's marginal, the
+    factored-EFE regime on a branching backend, issue #26); ``None`` = whole-state info
+    gain (the default, unchanged behaviour). The Agent dispatches an ObservationGoal to
+    an EFESelector. Not a pytree - construction-time only; the Agent extracts a
+    Preference.
     """
 
     target: Float64[Array, "m"]
@@ -268,9 +343,17 @@ class ObservationGoal:
     action_bounds: tuple[float, float]
     n_candidates: int
     horizon: int
+    info_target: int | None
 
     def __init__(
-        self, target, action_bounds, *, precision=None, n_candidates=21, horizon=1
+        self,
+        target,
+        action_bounds,
+        *,
+        precision=None,
+        n_candidates=21,
+        horizon=1,
+        info_target=None,
     ) -> None:
         target = jnp.asarray(target, dtype=float)
         object.__setattr__(self, "target", target)
@@ -283,6 +366,9 @@ class ObservationGoal:
         object.__setattr__(self, "action_bounds", action_bounds)
         object.__setattr__(self, "n_candidates", n_candidates)
         object.__setattr__(self, "horizon", horizon)
+        object.__setattr__(
+            self, "info_target", None if info_target is None else int(info_target)
+        )
         self._validate()
 
     def _validate(self) -> None:
@@ -308,3 +394,8 @@ class ObservationGoal:
             )
         if self.horizon < 1:
             raise ValueError(f"horizon must be >= 1, got {self.horizon}")
+        if self.info_target is not None and self.info_target < 0:
+            raise ValueError(
+                f"info_target must be a non-negative node index or None, "
+                f"got {self.info_target}"
+            )

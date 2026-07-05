@@ -8,7 +8,7 @@ from numpy.typing import ArrayLike
 
 from cpomdp.types import Belief, LinearGaussianModel
 
-__all__ = ["InferenceBackend", "validate_step_inputs"]
+__all__ = ["EfeBackend", "InferenceBackend", "validate_step_inputs"]
 
 
 @runtime_checkable
@@ -21,11 +21,16 @@ class InferenceBackend(Protocol):
     recursive filter step: the current belief goes in as the ``prior`` and the
     updated belief comes back as the posterior.
 
-    The Protocol is structural: any class with a matching ``infer_states`` is a
-    backend, with no shared base class. This is the abstraction wall — the
-    native Kalman fast path and the RxInfer oracle are interchangeable behind it,
-    and neither's implementation (JAX, juliacall, …) leaks into this signature.
+    The Protocol is structural: any class with a matching ``infer_states`` (and the
+    ``model`` it was built from) is a backend, with no shared base class. This is the
+    abstraction wall — the native Kalman fast path and the RxInfer oracle are
+    interchangeable behind it, and neither's implementation (JAX, juliacall, …) leaks
+    into this signature.
     """
+
+    # The model this backend was built from. A backend is *built from a model*, so it
+    # can always hand it back — the Agent derives its own ``model`` from here.
+    model: LinearGaussianModel
 
     def infer_states(
         self,
@@ -39,6 +44,37 @@ class InferenceBackend(Protocol):
         ``action`` just taken, if the model has a control matrix), return the
         updated belief.
         """
+        ...
+
+
+@runtime_checkable
+class EfeBackend(InferenceBackend, Protocol):
+    """An ``InferenceBackend`` that also supports *factored* EFE action selection.
+
+    A node-structured backend: beyond ``infer_states`` it exposes the pre-observation
+    predicted joint (``predicted_belief`` → Σ⁺), the real observation model
+    (``observation_model`` → C, R), and the per-node ``block`` the epistemic term can
+    target (issue #26). ``FfgEfeSelector`` and the Agent's EFE dispatch depend on *this*
+    abstraction, never the concrete backend class — so action selection stays above the
+    backend layer (Dependency Inversion).
+    """
+
+    dims: tuple[int, ...]
+    n_total: int
+
+    @property
+    def observation_model(self) -> tuple[Float64[Array, "m n"], Float64[Array, "m m"]]:
+        """The real sensor ``(C, R)`` embedded in the joint state (the EFE reads it)."""
+        ...
+
+    def predicted_belief(
+        self, prior: Belief, action: ArrayLike | None = None
+    ) -> Belief:
+        """The joint after dynamics + couplings, before observing (Σ⁺, μ⁺)."""
+        ...
+
+    def block(self, node: int) -> range:
+        """The joint-state indices node ``node`` occupies (``info_target`` → block)."""
         ...
 
 
