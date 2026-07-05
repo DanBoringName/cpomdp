@@ -556,6 +556,19 @@ class CouplingGraphBackend:
         return range(self._offsets[node], self._offsets[node + 1])
 
     @property
+    def flat_model(self) -> LinearGaussianModel:
+        """The flat ``LinearGaussianModel`` of the *real* interface — an Agent's model.
+
+        Block-diagonal dynamics (F, Q), the real sensors (C, R), and the control — the
+        joint state as one linear-Gaussian model, carrying the metadata an ``Agent``
+        reads (``n_observations``, ``control``, ``n_controls``). Pass it as ``Agent``'s
+        ``model`` alongside ``backend=self`` to run the FFG as an agent (issue #26).
+        Distinct from ``to_flat_model()``, which *augments* this with the structural
+        couplings as pseudo-observations for the oracle cross-check.
+        """
+        return self._flat_model
+
+    @property
     def observation_model(self) -> tuple[jax.Array, jax.Array]:
         """The real sensor ``(C, R)`` embedded in the joint state — what the EFE reads.
 

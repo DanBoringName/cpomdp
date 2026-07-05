@@ -5,11 +5,13 @@ from jaxtyping import Array, Float64
 from numpy.typing import ArrayLike
 
 from cpomdp.backends.base import InferenceBackend
+from cpomdp.backends.coupling import CouplingGraphBackend
 from cpomdp.backends.kalman import KalmanBackend
 from cpomdp.control import LQRController
 from cpomdp.selection import (
     ActionSelector,
     EFESelector,
+    FfgEfeSelector,
     LQRSelector,
     ObservationGoal,
     Preference,
@@ -145,11 +147,17 @@ class Agent:
                 raise ValueError(
                     "an ObservationGoal needs a model with a control matrix to act."
                 )
-            if sensor_is_fixed and selector is None:
+            is_ffg = isinstance(self._backend, CouplingGraphBackend)
+            if sensor_is_fixed and selector is None and not is_ffg:
                 raise ValueError(
                     "an ObservationGoal on a fixed sensor is output regulation "
                     "(deferred); pass a StateGoal for the LQR path, or "
                     "selector=EFESelector(...) to opt into H=1 EFE."
+                )
+            if objective.info_target is not None and not is_ffg:
+                raise ValueError(
+                    "info_target aims the epistemic at an FFG node; it needs a "
+                    "CouplingGraphBackend, not a flat backend."
                 )
             m = model.n_observations
             obs_target = jnp.asarray(objective.target, dtype=float)
@@ -160,19 +168,18 @@ class Agent:
                 )
             self._controller = None
             self._goal = None
-            self._preference = Preference(
-                jnp.asarray(objective.target, dtype=float), objective.precision
-            )
-            self._selector = (
-                selector
-                if selector is not None
-                else EFESelector(
+            self._preference = Preference(obs_target, objective.precision)
+            if selector is not None:
+                self._selector = selector
+            elif is_ffg:
+                self._selector = self._build_ffg_selector(objective)
+            else:
+                self._selector = EFESelector(
                     model,
                     n_candidates=objective.n_candidates,
                     action_bounds=objective.action_bounds,
                     horizon=objective.horizon,
                 )
-            )
             self._last_action = jnp.zeros(model.n_controls)
 
         else:
@@ -180,6 +187,37 @@ class Agent:
                 f"objective must be a StateGoal or ObservationGoal, "
                 f"got {type(objective).__name__}."
             )
+
+    def _build_ffg_selector(self, objective: ObservationGoal) -> FfgEfeSelector:
+        """The EFE selector for an ObservationGoal on a branching backend (issue #26).
+
+        ``info_target`` names the latent *node* whose marginal info gain is the
+        epistemic value; ``None`` aims at the whole joint state. Translate that node to
+        its joint-state block and hand it to the ``FfgEfeSelector``.
+        """
+        backend = self._backend
+        assert isinstance(backend, CouplingGraphBackend)  # only built for the FFG path
+        if objective.horizon != 1:
+            raise ValueError(
+                "H-step EFE on the FFG backend is deferred; ObservationGoal.horizon "
+                "must be 1 with a CouplingGraphBackend."
+            )
+        if objective.info_target is None:
+            target: range = range(backend.n_total)  # whole-state info gain
+        else:
+            n_nodes = len(backend.dims)
+            if not 0 <= objective.info_target < n_nodes:
+                raise ValueError(
+                    f"info_target {objective.info_target} is not a node index "
+                    f"(0..{n_nodes - 1})."
+                )
+            target = backend.block(objective.info_target)
+        return FfgEfeSelector(
+            backend,
+            target=target,
+            n_candidates=objective.n_candidates,
+            action_bounds=objective.action_bounds,
+        )
 
     @property
     def qs(self) -> Belief:
