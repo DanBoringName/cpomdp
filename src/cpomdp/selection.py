@@ -10,7 +10,7 @@ from jaxtyping import Array, Float64
 from numpy.typing import ArrayLike
 
 from cpomdp._validation import validate_covariance
-from cpomdp.backends.base import EfeBackend
+from cpomdp.backends.base import EfeBackend, InadmissiblePartitionError
 from cpomdp.control import LQRController
 from cpomdp.efe import _ffg_efe_step, expected_free_energy, policy_efe
 from cpomdp.types import Belief, LinearGaussianModel
@@ -236,6 +236,19 @@ class FfgEfeSelector:
         if n_candidates < 2:
             raise ValueError(
                 f"n_candidates must be at least 2 to search, got {n_candidates}"
+            )
+        # ADR-018 admissibility: refuse a carry partition that severs an edge the model
+        # declares EFE-load-bearing — it would break the temporal integration the
+        # epistemic rides on (the drift could still look right; see the error). Enforced
+        # here, at the EFE path; pure filtering on any partition is never blocked.
+        severed = backend.severed_efe_edges()
+        if severed:
+            edges = ", ".join(f"{e.parent}->{e.child}" for e in severed)
+            raise InadmissiblePartitionError(
+                f"the carry partition severs EFE-load-bearing edge(s) [{edges}]; the "
+                "epistemic about the targeted latent would degrade while the drift may "
+                "still pass. Keep the edge's endpoints in one cluster, or unflag it if "
+                "a severed-mass check shows the cut is safe."
             )
         # Front-load (ADR-002): the candidate grid, the target block, the constant C.
         # R is *not* front-loaded — it may be state-dependent, so it is read per

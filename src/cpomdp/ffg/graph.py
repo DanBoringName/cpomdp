@@ -36,12 +36,21 @@ class Coupling:
     ``W`` (shape ``(dim[child], dim[parent])``) and its noise covariance. ``tau`` is a
     time-constant carried alongside the edge; it is metadata and does not affect the
     factor.
+
+    ``efe_relevant`` is a modeller's *declaration* that this edge carries information
+    the instrumental epistemic depends on — a physics call, not a structural one (in
+    chemotaxis the gradient rides receptor->CheA->CheY, while CheA->CheB methylation is
+    observed and coupled yet gradient-blind). A carry partition (ADR-016) that severs a
+    flagged edge drops the cross-temporal covariance it holds, breaking the integration
+    of that information about a slow latent; the EFE selector refuses such a partition
+    (ADR-018). Default ``False``; it does not affect the factor or the filter.
     """
 
     parent: int
     child: int
     factor: GaussianCoupling
     tau: float
+    efe_relevant: bool = False
 
 
 class CouplingGraph:

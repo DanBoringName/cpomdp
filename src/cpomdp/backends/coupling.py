@@ -23,7 +23,7 @@ from numpy.typing import ArrayLike
 
 from cpomdp.backends.base import validate_step_inputs
 from cpomdp.ffg.factors.linear_gaussian import GaussianTransition, ObservationFactor
-from cpomdp.ffg.graph import CouplingGraph
+from cpomdp.ffg.graph import Coupling, CouplingGraph
 from cpomdp.ffg.message import CanonicalGaussian
 from cpomdp.types import Belief, LinearGaussianModel
 
@@ -104,6 +104,10 @@ class CouplingGraphBackend:
         self._sensor_is_fixed = all(
             o.is_fixed for o in self.graph.observations.values()
         )
+        # node -> its partition cluster index (ADR-018 admissibility diagnostic).
+        self._cluster_of = {
+            node: cid for cid, cluster in enumerate(self._partition) for node in cluster
+        }
 
     @staticmethod
     def _validate_transitions(
@@ -668,6 +672,23 @@ class CouplingGraphBackend:
         block the epistemic term targets — ``info_target`` node → ``block`` (issue #26).
         """
         return range(self._offsets[node], self._offsets[node + 1])
+
+    def severed_efe_edges(self) -> tuple[Coupling, ...]:
+        """The EFE-relevant edges this carry partition cuts (ADR-018 diagnostic).
+
+        Each ``efe_relevant`` coupling whose parent and child fall in different clusters
+        — so the carry drops the cross-temporal covariance it holds, breaking the
+        integration of that information about the targeted latent. Non-empty means the
+        EFE selector must refuse this partition; empty for the exact ``[[all]]`` carry
+        and for any cut that only severs unflagged edges (e.g. the methylation cut). A
+        structural read, not a filter step — no covariance is formed here.
+        """
+        return tuple(
+            edge
+            for edge in self.graph.couplings
+            if edge.efe_relevant
+            and self._cluster_of[edge.parent] != self._cluster_of[edge.child]
+        )
 
     @property
     def model(self) -> LinearGaussianModel:
