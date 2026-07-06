@@ -62,7 +62,7 @@ from cpomdp.types import Belief, LinearGaussianModel
 # Process-global by necessity; see ADR-004.
 jax.config.update("jax_enable_x64", True)
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 __all__ = [
     "ActionSelector",

@@ -4,10 +4,12 @@ Everything worth noting lands here. The format follows [Keep a Changelog](https:
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-07-06
+
 Forney factor-graph (FFG) message passing — the continuous-state generalisation of the
 Kalman/EFE path to a branching model the chain cannot draw cleanly (ADR-012, ADR-014).
 The chain is the degenerate case and stays validated byte-numerically against the Kalman
-filter. `__version__` stays `0.3.0` until the v0.4 release is cut.
+filter.
 
 ### Added
 
