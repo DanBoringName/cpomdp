@@ -21,7 +21,7 @@ same belief over ``r``, asserted before the figure is ever drawn.
 
 Needs the ``examples`` extra (matplotlib, not a runtime dependency of the library)::
 
-    uv run --extra examples python examples/coupling_graph_figure.py
+    uv run --extra examples python examples/ffg/coupling_graph_figure.py
 
 Pass ``--check`` to print the two routes' posteriors and their agreement, skipping the
 render (no plotting deps on that path).
@@ -432,7 +432,7 @@ def render(out_path: Path) -> Path:
     )
     fig.text(
         0.5,
-        0.075,
+        0.078,
         f"both routes  ->  belief over r:   mu = {mu:.3f},   sigma^2 = {var:.3f}"
         f"      identical to {gap:.0e}",
         ha="center",
@@ -441,10 +441,21 @@ def render(out_path: Path) -> Path:
         fontsize=10.5,
     )
     fig.text(
-        0.02,
-        0.025,
+        0.5,
+        0.04,
+        "the certifiable pole: a provably-optimal reference exists (the Kalman floor), "
+        "and CouplingGraph.infer attains it",
+        ha="center",
+        va="bottom",
+        color=INK,
+        fontsize=8.5,
+        style="italic",
+    )
+    fig.text(
+        0.985,
+        0.012,
         "cpomdp v0.4  ·  CouplingGraph.infer vs flattened KalmanBackend",
-        ha="left",
+        ha="right",
         va="bottom",
         color=GRAY,
         fontsize=7.5,

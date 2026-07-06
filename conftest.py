@@ -9,4 +9,6 @@ the test process resolves them.
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent / "examples"))
+_examples = Path(__file__).parent / "examples"
+sys.path.insert(0, str(_examples))
+sys.path.insert(0, str(_examples / "ffg"))

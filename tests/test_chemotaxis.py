@@ -1,7 +1,7 @@
 """The E. coli chemotaxis generative model as a native FFG (Phase 3).
 
-Pins the reusable builder `examples/chemotaxis_model.py`: the receptor-driven CheA hub
-feeding a fast CheY -> motor branch and a slow CheR/CheB methylation branch, with
+Pins `examples/ffg/chemotaxis_model.py`: the receptor-driven CheA hub feeding a fast
+CheY -> motor branch and a slow CheR/CheB methylation branch, with
 per-node Ornstein-Uhlenbeck dynamics discretised on a single clock. Correctness is the
 established bar: the built model's filtering matches an independent `KalmanBackend` on
 the flattened joint (`to_flat_model`) at atol 1e-7. The timescale separation (slow

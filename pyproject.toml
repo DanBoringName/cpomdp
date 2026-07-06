@@ -124,7 +124,7 @@ convention = "google"
 
 [tool.ty.environment]
 python-version = "3.10"
-extra-paths = ["examples"]
+extra-paths = ["examples", "examples/ffg"]
 
 [tool.ty.src]
 include = ["src", "tests"]

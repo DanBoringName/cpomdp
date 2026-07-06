@@ -29,14 +29,14 @@ from cpomdp.types import Belief, LinearGaussianModel
 
 
 class IncompatibleLinearizationError(ValueError):
-    """The flattened-Kalman oracle route cannot reproduce this backend's linearization.
+    """The flattened-Kalman route can't reproduce this backend's linearization.
 
-    A theorem, not a TODO: ``to_flat_model`` encodes couplings as pseudo-observations,
-    so the flat Kalman linearizes ``R`` at the pre-coupling predicted mean μ⁻, while the
-    FFG linearizes at the coupling-resolved μ⁺ (issue #27, ADR-019). With a
-    state-dependent ``R(x)`` *and* a mean-shifting coupling, μ⁻ ≠ μ⁺ and no fixed flat
-    model reproduces the filter. The R(x) oracle is the standalone NumPy R(μ⁺) filter
-    (in the backend tests) plus the single-node ``CallableSensor`` cross-check.
+    ``to_flat_model`` encodes couplings as pseudo-observations, so the flat Kalman
+    linearizes ``R`` at the pre-coupling predicted mean μ⁻, while the FFG linearizes at
+    the coupling-resolved μ⁺ (issue #27, ADR-019). With a state-dependent ``R(x)`` and a
+    mean-shifting coupling, μ⁻ ≠ μ⁺ and no fixed flat model reproduces the filter. The
+    oracle is the standalone NumPy R(μ⁺) filter (backend tests) plus the single-node
+    ``CallableSensor`` cross-check.
     """
 
 
@@ -749,13 +749,13 @@ class CouplingGraphBackend:
         """
         if not self._sensor_is_fixed:
             if self.graph.couplings:
-                # Theorem: a mean-shifting coupling makes μ⁺ ≠ μ⁻, so no fixed flat
-                # model reproduces R(μ⁺).
+                # A mean-shifting coupling makes μ⁺ ≠ μ⁻, so no fixed flat model
+                # reproduces R(μ⁺) -- inherent, not a missing feature.
                 raise IncompatibleLinearizationError(
-                    "to_flat_model cannot flatten a state-dependent R(x) with "
-                    "couplings (see IncompatibleLinearizationError). Its oracle is the "
-                    "NumPy R-at-mu-plus filter (backend tests) or the single-node "
-                    "CallableSensor cross-check."
+                    "Cannot flatten a state-dependent R(x) model with couplings: a "
+                    "mean-shifting coupling makes the prediction mean μ⁺ differ from "
+                    "the prior mean μ⁻, so no fixed linear-Gaussian model reproduces "
+                    "R(μ⁺)."
                 )
             # Coupling-free: μ⁺ = μ⁻, so a CallableSensor flat model *would* be faithful
             # — that emission is simply not wired (build KalmanBackend(CallableSensor)

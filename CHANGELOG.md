@@ -12,7 +12,8 @@ filter. `__version__` stays `0.3.0` until the v0.4 release is cut.
 ### Added
 
 - FFG message passing in canonical/information form, owned from-scratch in JAX, reachable
-  under `cpomdp.ffg.*` (not yet re-exported from the top-level namespace):
+  under `cpomdp.ffg.*` (the model-construction symbols are also re-exported at the top
+  level — see the public-surface entry below, ADR-021):
   - `CanonicalGaussian` (`cpomdp.ffg.message`) — the `(Λ, h)` message payload; factor
     product is addition, marginalisation a Schur complement, moment form a readout view.
   - Tier-1 linear-Gaussian factor nodes (`cpomdp.ffg.factors.linear_gaussian`):
@@ -43,11 +44,33 @@ filter. `__version__` stays `0.3.0` until the v0.4 release is cut.
     `CanonicalGaussian.__sub__`) in place of the dense joint solve — O(tree) rather than
     O(n³), matching the dense path to atol 1e-7. The exact endpoint stays byte-identical
     under `[[all]]`.
-- Examples: `bacillus_uncertain_food.py`, the instrumental-epistemics flagship — the
-  beacon now resolves an explicit food *latent* rather than the agent's own position
-  (ADR-013), runnable on both `KalmanBackend` and `ChainBackend`; `coupling_graph_figure.py`,
-  the v0.4 difference demo — a branching tree resolved natively vs. the hand-flattened
-  joint precision a normal backend forces.
+- State-dependent sensing `R(x)` on the branching backend (issue #27, ADR-019): a
+  `CallableGaussianObservation` factor and a two-pass linearisation that reads `R` at the
+  coupling-resolved predictive mean μ⁺ — the dual effect (`observation_noise_at`,
+  `predicted_belief`).
+- `FfgEfeSelector` scores the per-candidate epistemic term over the FFG, so an `Agent` with
+  an `ObservationGoal(info_target=…)` seeks information through a branch. `severed_efe_edges`
+  / `InadmissiblePartitionError` reject a carry partition that would sever an EFE-relevant
+  edge (ADR-018).
+- `IncompatibleLinearizationError` (`cpomdp.backends.coupling`): `to_flat_model` raises it
+  when a coupled `R(x)` model is asked to flatten. A mean-shifting coupling makes μ⁺ ≠ μ⁻, so
+  no fixed linear-Gaussian model reproduces `R(μ⁺)` (ADR-019, ADR-020).
+- Public surface (ADR-021): the branching construction symbols (`CouplingGraph`, `Coupling`,
+  `CouplingGraphBackend`, `IncompatibleLinearizationError`, the four Gaussian factors) and the
+  selector family (`ActionSelector`, `EFESelector`, `FfgEfeSelector`, `LQRSelector`) now sit in
+  the top-level `cpomdp` namespace. `FfgEfeSelector` gains `EFESelector`'s `n_candidates` /
+  `horizon` / `cost_per_cycle`.
+- Examples: `epistemic_dissociation_figure.py`, the v0.4 flagship — two agents on one maze,
+  differing only in a state-dependent vs. fixed cue sensor; the `R(x)` agent resolves the
+  hidden context through a branch and crosses to the reward, the fixed-sensor agent collapses
+  to LQR, and the `R(x)` model can't be flattened (`IncompatibleLinearizationError`).
+  `bacillus_uncertain_food.py`, the instrumental-epistemics demo — the beacon resolves an
+  explicit food *latent* rather than the agent's own position (ADR-013), on both
+  `KalmanBackend` and `ChainBackend`. `coupling_graph_figure.py`, the difference demo — a
+  branching tree resolved natively vs. the hand-flattened joint precision.
+  `chemotaxis_figure.py`, the same on a real branching network (the E. coli chemotaxis
+  pathway's shape, native FFG vs flattened Kalman) — illustrative only, no biophysics
+  (ADR-020).
 
 ### Validation
 

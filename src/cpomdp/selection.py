@@ -267,15 +267,10 @@ class FfgEfeSelector:
     def select(self, belief: Belief, preference: Preference) -> Float64[Array, "p"]:
         """The grid action minimising ``G`` (the per-cycle work).
 
-        For each candidate action, predict the joint (``predicted_belief`` → ``μ⁺``,
-        ``Σ⁺``), score it with ``_ffg_efe_step``, then ``argmin`` over the grid.
-
-        TODO(energy): the ``vmap`` recomputes ``Σ⁺`` per candidate, though ``Σ⁺`` is
-        action-independent. Under a fixed sensor so is ``R`` and the epistemic, so a
-        follow-up can hoist them out and vary only the pragmatic mean. Under a
-        state-dependent ``R(x)`` the epistemic genuinely varies per candidate (that is
-        the dual effect), so ``R(μ⁺)`` must be re-evaluated — the intended per-cycle
-        cost, not waste. This is the RFC-001 per-cycle hot path, flagged not to balloon.
+        For each candidate: predict the joint (``predicted_belief`` → ``μ⁺``, ``Σ⁺``),
+        score with ``_ffg_efe_step``, ``argmin`` over the grid. ``R`` is re-read at
+        ``μ⁺`` per candidate — constant under a fixed sensor, action-dependent under
+        ``R(x)`` (the dual effect). This is the RFC-001 hot path; keep it lean.
         """
 
         def g_of(action: Float64[Array, "p"]) -> Float64[Array, ""]:
@@ -294,6 +289,21 @@ class FfgEfeSelector:
 
         g = jax.vmap(g_of)(self._candidates)
         return self._candidates[self._argmin(g)]
+
+    @property
+    def n_candidates(self) -> int:
+        """The per-cycle EFE-evaluation count — attributable work (RFC-001)."""
+        return self._candidates.shape[0]
+
+    @property
+    def horizon(self) -> int:
+        """One-step; the H-step FFG rollout is a deferred seam."""
+        return 1
+
+    @property
+    def cost_per_cycle(self) -> int:
+        """Per-cycle step-evals = n_candidates (horizon is 1)."""
+        return self.n_candidates
 
 
 @dataclass(frozen=True, init=False)
