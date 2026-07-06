@@ -1594,3 +1594,53 @@ directly when the paper leans on it.)
   biophysical chemotaxis model; it must not display or imply η, β, or the drift bound.
 - The certified-regret credibility suite (F_rel on known-p* worlds) is the honest north-star
   flagship direction; deferred beyond the small-work v0.4 close.
+
+## ADR-021 — v0.4 FFG: the public export surface (top-level construction API, internal selector)
+
+**Date:** 2026-07-06
+**Status:** Accepted
+**Phase:** v0.4, closed-loop active inference on the FFG (issue #27) — API/release
+**Extends:** ADR-002 (the construction/loop split), ADR-019 (R(x)), ADR-020 (the boundary
+framing); gates the v0.4 release and the dissociation flagship
+
+### The question
+
+The branching-FFG machinery (issues #25–#27) shipped behind deep module paths: a user
+building the flagship had to reach into `cpomdp.ffg.graph`, `cpomdp.backends.coupling`, and `cpomdp.ffg.factors.linear_gaussian`.
+
+### Decision
+
+Promote the model-*construction* symbols to the top-level `cpomdp` namespace, and only
+those. A user declares and runs a branching model entirely off `from cpomdp import …`:
+
+- `CouplingGraph`, `Coupling` — the graph and its edges.
+- `GaussianObservation`, `CallableGaussianObservation`, `GaussianCoupling`,
+  `GaussianTransition` — the factors an edge/node carries.
+- `CouplingGraphBackend`, `IncompatibleLinearizationError` — the engine and the error it
+  raises when a coupled `R(x)` model is asked to flatten.
+
+The **selector family** is also uniform public: `ActionSelector` (the protocol),
+`EFESelector`, `FfgEfeSelector`, and `LQRSelector` all sit in `cpomdp.__all__`. I first
+kept `FfgEfeSelector` internal because the `Agent` auto-dispatches it, but that split it
+from its flat twin `EFESelector`, which was already exported — an odd seam to expose from
+one side only. So `FfgEfeSelector` now carries the same introspection surface as
+`EFESelector` (`n_candidates`, `horizon`, `cost_per_cycle`) and the same top-level
+visibility. Pass `selector=` to `Agent` to override the dispatched one.
+
+The canonical *homes* are unchanged: the symbols still live in `cpomdp.ffg.*` and
+`cpomdp.backends.coupling`, and those paths keep working. The top-level names are the
+documented, stable entry point; the deep paths are where the code lives, not where callers
+are asked to look. `cpomdp.ffg` / `cpomdp.ffg.factors` / `cpomdp.backends` `__init__`
+modules stay docstring-only (no re-export layer to keep in sync).
+
+### Consequences
+
+- `cpomdp.__all__` grows by the branching-construction symbols and the selector family; the
+  import block sits in the lower, `agent`-free layer, so there is no import cycle (the FFG
+  modules never import the top package or `cpomdp.agent`).
+- `examples/ffg/epistemic_dissociation_figure.py` builds off a single `from cpomdp import (…)`
+  block — the reproducible snippet the release and the docs quote.
+- The selectors now read as one family: same `select(belief, preference)` contract, same
+  `n_candidates`/`horizon`/`cost_per_cycle` introspection, same top-level visibility.
+
+*Can refine in future.*

@@ -1,6 +1,6 @@
 [project]
 name = "cpomdp"
-version = "0.3.0"
+version = "0.4.0"
 description = "Continuous active inference for Python — the continuous-state sibling of pymdp."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -124,7 +124,7 @@ convention = "google"
 
 [tool.ty.environment]
 python-version = "3.10"
-extra-paths = ["examples"]
+extra-paths = ["examples", "examples/ffg"]
 
 [tool.ty.src]
 include = ["src", "tests"]

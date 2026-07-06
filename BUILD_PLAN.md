@@ -243,7 +243,7 @@ exhibits a topology the chain path cannot express cleanly.
       `test_branching_tree_matches_coupling_graph` collects the same root marginal up a
       degree-3 tree through RxInfer's machinery and `CouplingGraph.infer`.
 - [x] Demo/figure contrasting the native FFG representation with the flattened-joint
-      Kalman equivalent — `examples/coupling_graph_figure.py` (asset
+      Kalman equivalent — `examples/ffg/coupling_graph_figure.py` (asset
       `docs/assets/coupling_graph.png`): `CouplingGraph` (name three edges, one `infer`)
       beside the 4x4 joint precision you otherwise assemble, invert, and marginalise.
 - [x] Numerical agreement of the FFG posterior with the flattened-joint oracle — the
@@ -300,6 +300,10 @@ within-slice factors. The distribute-pass / factored machinery is Phase 2, not h
 
 ### Phase 3 — chemotaxis generative model as an FFG
 
+> Paused (ADR-020): the chemotaxis witness is a build-on-top (RFC-002), not a v0.4
+> deliverable. The abstract dissociation demo (Phase 5) carries the v0.4 story instead; the
+> Mattingly timescales below stay for whenever the paused track resumes.
+
 - [ ] Receptor → CheA (degree-3) → CheY-P (fast) and CheR/CheB methylation (slow), native
       `CouplingGraph` + per-node transitions carrying the Mattingly timescales
       (τ₁≈0.05s kinase, τ₂≈9.9s methylation, λ_tot≈0.86 s⁻¹); discretise on the one `dt`.
@@ -311,12 +315,21 @@ within-slice factors. The distribute-pass / factored machinery is Phase 2, not h
       marginals, reducing to `expected_free_energy` on a chain (atol 1e-7); ADR-018
       admissibility guard. Sign/decomposition matches ADR-005; rfcs/004 tests pass.
 
-### Phase 5 — v1 validation demo + figure (issue #27)
+### Phase 5 — v0.4 flagship demo + figure (issue #27; reframed by ADR-020)
 
-- [ ] `{fast+CheA}/{slow}` partition reproduces η (=0.66±0.05, **dimensionless — never a
-      rate**) and drift within the full-joint run and Mattingly bounds; EFE-admissibility
-      check passes on the cut. New `examples/chemotaxis_*.py`, the closed-loop successor to
-      `coupling_graph_figure.py`.
+- [x] The v0.4 flagship is the **abstract dissociation demo**
+      (`examples/ffg/epistemic_dissociation_figure.py`), not a chemotaxis reproduction: two
+      agents on one branching FFG differ only in a state-dependent vs. fixed cue sensor; the
+      `R(x)` agent resolves a hidden context through a branch and the fixed-sensor agent
+      collapses to LQR, and the `R(x)` model provably cannot be flattened
+      (`IncompatibleLinearizationError` — the headline). `--check` asserts all three results;
+      `severed_efe_edges` / ADR-018 guards the EFE-relevant cut.
+- [~] **Superseded (ADR-020):** the earlier "`{fast+CheA}/{slow}` partition reproduces η
+      (=0.65±0.05) and drift within Mattingly bounds" target does **not** fall faithfully out
+      of cpomdp (no swimming `v_d`, no directed bits/s rate, the tree cannot hold the CheB
+      feedback that causes η < 1). The faithful in-regime statement is the LQG
+      sequential-rate-distortion bound; the chemotaxis witness is a paused build-on-top
+      (RFC-002), prose-only, never implied by the demo's numbers.
 
 ### Deferred beyond v0.4 (ADR-014 — tracked as GitHub issues)
 

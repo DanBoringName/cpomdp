@@ -40,24 +40,52 @@ the native `KalmanBackend` and the v0.4 FFG `ChainBackend` and asserts they agre
 
 ![Four bacilli learning where the food is, under different goal precisions Λ](assets/bacillus_uncertain_food.gif)
 
-## FFG — declare the structure, skip the joint
+## FFG examples — branching factor graphs
 
-[`coupling_graph_figure.py`](https://github.com/inferogenesis/cpomdp/blob/main/examples/coupling_graph_figure.py) · v0.4 · ADR-012, ADR-014
+The v0.4 examples that need a *branching* model rather than a chain. Full writeups in the
+[FFG sub-gallery](https://github.com/inferogenesis/cpomdp/blob/main/examples/ffg/README.md).
 
-A chain is the one shape a Kalman filter already is, so a chain backend proves nothing
-the normal path can't — the factor graph earns its keep the moment the model *branches*.
-This is the smallest model that genuinely does: a hidden root `r` feeds a hidden hub `h`
-that fans out to two observed leaves `a` and `b`, giving `h` three neighbours, a degree
-no path (and so no chain) can hold. The figure sets the two routes to the root's
-posterior side by side: on the left, `CouplingGraph` — name the three edges, call
-`infer` once; on the right, the 4x4 joint precision a normal backend makes you assemble,
-invert, and marginalise back down to `r`, re-derived whenever the wiring changes. Both
-land on the same belief over `r` (μ ≈ 1.234, σ² ≈ 0.137), agreeing to floating-point
-noise (the figure computes the gap live and prints it). The payoff is not a different
-answer — it is that the branching stays *declared* instead of flattened, the difference
-ADR-014 asks the v0.4 capstone to show.
+### A branch-coupled R(x) can't be flattened
+
+[`epistemic_dissociation_figure.py`](https://github.com/inferogenesis/cpomdp/blob/main/examples/ffg/epistemic_dissociation_figure.py) · v0.4 · ADR-019, ADR-020, ADR-021
+
+Why an **Forney-style Factor Graph (FFG)** over a flat loop? Because a flat loop can't run B's model at all. Ask
+`CouplingGraphBackend.to_flat_model()` to flatten it and you get
+`IncompatibleLinearizationError` — B's state-dependent `R(x)` sits on a coupling, a
+mean-shifting coupling makes μ⁺ ≠ μ⁻, so no fixed linear-Gaussian model reproduces `R(μ⁺)`.
+A's fixed sensor flattens fine. Then the behaviour that buys: two agents on the same maze,
+differing in that one line. B's live epistemic term detours to read the cue, resolves a hidden
+context through the branch, and crosses to the reward; A's constant epistemic term (Koudahl–Kouw–de
+Vries 2021) collapses to LQR and it stays at the wrong arm. A control statement, not biology
+(ADR-020). `--check` prints the three results without plotting.
+
+![Two agents on the same branching maze: B reads a state-dependent cue and crosses to the reward, A with a fixed sensor cannot](assets/epistemic_dissociation.gif)
+
+### Declare the structure, skip the joint
+
+[`coupling_graph_figure.py`](https://github.com/inferogenesis/cpomdp/blob/main/examples/ffg/coupling_graph_figure.py) · v0.4 · ADR-012, ADR-014
+
+The factor graph earns its keep the moment the model *branches*: a hidden root `r` seen only
+through a hub `h` that fans out to two observed leaves, a degree no chain can hold. The figure
+sets `CouplingGraph.infer` (name the edges, call once) beside the 4x4 joint precision a normal
+backend makes you assemble, invert, and marginalise back down to `r`. Both land on the same
+belief (μ ≈ 1.234, σ² ≈ 0.137) to floating-point noise; the branching stays *declared* instead
+of flattened (ADR-014).
 
 ![A branching tree resolved two ways: CouplingGraph.infer against the hand-flattened joint precision](assets/coupling_graph.png)
+
+### A chemotaxis network, as its shape
+
+[`chemotaxis_figure.py`](https://github.com/inferogenesis/cpomdp/blob/main/examples/ffg/chemotaxis_figure.py) · v0.4 · ADR-012, ADR-020
+
+The same declare-and-infer on a real branching network: E. coli chemotaxis, a receptor-driven
+CheA kinase hub feeding a fast CheY → motor branch and a slow CheB methylation branch — a tree
+with a degree-3 node no chain can hold. cpomdp infers the hidden CheA hub from the downstream
+readouts (CheB and the two motors), exact to a flattened Kalman. It's the shape, not the
+biophysics: no CheB → receptor feedback (a loop, not a tree), no swimming or efficiency; a
+faithful E. coli model is a build-on-top (RFC-002, ADR-020).
+
+![The E. coli chemotaxis network as a branching factor graph; the hidden CheA kinase hub inferred through its downstream readouts](assets/chemotaxis.png)
 
 ## The journey
 

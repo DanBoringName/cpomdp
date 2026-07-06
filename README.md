@@ -20,7 +20,7 @@ Four bacilli seeking food in the same world — the continuous-state answer to p
 
 ![Four bacilli learning where the food is, under different goal precisions Λ, via continuous active inference](https://raw.githubusercontent.com/inferogenesis/cpomdp/main/docs/assets/bacillus_uncertain_food.gif)
 
-Reproduce it with [`examples/bacillus_uncertain_food.py`](https://github.com/inferogenesis/cpomdp/blob/main/examples/bacillus_uncertain_food.py) (`pip install "cpomdp[examples]"`). More — including the v0.3 demo where the beacon reveals the agent's *own* position, and the original v0.2 single-bacillus demo — in the [examples gallery](https://github.com/inferogenesis/cpomdp/blob/main/examples/README.md).
+Reproduce it with [`examples/bacillus_uncertain_food.py`](https://github.com/inferogenesis/cpomdp/blob/main/examples/bacillus_uncertain_food.py) (`pip install "cpomdp[examples]"`). More — including the v0.4 [FFG examples](https://github.com/inferogenesis/cpomdp/blob/main/examples/ffg/README.md), where a branch-coupled state-dependent sensor resolves a hidden context and can't be flattened to a Kalman filter — in the [examples gallery](https://github.com/inferogenesis/cpomdp/blob/main/examples/README.md).
 
 ## Install
 
