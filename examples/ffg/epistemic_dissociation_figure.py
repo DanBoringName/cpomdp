@@ -31,9 +31,10 @@ dimensional) filtering impossibility.
 Not a biology model (ADR-020): the abstract T-maze is the canonical epistemic task
 (Friston et al. 2015), here continuous-state on a factor graph.
 
-Needs the ``examples`` extra (matplotlib + pillow). ``--check`` asserts the three
-results with no plotting deps; the bare command writes the GIF, its poster still, the
-boundary panel, and a static triptych for the paper::
+Needs the ``examples`` extra (matplotlib + pillow). ``--check`` asserts the four
+results with no plotting deps (Result 4 moves the cue off the prior path to strip the
+geometric confound from the dissociation); the bare command writes the GIF, its poster
+still, the boundary panel, and a static triptych for the paper::
 
     uv run --extra examples python examples/ffg/epistemic_dissociation_figure.py --check
     uv run --extra examples python examples/ffg/epistemic_dissociation_figure.py
@@ -77,6 +78,8 @@ CONTEXT, ARM_NODE = 0, 1  # node indices; joint state is [c, x, f]
 # learns the truth, and reverses to the correct arm.
 X_START = 0.0  # start at the junction
 CUE_X = -3.0  # cue location = the wrong arm (where the prior points)
+CUE_DETOUR_X = 1.0  # Result 4: the cue moved OFF the prior path (right of start, while
+# the prior still points left) -- so any cue-ward pull is purely epistemic, no confound
 REWARD_TRUE = 3.0  # true context c: the correct arm is to the RIGHT
 PRIOR_ARM = -3.0  # a-priori guess: the WRONG (left) arm -- routes both agents left
 PRIOR_COV_CONTEXT = 5.0  # context loosely known: must detour to learn it
@@ -114,22 +117,28 @@ def cue_noise(state, params):
     return jnp.diag(jnp.array([params["r_goal"], r_info]))
 
 
-def _cue_params():
-    return {"x0": CUE_X, "r_lo": R_LO, "r_hi": R_HI, "width": R_WIDTH, "r_goal": R_GOAL}
+def _cue_params(cue_x: float = CUE_X):
+    return {"x0": cue_x, "r_lo": R_LO, "r_hi": R_HI, "width": R_WIDTH, "r_goal": R_GOAL}
 
 
-def _fixed_noise_at_prior():
+def _fixed_noise_at_prior(cue_x: float = CUE_X):
     """Agent A's fixed cue noise = R at the prior position (far from cue -> dull)."""
-    return np.asarray(cue_noise(jnp.array([X_START, PRIOR_ARM]), _cue_params()))
+    return np.asarray(cue_noise(jnp.array([X_START, PRIOR_ARM]), _cue_params(cue_x)))
 
 
-def build_backend(*, epistemic_alive: bool) -> CouplingGraphBackend:
-    """The shared branching T-maze; the cue's noise is the only A/B difference."""
+def build_backend(
+    *, epistemic_alive: bool, cue_x: float = CUE_X
+) -> CouplingGraphBackend:
+    """The shared branching T-maze; the cue's noise is the only A/B difference.
+
+    ``cue_x`` relocates the cue along the corridor. It defaults to ``CUE_X`` (the
+    prior arm) for the headline run; Result 4 moves it off the pragmatic path.
+    """
     sensor_model = [[-1.0, 1.0], [-1.0, 1.0]]  # C: both channels read o = f - x
     cue = (
-        CallableGaussianObservation(sensor_model, cue_noise, _cue_params())
+        CallableGaussianObservation(sensor_model, cue_noise, _cue_params(cue_x))
         if epistemic_alive
-        else GaussianObservation(sensor_model, _fixed_noise_at_prior())
+        else GaussianObservation(sensor_model, _fixed_noise_at_prior(cue_x))
     )
     context_to_arm = Coupling(
         parent=CONTEXT,
@@ -184,12 +193,12 @@ def build_agent(backend: CouplingGraphBackend) -> Agent:
     return agent
 
 
-def simulate(*, epistemic_alive: bool, seed: int = 7) -> dict:
+def simulate(*, epistemic_alive: bool, seed: int = 7, cue_x: float = CUE_X) -> dict:
     """Run one agent's closed perceive -> act loop; return its trajectory + beliefs."""
     rng = np.random.default_rng(seed)
-    backend = build_backend(epistemic_alive=epistemic_alive)
+    backend = build_backend(epistemic_alive=epistemic_alive, cue_x=cue_x)
     agent = build_agent(backend)
-    params = _cue_params()
+    params = _cue_params(cue_x)
 
     x_true = float(X_START)
     positions = [x_true]
@@ -222,7 +231,7 @@ def simulate(*, epistemic_alive: bool, seed: int = 7) -> dict:
     }
 
 
-def _boundary_scan(alive: bool) -> dict:
+def _boundary_scan(alive: bool, cue_x: float = CUE_X) -> dict:
     """The action scan behind Result 2 and the boundary panel -- one shared source.
 
     Sweep the candidate-action grid; at each action read the info-channel noise
@@ -231,25 +240,29 @@ def _boundary_scan(alive: bool) -> dict:
     asserts on the spread, the boundary panel plots ``r_info_mu_plus`` -- same numbers
     from the same call, so the gate and the figure can't diverge.
 
-    Returns arrays over the grid: ``grid`` (the actions), ``epistemic`` (the EFE
-    epistemic value), ``r_info_mu_plus`` (``R_info(mu+(a))``), and ``mu_plus_x`` (the
-    position component of node 1's *local* predictive mean -- the vector
-    ``observation_noise_at`` hands to ``cue_noise``, which reads ``x = state[0]``).
+    ``cue_x`` moves the cue along the corridor (Result 4's confound-free geometry);
+    it defaults to the headline location.
+
+    Returns arrays over the grid: ``grid`` (the actions), ``total`` (the minimised EFE
+    ``G = pragmatic - epistemic``), ``epistemic`` (the EFE epistemic value),
+    ``r_info_mu_plus`` (``R_info(mu+(a))``), and ``mu_plus_x`` (the position component
+    of node 1's *local* predictive mean -- the vector ``observation_noise_at`` hands to
+    ``cue_noise``, which reads ``x = state[0]``).
     """
     from cpomdp.efe import _ffg_efe_step
 
-    backend = build_backend(epistemic_alive=alive)
+    backend = build_backend(epistemic_alive=alive, cue_x=cue_x)
     sensor_model, _ = backend.observation_model
     arm_block = list(backend.block(ARM_NODE))  # node 1's joint indices: [position, arm]
     goal = jnp.array([0.0, 0.0])
     precision = jnp.array([[GOAL_PRECISION, 0.0], [0.0, INFO_PRECISION]])
     grid = np.linspace(*ACTION_BOUNDS, GRID_N)
 
-    epistemic, r_info_mu_plus, mu_plus_x = [], [], []
+    total, epistemic, r_info_mu_plus, mu_plus_x = [], [], [], []
     for action in grid:
         predicted = backend.predicted_belief(start_belief(), jnp.array([action]))
         noise = backend.observation_noise_at(predicted.mean)  # R(mu+)
-        _, parts = _ffg_efe_step(
+        efe, parts = _ffg_efe_step(
             predicted.mean,
             predicted.cov,
             sensor_model,
@@ -258,21 +271,23 @@ def _boundary_scan(alive: bool) -> dict:
             precision,
             (CONTEXT,),
         )
+        total.append(float(efe))  # G = pragmatic - epistemic, the minimised quantity
         epistemic.append(float(parts["epistemic"]))
         r_info_mu_plus.append(float(np.asarray(noise)[1, 1]))  # info channel [1, 1]
         local = np.asarray(predicted.mean)[arm_block]  # cue_noise reads x = local[0]
         mu_plus_x.append(float(local[0]))
     return {
         "grid": grid,
+        "total": np.array(total),
         "epistemic": np.array(epistemic),
         "r_info_mu_plus": np.array(r_info_mu_plus),
         "mu_plus_x": np.array(mu_plus_x),
     }
 
 
-# --- the three demonstrated results (assert them; --check prints, no plotting) ---
+# --- the four demonstrated results (assert them; --check prints, no plotting) ---
 def check() -> None:
-    """Assert the three results; the ``IncompatibleLinearizationError`` is the lead."""
+    """Assert the four results; the ``IncompatibleLinearizationError`` is the lead."""
     run_b = simulate(epistemic_alive=True)
     run_a = simulate(epistemic_alive=False)
 
@@ -334,7 +349,53 @@ def check() -> None:
             f"  {tag}: epistemic range = {spread:.2e}   R(mu+) range = {r_spread:.1f}"
             f"   ({'VARIES' if spread > 1e-6 else 'flat'})"
         )
-    print("\nAll three results PASS.")
+    print()
+
+    # Result 4: remove the geometric confound. Results 1-2 sit the cue ON the prior arm,
+    # so B's outbound move fits either drive. Here the cue moves OFF the prior path (to
+    # +CUE_DETOUR_X, right of start) while the prior still points left -- epistemic and
+    # pragmatic now pull opposite ways. The scan carries no draw, so these are exact
+    # facts, not sampled ones: Result 2's mathematics at a geometry where only the
+    # epistemic term can explain any cue-ward preference.
+    print("Result 4 -- confound removed: B's epistemics point at the off-path cue:")
+    scan_b = _boundary_scan(alive=True, cue_x=CUE_DETOUR_X)
+    scan_a = _boundary_scan(alive=False, cue_x=CUE_DETOUR_X)
+    grid = scan_b["grid"]
+    epi_i = int(np.argmax(scan_b["epistemic"]))  # the action B most values sensing at
+    epi_peak, epi_peak_pos = grid[epi_i], scan_b["mu_plus_x"][epi_i]
+    edge = scan_a["total"] - scan_b["total"]  # how much cheaper B rates each action
+    edge_i = int(np.argmax(edge))  # ... peaked where B's edge over A is largest
+    a_choice = grid[int(np.argmin(scan_a["total"]))]  # pragmatic-only myopic optimum
+    b_choice = grid[int(np.argmin(scan_b["total"]))]  # B's myopic optimum from prior
+    # B's information value peaks at a cue-ward (rightward) action, essentially at the
+    # cue; A's is dead flat. The only actions B rates below the pragmatic-only agent are
+    # cue-ward -- and the prior gives no pragmatic reason to go right, so the epistemic
+    # term is the sole explanation.
+    assert epi_peak > 0  # B's epistemic points RIGHT, off the prior path
+    assert abs(epi_peak_pos - CUE_DETOUR_X) < 0.1  # ... and peaks at the cue itself
+    assert float(np.ptp(scan_a["epistemic"])) < 1e-9  # A's epistemic is dead flat
+    assert a_choice < 0  # the pragmatic-only baseline's optimum is prior-ward
+    assert grid[edge_i] > 0  # the action B rates below A is cue-ward (rightward)
+    assert float(edge.max()) > 1.0  # ... and B's discount there is a full nat-plus
+    # Owned locality: at the opening decision the pull is present but not yet decisive.
+    # B's myopic optimum from the prior is still prior-ward, so the detour lives in the
+    # objective, not (yet) reliably in the horizon-1 trajectory (it is noise-gated: some
+    # seeds cross, some stay). A longer horizon is what lets it walk -- see Discussion.
+    assert b_choice < 0
+    print(
+        f"  B epistemic peaks at u={epi_peak:+.2f} (cue at {CUE_DETOUR_X:+.1f})   "
+        f"A epistemic range = {float(np.ptp(scan_a['epistemic'])):.0e} (flat)"
+    )
+    print(
+        f"  B rates u={grid[edge_i]:+.2f} cheaper than A by {edge.max():.2f}   "
+        f"pragmatic-only A's optimum u={a_choice:+.1f} (prior-ward)"
+    )
+    print(
+        f"  horizon-1 locality: B's opening optimum u={b_choice:+.1f} still prior-ward"
+        " -- the cue-ward pull is in the objective, not yet the step -- PASS\n"
+    )
+
+    print("\nAll four results PASS.")
 
 
 # --- rendering ------------------------------------------------------------------
@@ -756,7 +817,7 @@ def _draw_boundary_panel(ax, scan_b: dict, a_fixed_r_info: float) -> None:
     ax.axhline(a_fixed_r_info, color=DEAD, lw=1.8, ls="--", zorder=4)
     ax.plot(grid, curve, color=ALIVE, lw=2.6, zorder=5)
 
-    # the cause, faint on a twin axis: the linearisation point mu+ slides with a
+    # the cause, faint on a twin axis: the linearisation point mu+ slides with u
     ax2 = ax.twinx()
     ax2.plot(
         grid,
@@ -773,7 +834,7 @@ def _draw_boundary_panel(ax, scan_b: dict, a_fixed_r_info: float) -> None:
         spine.set_visible(False)
 
     ax.set_xlim(grid[0], grid[-1])
-    ax.set_xlabel("candidate action  a", color=INK, fontsize=9)
+    ax.set_xlabel("candidate action  u", color=INK, fontsize=9)
     ax.set_ylabel("info-channel noise  R(mu+)", color=ALIVE, fontsize=9)
     ax.tick_params(colors=FAINT, labelsize=7.5)
     for spine in ax.spines.values():
@@ -787,9 +848,9 @@ def _draw_boundary_panel(ax, scan_b: dict, a_fixed_r_info: float) -> None:
     )
 
     ax.text(
-        grid[2],
-        curve[2],
-        "B: R(mu+(a))",
+        grid[7],
+        curve[6],
+        "B: R(mu+(u))",
         color=ALIVE,
         fontsize=9.5,
         fontweight="bold",
