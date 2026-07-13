@@ -4,6 +4,19 @@ Everything worth noting lands here. The format follows [Keep a Changelog](https:
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-07-13
+
+Maintenance release cut for the paper-1 Zenodo archive. No library code changed — the
+public API and numerics are identical to 0.4.0.
+
+### Changed
+
+- Reworked the epistemic-dissociation flagship figure
+  (`examples/ffg/epistemic_dissociation_figure.py`): renamed the candidate action to `u`
+  to stop it clashing with "Agent A", moved the `R(mu+u)` label into a clean gap, and
+  added paper-facing assertions that pin Result 2 at the geometry where only B's edge
+  over A survives. Regenerated `docs/assets/epistemic_dissociation_boundary.png`.
+
 ## [0.4.0] — 2026-07-06
 
 Forney factor-graph (FFG) message passing — the continuous-state generalisation of the
