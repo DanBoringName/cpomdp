@@ -1,7 +1,7 @@
 # cpomdp
 
 [![PyPI](https://img.shields.io/pypi/v/cpomdp.svg)](https://pypi.org/project/cpomdp/)
-[![DOI](https://zenodo.org/badge/1264853857.svg)](https://doi.org/10.5281/zenodo.21334562)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21334563.svg)](https://doi.org/10.5281/zenodo.21334562)
 [![Python](https://img.shields.io/pypi/pyversions/cpomdp.svg)](https://pypi.org/project/cpomdp/)
 [![CI](https://github.com/inferogenesis/cpomdp/actions/workflows/ci.yml/badge.svg)](https://github.com/inferogenesis/cpomdp/actions/workflows/ci.yml)
 [![coverage](https://cpomdp.inferogenesis.com/assets/coverage.svg)](https://github.com/inferogenesis/cpomdp/actions/workflows/ci.yml)
