@@ -1,30 +1,45 @@
-"""Figure: the EFE epistemic collapse, and how a state-dependent sensor breaks it.
+"""The single-chain EFE epistemic collapse, and how a state-dependent sensor breaks it.
 
-Sweeps a one-step action and plots the EFE decomposition `G = pragmatic − epistemic`
-for two sensors:
+This is the model class of the paper's §3.1 made executable: one node, no couplings,
+additive control, and a sensor whose noise `R(x)` depends on the state — run through
+the flat `KalmanBackend(CallableSensor)` route (the coupling-free `R(x)` case the
+`CouplingGraphBackend.to_flat_model` docstring points at: build the Kalman model with a
+`CallableSensor` directly rather than flattening a graph). The T-maze demo illustrates
+the same mechanism on a richer branching graph; here it is the theorem's own chain.
 
-- LEFT (fixed sensor): the epistemic term is dead-flat across actions, so `G`'s
-  minimum is driven entirely by the pragmatic term — `argmin G == argmin pragmatic`.
-  This is ADR-003's collapse: under a fixed linear-Gaussian sensor, EFE selection
-  reduces to LQR and there is no information-seeking.
+`--check` executes Theorem 1's clauses (i) and (iii) on this class and asserts them,
+with no plotting deps:
+
+- (i)  the one-step epistemic value *varies* across a candidate-action grid;
+- twin  freezing `R` at the predicted mean `μ⁻` makes that same term dead-flat —
+        ADR-003's collapse: a fixed linear-Gaussian sensor reduces EFE to LQR;
+- (iii) `R(μ⁻(a))` — the noise the sensor presents at the predicted mean — traces a
+        curve across the grid (the state-dependence the theorem turns on).
+
+The bare command renders the two-panel figure that plots the same sweep:
+
+- LEFT (fixed sensor): the epistemic term is dead-flat across actions, so `G`'s minimum
+  is driven entirely by the pragmatic term — `argmin G == argmin pragmatic`.
 - RIGHT (state-dependent sensor): a "precision well" makes the sensor sharp near a
-  beacon away from the goal. The epistemic term now *curves* (peaks at the beacon),
-  and `G`'s minimum is pulled off the goal toward the information — the agent
-  detours. This is why v0.3 exists.
+  beacon away from the goal. The epistemic term *curves* (peaks at the beacon) and
+  `G`'s minimum is pulled off the goal toward information — the detour. Why v0.3 exists.
 
 The right-hand sensor is a real `CallableSensor` (Phase 2a) supplying a
 position-dependent `R(x)` to `expected_free_energy` through the `gaussianize` seam.
 
-Run: `uv run python examples/efe_collapse_figure.py`
-Output: docs/assets/efe_collapse.png
+Run:
+    uv run python examples/efe_collapse_figure.py --check
+    uv run --extra examples python examples/efe_collapse_figure.py
+Output (bare command): docs/assets/efe_collapse.png
 """
 
+import sys
 from pathlib import Path
 
 import jax.numpy as jnp
-import matplotlib.pyplot as plt
 import numpy as np
 
+from cpomdp.backends.kalman import KalmanBackend
 from cpomdp.efe import expected_free_energy
 from cpomdp.observation import CallableSensor
 from cpomdp.selection import Preference
@@ -43,6 +58,9 @@ BELIEF = Belief(mean=[0.0], cov=[[2.0]])
 GOAL = Preference(goal=[0.0], precision=[[0.4]])  # prefer to observe position 0
 ACTIONS = jnp.linspace(-2.0, 4.0, 400)
 BEACON = 1.5  # the sensor is sharpest here — away from the goal at 0
+# The R(x) well the figure plots and --check asserts on — one source, so the gate and
+# the picture can never disagree about the sensor.
+WELL_PARAMS = {"beacon": BEACON, "width": 0.6, "r_lo": 0.02, "r_hi": 0.8}
 
 
 def _precision_well_noise(x, params):
@@ -69,6 +87,11 @@ def _model(observation=None):
         control=CONTROL,
         observation=observation,
     )
+
+
+def _well() -> CallableSensor:
+    """The state-dependent sensor: constant ``C``, ``R(x)`` dipping at the beacon."""
+    return CallableSensor(SENSOR, _precision_well_noise, WELL_PARAMS)
 
 
 def _sweep(model):
@@ -109,15 +132,82 @@ def _panel(ax, prag, epi, g, title, note):
     ax.legend(loc="upper right", fontsize=8.5, framealpha=0.9)
 
 
+def check() -> None:
+    """Assert Theorem 1 (i)/(iii) on §3.1's own model class — the single R(x) chain.
+
+    One node, no couplings, additive control, and a state-dependent ``R(x)`` sensor,
+    run through the flat ``KalmanBackend(CallableSensor)`` route. The sweep is the same
+    one the figure plots; here the three clauses are asserted, not drawn.
+    """
+    live = _model(observation=_well())
+
+    # The single chain actually filters. KalmanBackend(CallableSensor) is the
+    # coupling-free R(x) route the CouplingGraphBackend.to_flat_model docstring points
+    # at (build the Kalman model with a CallableSensor directly). One update at the
+    # beacon — where R dips — sharpens the belief: the §3.1 model class, run.
+    prior = Belief(mean=[BEACON], cov=[[2.0]])
+    post = KalmanBackend(live).infer_states(
+        jnp.array([BEACON]), prior, action=jnp.array([0.0])
+    )
+    prior_var, post_var = float(prior.cov[0, 0]), float(post.cov[0, 0])
+    assert post_var < prior_var
+    print("The single-chain model filters (KalmanBackend + CallableSensor):")
+    print(f"  belief var at the beacon: {prior_var:.2f} → {post_var:.3f} (sharpened)\n")
+
+    # The frozen-R twin: the same sensor, but R pinned at what a flat Kalman would
+    # linearize once at the prior mean μ⁻ and freeze. Any fixed R collapses the
+    # epistemic term to a constant (ADR-003), whatever the action.
+    r_frozen = float(_precision_well_noise(jnp.asarray(BELIEF.mean), WELL_PARAMS)[0, 0])
+    frozen = LinearGaussianModel(
+        DYNAMICS, SENSOR, PROCESS_NOISE, [[r_frozen]], BELIEF, CONTROL
+    )
+
+    a_mat, b_mat = np.asarray(DYNAMICS), np.asarray(CONTROL)
+    mu = np.asarray(BELIEF.mean)
+    epi_live, epi_frozen, r_curve = [], [], []
+    for a in np.asarray(ACTIONS):
+        _, live_parts = expected_free_energy(live, BELIEF, jnp.array([a]), GOAL)
+        _, frozen_parts = expected_free_energy(frozen, BELIEF, jnp.array([a]), GOAL)
+        epi_live.append(float(live_parts["epistemic"]))
+        epi_frozen.append(float(frozen_parts["epistemic"]))
+        mu_minus = a_mat @ mu + b_mat @ np.array([a])  # μ⁻(a) = A·μ + B·a
+        r_here = _precision_well_noise(jnp.asarray(mu_minus), WELL_PARAMS)
+        r_curve.append(float(r_here[0, 0]))
+    epi_live, epi_frozen, r_curve = map(np.array, (epi_live, epi_frozen, r_curve))
+
+    live_swing = float(np.ptp(epi_live))
+    frozen_swing = float(np.ptp(epi_frozen))
+    r_swing = float(np.ptp(r_curve))
+
+    # (i) the epistemic value varies across the candidate-action grid — R is state-dep.
+    assert live_swing > 1e-3
+    # twin: freeze R and that same term is dead-flat (the ADR-003 collapse).
+    assert frozen_swing < 1e-9
+    # (iii) R(μ⁻(a)) traces a curve across the grid — the state-dependence (i) rides on.
+    assert r_swing > 1e-3
+
+    print("Theorem 1 (i)/(iii) on the single-chain R(x) model class (§3.1):")
+    print(
+        f"  (i)   epistemic value over the action grid: swing = {live_swing:.2f} nats "
+        f"(peak {epi_live.max():.2f} at μ⁻ = beacon) — VARIES"
+    )
+    print(
+        f"  twin  frozen-R epistemic swing = {frozen_swing:.0e} nats — flat "
+        f"(ADR-003 collapse)"
+    )
+    print(
+        f"  (iii) R(μ⁻) over the grid: range = {r_swing:.2f} "
+        f"({r_curve.min():.2f} → {r_curve.max():.2f}) — traces a curve"
+    )
+    print("\nAll clauses PASS.")
+
+
 def main():
     """Render the two-panel collapse/detour figure to docs/assets/."""
+    import matplotlib.pyplot as plt
+
     prag_f, epi_f, g_f = _sweep(_model())  # fixed sensor (observation=None)
-    well = CallableSensor(
-        sensor_model=[[1.0]],
-        noise_fn=_precision_well_noise,
-        noise_params={"beacon": BEACON, "width": 0.6, "r_lo": 0.02, "r_hi": 0.8},
-    )
-    prag_s, epi_s, g_s = _sweep(_model(observation=well))
+    prag_s, epi_s, g_s = _sweep(_model(observation=_well()))
 
     fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(12.5, 5.2), sharex=True)
     fig.suptitle(
@@ -160,4 +250,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    if "--check" in sys.argv:
+        check()
+    else:
+        main()
