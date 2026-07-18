@@ -245,6 +245,7 @@ def _boundary_scan(alive: bool, cue_x: float = CUE_X) -> dict:
 
     Returns arrays over the grid: ``grid`` (the actions), ``total`` (the minimised EFE
     ``G = pragmatic - epistemic``), ``epistemic`` (the EFE epistemic value),
+    ``pragmatic`` (the EFE pragmatic cost -- the term Result 4 reads its gradient off),
     ``r_info_mu_plus`` (``R_info(mu+(a))``), and ``mu_plus_x`` (the position component
     of node 1's *local* predictive mean -- the vector ``observation_noise_at`` hands to
     ``cue_noise``, which reads ``x = state[0]``).
@@ -258,7 +259,7 @@ def _boundary_scan(alive: bool, cue_x: float = CUE_X) -> dict:
     precision = jnp.array([[GOAL_PRECISION, 0.0], [0.0, INFO_PRECISION]])
     grid = np.linspace(*ACTION_BOUNDS, GRID_N)
 
-    total, epistemic, r_info_mu_plus, mu_plus_x = [], [], [], []
+    total, epistemic, pragmatic, r_info_mu_plus, mu_plus_x = [], [], [], [], []
     for action in grid:
         predicted = backend.predicted_belief(start_belief(), jnp.array([action]))
         noise = backend.observation_noise_at(predicted.mean)  # R(mu+)
@@ -273,6 +274,7 @@ def _boundary_scan(alive: bool, cue_x: float = CUE_X) -> dict:
         )
         total.append(float(efe))  # G = pragmatic - epistemic, the minimised quantity
         epistemic.append(float(parts["epistemic"]))
+        pragmatic.append(float(parts["pragmatic"]))  # the goal-seeking cost
         r_info_mu_plus.append(float(np.asarray(noise)[1, 1]))  # info channel [1, 1]
         local = np.asarray(predicted.mean)[arm_block]  # cue_noise reads x = local[0]
         mu_plus_x.append(float(local[0]))
@@ -280,6 +282,7 @@ def _boundary_scan(alive: bool, cue_x: float = CUE_X) -> dict:
         "grid": grid,
         "total": np.array(total),
         "epistemic": np.array(epistemic),
+        "pragmatic": np.array(pragmatic),
         "r_info_mu_plus": np.array(r_info_mu_plus),
         "mu_plus_x": np.array(mu_plus_x),
     }
@@ -366,7 +369,15 @@ def check() -> None:
     edge = scan_a["total"] - scan_b["total"]  # how much cheaper B rates each action
     edge_i = int(np.argmax(edge))  # ... peaked where B's edge over A is largest
     a_choice = grid[int(np.argmin(scan_a["total"]))]  # pragmatic-only myopic optimum
-    b_choice = grid[int(np.argmin(scan_b["total"]))]  # B's myopic optimum from prior
+    b_opt_i = int(np.argmin(scan_b["total"]))  # B's myopic optimum from prior (index)
+    b_choice = grid[b_opt_i]
+    # The horizon-1 decision as its two competing terms, both read at the cue-ward
+    # sensing action (epi_i) against B's own prior-ward optimum (b_opt_i): moving to the
+    # cue BUYS `pull` nats of information and COSTS `gradient` nats of pragmatic goal-
+    # distance. This is the arithmetic behind "the drive reaches without walking",
+    # asserted below (pull > 0 < gradient), not merely plotted.
+    pull = float(scan_b["epistemic"][epi_i] - scan_b["epistemic"][b_opt_i])
+    gradient = float(scan_b["pragmatic"][epi_i] - scan_b["pragmatic"][b_opt_i])
     # B's information value peaks at a cue-ward (rightward) action, essentially at the
     # cue; A's is dead flat. The only actions B rates below the pragmatic-only agent are
     # cue-ward -- and the prior gives no pragmatic reason to go right, so the epistemic
@@ -382,6 +393,8 @@ def check() -> None:
     # objective, not (yet) reliably in the horizon-1 trajectory (it is noise-gated: some
     # seeds cross, some stay). A longer horizon is what lets it walk -- see Discussion.
     assert b_choice < 0
+    assert pull > 0  # the drive REACHES: there is real epistemic value toward the cue
+    assert pull < gradient  # ... WITHOUT walking: the pragmatic gradient is steeper
     print(
         f"  B epistemic peaks at u={epi_peak:+.2f} (cue at {CUE_DETOUR_X:+.1f})   "
         f"A epistemic range = {float(np.ptp(scan_a['epistemic'])):.0e} (flat)"
@@ -389,6 +402,10 @@ def check() -> None:
     print(
         f"  B rates u={grid[edge_i]:+.2f} cheaper than A by {edge.max():.2f}   "
         f"pragmatic-only A's optimum u={a_choice:+.1f} (prior-ward)"
+    )
+    print(
+        f"  reach vs walk (h=1): epistemic pull {pull:.2f} nats < pragmatic gradient "
+        f"{gradient:.2f} nats -- the drive reaches the cue, the step stays prior-ward"
     )
     print(
         f"  horizon-1 locality: B's opening optimum u={b_choice:+.1f} still prior-ward"

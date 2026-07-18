@@ -52,8 +52,9 @@ tighter. A control statement, not biology (ADR-020).
 
 ![Two agents on the same maze: B reads a state-dependent cue and crosses to the reward, A with a fixed sensor cannot](../../docs/assets/epistemic_dissociation.gif)
 
-`epistemic_dissociation_figure.py --check` asserts the three results — the raised error, B's
-resolved latent, A's flat epistemic — without rendering.
+`epistemic_dissociation_figure.py --check` asserts the four results — the raised error, B's
+resolved latent, the dual effect (B's epistemic moves, A's is flat), and the confound-free
+horizon-1 ordering (epistemic pull < pragmatic gradient) — without rendering.
 
 ---
 

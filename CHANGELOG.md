@@ -4,6 +4,32 @@ Everything worth noting lands here. The format follows [Keep a Changelog](https:
 
 ## [Unreleased]
 
+## [0.4.2] — 2026-07-18
+
+Archival release accompanying the paper. No library code changed — the public API and
+numerics are identical to 0.4.1. The changes are in the example check suite, which the
+paper's reproducibility claims quote, and are now gated in CI.
+
+### Added
+
+- A single-chain theorem-instance check on the EFE-collapse demo
+  (`examples/efe_collapse_figure.py --check`): the model class of the paper's §3.1 — one
+  node, no couplings, additive control, a state-dependent `R(x)` sensor — run through the
+  flat `KalmanBackend(CallableSensor)` route, asserting Theorem 1 clauses (i) and (iii):
+  the one-step epistemic value varies across the action grid, its frozen-`R` twin is flat
+  (the ADR-003 collapse), and `R(μ⁻)` traces a curve. Runs with no plotting deps.
+- `tests/test_example_checks.py` runs both demos' `check()` gates in CI, so their
+  paper-facing assertions fire on every test run rather than only when the script is run
+  by hand.
+
+### Changed
+
+- Strengthened Result 4 of the epistemic-dissociation demo
+  (`examples/ffg/epistemic_dissociation_figure.py --check`): `_boundary_scan` now also
+  returns the pragmatic term, and Result 4 prints and asserts the horizon-1 ordering
+  `epistemic pull < pragmatic gradient` — the "reaches without walking" claim, previously
+  an unasserted diagnostic number, is now a checked fact.
+
 ## [0.4.1] — 2026-07-13
 
 Maintenance release cut for the paper-1 Zenodo archive. No library code changed — the
