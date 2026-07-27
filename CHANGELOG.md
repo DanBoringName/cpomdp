@@ -4,6 +4,8 @@ Everything worth noting lands here. The format follows [Keep a Changelog](https:
 
 ## [Unreleased]
 
+## [0.4.3] — 2026-07-27
+
 Closes the code-side divergences found by auditing the library against the paper written
 about it (`PAPER_DIVERGENCE.md`). The paper's own quoted numbers are unchanged and both
 demonstrations' `--check` gates still pass; the paper-side items are tracked separately.
