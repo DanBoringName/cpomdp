@@ -232,7 +232,7 @@ def simulate(*, epistemic_alive: bool, seed: int = 7, cue_x: float = CUE_X) -> d
 
 
 def _boundary_scan(alive: bool, cue_x: float = CUE_X) -> dict:
-    """The action scan behind Result 2 and the boundary panel -- one shared source.
+    """The action scan behind Result 1 and the boundary panel -- one shared source.
 
     Sweep the candidate-action grid; at each action read the info-channel noise
     ``R_info(mu+) = R`` at the coupling-resolved predictive mean (entry ``[1, 1]``; the
@@ -290,31 +290,32 @@ def _boundary_scan(alive: bool, cue_x: float = CUE_X) -> dict:
 
 # --- the four demonstrated results (assert them; --check prints, no plotting) ---
 def check() -> None:
-    """Assert the four results; the ``IncompatibleLinearizationError`` is the lead."""
+    """Assert the four results, in the order the write-up presents them."""
     run_b = simulate(epistemic_alive=True)
     run_a = simulate(epistemic_alive=False)
 
-    # Result 3 (the headline) first: the flat route cannot express B's model.
-    print("Result 3 -- the expressiveness boundary (the headline):")
-    backend_b = build_backend(epistemic_alive=True)
-    backend_a = build_backend(epistemic_alive=False)
-    try:
-        backend_b.to_flat_model()
-    except IncompatibleLinearizationError as exc:
-        message = str(exc)
-    else:
-        raise AssertionError("expected IncompatibleLinearizationError for Agent B")
-    assert "state-dependent R(x)" in message
-    print("  B: to_flat_model() raised IncompatibleLinearizationError -- PASS")
-    backend_a.to_flat_model()  # fixed sensor, mu- = mu+ : flattens fine, no raise
-    print("  A: to_flat_model() flattened fine (fixed sensor) -- PASS")
-    print(
-        "  a mean-shifting coupling makes mu+ != mu-, so no fixed flat model "
-        "reproduces R(mu+)\n"
-    )
+    # Result 1: B's epistemic term moves with the action; A's is flat (ADR-003/019).
+    # Both the spread and the R(mu+) curve come from _boundary_scan -- the same call the
+    # boundary panel plots, so the gate and the figure can never disagree.
+    print("Result 1 -- the dual effect: B's epistemic is action-dependent, A's flat:")
+    for tag, alive in (("B", True), ("A", False)):
+        scan = _boundary_scan(alive)
+        spread = float(np.ptp(scan["epistemic"]))
+        r_spread = float(np.ptp(scan["r_info_mu_plus"]))
+        if alive:
+            assert spread > 1e-6
+            assert r_spread > 1.0  # R(mu+) genuinely moves -> no single fixed R fits it
+        else:
+            assert spread < 1e-9
+            assert r_spread < 1e-9  # fixed sensor: R is constant across every action
+        print(
+            f"  {tag}: epistemic range = {spread:.2e}   R(mu+) range = {r_spread:.1f}"
+            f"   ({'VARIES' if spread > 1e-6 else 'flat'})"
+        )
+    print()
 
-    # Result 1: B resolves the hidden context and commits to the correct arm; A cannot.
-    print("Result 1 -- B resolves the latent through the branch and acts on it:")
+    # Result 2: B resolves the hidden context and commits to the correct arm; A cannot.
+    print("Result 2 -- B resolves the latent through the branch and acts on it:")
     var_b, var_a = run_b["context_covs"][-1], run_a["context_covs"][-1]
     assert var_b < var_a
     assert np.abs(run_b["actions"] - run_a["actions"]).max() > 1e-3
@@ -334,31 +335,30 @@ def check() -> None:
         f"A={run_a['positions'][-1]:+.2f} (wrong arm) -- PASS\n"
     )
 
-    # Result 2: B's epistemic term moves with the action; A's is flat (ADR-003/019).
-    # Both the spread and the R(mu+) curve come from _boundary_scan -- the same call the
-    # boundary panel plots, so the gate and the figure can never disagree.
-    print("Result 2 -- the dual effect: B's epistemic is action-dependent, A's flat:")
-    for tag, alive in (("B", True), ("A", False)):
-        scan = _boundary_scan(alive)
-        spread = float(np.ptp(scan["epistemic"]))
-        r_spread = float(np.ptp(scan["r_info_mu_plus"]))
-        if alive:
-            assert spread > 1e-6
-            assert r_spread > 1.0  # R(mu+) genuinely moves -> no single fixed R fits it
-        else:
-            assert spread < 1e-9
-            assert r_spread < 1e-9  # fixed sensor: R is constant across every action
-        print(
-            f"  {tag}: epistemic range = {spread:.2e}   R(mu+) range = {r_spread:.1f}"
-            f"   ({'VARIES' if spread > 1e-6 else 'flat'})"
-        )
-    print()
+    # Result 3: the flat route cannot express B's model at all.
+    print("Result 3 -- the expressiveness boundary:")
+    backend_b = build_backend(epistemic_alive=True)
+    backend_a = build_backend(epistemic_alive=False)
+    try:
+        backend_b.to_flat_model()
+    except IncompatibleLinearizationError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("expected IncompatibleLinearizationError for Agent B")
+    assert "state-dependent R(x)" in message
+    print("  B: to_flat_model() raised IncompatibleLinearizationError -- PASS")
+    backend_a.to_flat_model()  # fixed sensor, mu- = mu+ : flattens fine, no raise
+    print("  A: to_flat_model() flattened fine (fixed sensor) -- PASS")
+    print(
+        "  a mean-shifting coupling makes mu+ != mu-, so no fixed flat model "
+        "reproduces R(mu+)\n"
+    )
 
     # Result 4: remove the geometric confound. Results 1-2 sit the cue ON the prior arm,
     # so B's outbound move fits either drive. Here the cue moves OFF the prior path (to
     # +CUE_DETOUR_X, right of start) while the prior still points left -- epistemic and
     # pragmatic now pull opposite ways. The scan carries no draw, so these are exact
-    # facts, not sampled ones: Result 2's mathematics at a geometry where only the
+    # facts, not sampled ones: Result 1's mathematics at a geometry where only the
     # epistemic term can explain any cue-ward preference.
     print("Result 4 -- confound removed: B's epistemics point at the off-path cue:")
     scan_b = _boundary_scan(alive=True, cue_x=CUE_DETOUR_X)
@@ -388,6 +388,10 @@ def check() -> None:
     assert a_choice < 0  # the pragmatic-only baseline's optimum is prior-ward
     assert grid[edge_i] > 0  # the action B rates below A is cue-ward (rightward)
     assert float(edge.max()) > 1.0  # ... and B's discount there is a full nat-plus
+    # ONLY cue-ward actions are rated below A -- the universal form, not just the
+    # peak. Nothing B scores cheaper than the pragmatic-only agent points left, so
+    # no prior-ward action can be explained by B's extra term.
+    assert np.all(grid[edge > 0] > 0)
     # Owned locality: at the opening decision the pull is present but not yet decisive.
     # B's myopic optimum from the prior is still prior-ward, so the detour lives in the
     # objective, not (yet) reliably in the horizon-1 trajectory (it is noise-gated: some
@@ -1011,7 +1015,7 @@ def render_triptych(run_a: dict, run_b: dict, out_path: Path) -> Path:
 
 
 def main():
-    """``--check`` asserts the three results; otherwise render the figure set."""
+    """``--check`` asserts the four results; otherwise render the figure set."""
     if "--check" in sys.argv:
         check()
         return

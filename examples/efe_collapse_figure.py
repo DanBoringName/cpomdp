@@ -7,14 +7,18 @@ the flat `KalmanBackend(CallableSensor)` route (the coupling-free `R(x)` case th
 `CallableSensor` directly rather than flattening a graph). The T-maze demo illustrates
 the same mechanism on a richer branching graph; here it is the theorem's own chain.
 
-`--check` executes Theorem 1's clauses (i) and (iii) on this class and asserts them,
-with no plotting deps:
+`--check` asserts Theorem 1's clauses (i) and (iii) on this class, plus the pinning
+Lemma 1 rests on, with no plotting deps:
 
-- (i)  the one-step epistemic value *varies* across a candidate-action grid;
+- (i)   the posterior covariance and the Kalman gain *move with the action* — the dual
+        effect, the control reaching a covariance rather than only a mean;
+- (iii) the one-step epistemic value *varies* across a candidate-action grid;
 - twin  freezing `R` at the predicted mean `μ⁻` makes that same term dead-flat —
         ADR-003's collapse: a fixed linear-Gaussian sensor reduces EFE to LQR;
-- (iii) `R(μ⁻(a))` — the noise the sensor presents at the predicted mean — traces a
-        curve across the grid (the state-dependence the theorem turns on).
+- pin   `R(μ⁻(a))` — the noise the sensor presents at the predicted mean — traces a
+        curve across the grid. No horizontal line follows a curve, which is the
+        pinning argument drawn: a fixed noise schedule is named in advance and cannot
+        track it.
 
 The bare command renders the two-panel figure that plots the same sweep:
 
@@ -22,10 +26,10 @@ The bare command renders the two-panel figure that plots the same sweep:
   is driven entirely by the pragmatic term — `argmin G == argmin pragmatic`.
 - RIGHT (state-dependent sensor): a "precision well" makes the sensor sharp near a
   beacon away from the goal. The epistemic term *curves* (peaks at the beacon) and
-  `G`'s minimum is pulled off the goal toward information — the detour. Why v0.3 exists.
+  `G`'s minimum is pulled off the goal toward information — the detour.
 
-The right-hand sensor is a real `CallableSensor` (Phase 2a) supplying a
-position-dependent `R(x)` to `expected_free_energy` through the `gaussianize` seam.
+The right-hand sensor is a real `CallableSensor` supplying a position-dependent
+`R(x)` to `expected_free_energy` through the `gaussianize` seam.
 
 Run:
     uv run python examples/efe_collapse_figure.py --check
@@ -39,7 +43,7 @@ from pathlib import Path
 import jax.numpy as jnp
 import numpy as np
 
-from cpomdp.backends.kalman import KalmanBackend
+from cpomdp.backends.kalman import KalmanBackend, _gain_and_posterior_cov
 from cpomdp.efe import expected_free_energy
 from cpomdp.observation import CallableSensor
 from cpomdp.selection import Preference
@@ -133,11 +137,11 @@ def _panel(ax, prag, epi, g, title, note):
 
 
 def check() -> None:
-    """Assert Theorem 1 (i)/(iii) on §3.1's own model class — the single R(x) chain.
+    """Assert Theorem 1 on §3.1's own model class — the single R(x) chain.
 
     One node, no couplings, additive control, and a state-dependent ``R(x)`` sensor,
     run through the flat ``KalmanBackend(CallableSensor)`` route. The sweep is the same
-    one the figure plots; here the three clauses are asserted, not drawn.
+    one the figure plots; here the clauses are asserted, not drawn.
     """
     live = _model(observation=_well())
 
@@ -164,7 +168,7 @@ def check() -> None:
 
     a_mat, b_mat = np.asarray(DYNAMICS), np.asarray(CONTROL)
     mu = np.asarray(BELIEF.mean)
-    epi_live, epi_frozen, r_curve = [], [], []
+    epi_live, epi_frozen, r_curve, post_vars, gains = [], [], [], [], []
     for a in np.asarray(ACTIONS):
         _, live_parts = expected_free_energy(live, BELIEF, jnp.array([a]), GOAL)
         _, frozen_parts = expected_free_energy(frozen, BELIEF, jnp.array([a]), GOAL)
@@ -173,22 +177,46 @@ def check() -> None:
         mu_minus = a_mat @ mu + b_mat @ np.array([a])  # μ⁻(a) = A·μ + B·a
         r_here = _precision_well_noise(jnp.asarray(mu_minus), WELL_PARAMS)
         r_curve.append(float(r_here[0, 0]))
-    epi_live, epi_frozen, r_curve = map(np.array, (epi_live, epi_frozen, r_curve))
+        # The covariance half of the same step: the action chose where R was read, so
+        # it also chose this posterior and this gain.
+        gain, cov_post = _gain_and_posterior_cov(
+            jnp.asarray(DYNAMICS),
+            jnp.asarray(SENSOR),
+            jnp.asarray(PROCESS_NOISE),
+            r_here,
+            jnp.asarray(BELIEF.cov),
+        )
+        post_vars.append(float(cov_post[0, 0]))
+        gains.append(float(gain[0, 0]))
+    epi_live, epi_frozen, r_curve, post_vars, gains = map(
+        np.array, (epi_live, epi_frozen, r_curve, post_vars, gains)
+    )
 
     live_swing = float(np.ptp(epi_live))
     frozen_swing = float(np.ptp(epi_frozen))
     r_swing = float(np.ptp(r_curve))
+    post_swing = float(np.ptp(post_vars))
+    gain_swing = float(np.ptp(gains))
 
-    # (i) the epistemic value varies across the candidate-action grid — R is state-dep.
+    # (i) the dual effect: the action reaches the posterior covariance, and the gain
+    # inherits it. Under a fixed sensor both would be constants named in advance.
+    assert post_swing > 1e-6
+    assert gain_swing > 1e-6
+    # (iii) the epistemic value varies across the candidate-action grid.
     assert live_swing > 1e-3
     # twin: freeze R and that same term is dead-flat (the ADR-003 collapse).
     assert frozen_swing < 1e-9
-    # (iii) R(μ⁻(a)) traces a curve across the grid — the state-dependence (i) rides on.
+    # the pinning: R(μ⁻(a)) traces a curve, and no constant follows a curve.
     assert r_swing > 1e-3
 
-    print("Theorem 1 (i)/(iii) on the single-chain R(x) model class (§3.1):")
+    print("Theorem 1 on the single-chain R(x) model class (§3.1):")
     print(
-        f"  (i)   epistemic value over the action grid: swing = {live_swing:.2f} nats "
+        f"  (i)   posterior variance over the grid: {post_vars.min():.4f} → "
+        f"{post_vars.max():.4f} (swing {post_swing:.4f}); gain swing {gain_swing:.4f} "
+        f"— the DUAL EFFECT"
+    )
+    print(
+        f"  (iii) epistemic value over the action grid: swing = {live_swing:.2f} nats "
         f"(peak {epi_live.max():.2f} at μ⁻ = beacon) — VARIES"
     )
     print(
@@ -196,8 +224,8 @@ def check() -> None:
         f"(ADR-003 collapse)"
     )
     print(
-        f"  (iii) R(μ⁻) over the grid: range = {r_swing:.2f} "
-        f"({r_curve.min():.2f} → {r_curve.max():.2f}) — traces a curve"
+        f"  pin   R(μ⁻) over the grid: range = {r_swing:.2f} "
+        f"({r_curve.min():.2f} → {r_curve.max():.2f}) — a curve no constant follows"
     )
     print("\nAll clauses PASS.")
 
