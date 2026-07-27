@@ -25,6 +25,10 @@ coupled node cannot be flattened to a fixed linear-Gaussian model; asking it to
 raises :class:`IncompatibleLinearizationError` (ADR-019, ADR-020). The
 :class:`Agent` dispatches an :class:`FfgEfeSelector` — the FFG peer of
 :class:`EFESelector` — for such a backend; pass ``selector=`` to override it.
+
+Whether a state-dependent sensor earns its keep is a question about the states an
+action can actually reach: :func:`probe_model` samples that reachable set and
+reports back a :class:`SensorReport`.
 """
 
 import jax
@@ -36,6 +40,7 @@ from cpomdp.backends.coupling import (
     IncompatibleLinearizationError,
 )
 from cpomdp.backends.kalman import KalmanBackend
+from cpomdp.diagnostics import SensorReport, probe_model
 from cpomdp.dynamics import CallableProcessNoise, DynamicsNoise
 from cpomdp.efe import expected_free_energy
 from cpomdp.ffg.factors.linear_gaussian import (
@@ -90,6 +95,8 @@ __all__ = [
     "ObservationGoal",
     "ObservationModel",
     "Preference",
+    "SensorReport",
     "StateGoal",
     "expected_free_energy",
+    "probe_model",
 ]
