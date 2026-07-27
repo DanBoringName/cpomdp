@@ -22,7 +22,7 @@ Scope (tier-1). Both factors invert their noise covariance, so a deterministic
 factor regardless of fixedness — the one documented divergence from moment-form
 Kalman, harmless for the chain the gate exercises. State-dependent ``R(x)``/``Q(x)``
 (the ``observation``/``process_noise`` fields) reach parity with ``KalmanBackend``
-in Phase 2.5 (ADR-012 amendment 2026-06-26): the fixed sides keep their front-loaded
+(ADR-012 amendment 2026-06-26): the fixed sides keep their front-loaded
 factors; a state-dependent side is linearized at the predicted mean ``μ⁻`` and its
 factor rebuilt per step (see ``infer_states``).
 
@@ -59,7 +59,7 @@ class ChainBackend:
     Args:
         model: The linear-Gaussian generative model to filter under. A
             state-dependent ``observation`` (``R(x)``) or ``process_noise``
-            (``Q(x)``) is supported (Phase 2.5) and linearized at the predicted
+            (``Q(x)``) is supported and linearized at the predicted
             mean each step; the fixed sides are front-loaded once here. Whichever
             covariance ends up feeding the transition factor (fixed ``dynamics_noise``
             or a state-dependent ``Q(x)``) must be positive-*definite* (the
@@ -81,7 +81,7 @@ class ChainBackend:
 
         When a side is *not* fixed, the corresponding factor is left ``None`` here
         and built per step in ``infer_states`` from ``observation.linearize(μ⁻)`` /
-        ``process_noise.noise_at(μ⁻)`` instead (Phase 2.5, ADR-012 amendment
+        ``process_noise.noise_at(μ⁻)`` instead (ADR-012 amendment
         2026-06-26). This is not just laziness: ``GaussianTransition`` requires Q
         positive-*definite* (it inverts it), but a model carrying a state-dependent
         ``process_noise`` is only required to give ``model.dynamics_noise`` itself a
@@ -123,7 +123,7 @@ class ChainBackend:
         observation factor's ``message(y)`` (the measurement update), and
         ``to_moment`` the result back into a ``Belief``.
 
-        On a state-dependent side (Phase 2.5), the transition/observation factor for
+        On a state-dependent side, the transition/observation factor for
         *this* step is built from ``process_noise.noise_at(μ⁻)`` /
         ``observation.linearize(μ⁻)``, where ``μ⁻ = A·prior.mean + b`` is the
         predicted mean — pure mean-propagation, so it needs no Q and can be computed

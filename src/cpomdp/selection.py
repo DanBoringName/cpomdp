@@ -84,8 +84,8 @@ class ActionSelector(Protocol):
     """Chooses an action from a belief and a preference.
 
     The abstraction wall for action selection: ``LQRSelector`` is the fixed-sensor
-    case (EFE collapses to LQR, ADR-003); ``EFESelector`` arrives in v0.3 for
-    state-dependent sensing. ``Agent`` depends only on this, never on a concrete
+    case (EFE collapses to LQR, ADR-003); ``EFESelector`` is the state-dependent
+    one. ``Agent`` depends only on this, never on a concrete
     selector.
     """
 
