@@ -57,7 +57,7 @@ A's fixed sensor flattens fine. Then the behaviour that buys: two agents on the 
 differing in that one line. B's live epistemic term detours to read the cue, resolves a hidden
 context through the branch, and crosses to the reward; A's constant epistemic term (Koudahl–Kouw–de
 Vries 2021) collapses to LQR and it stays at the wrong arm. A control statement, not biology
-(ADR-020). `--check` prints the three results without plotting.
+(ADR-020). `--check` prints the four results without plotting.
 
 ![Two agents on the same branching maze: B reads a state-dependent cue and crosses to the reward, A with a fixed sensor cannot](assets/epistemic_dissociation.gif)
 

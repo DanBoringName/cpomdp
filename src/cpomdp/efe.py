@@ -3,23 +3,20 @@
 This module computes ``G(a)`` — the Expected Free Energy of taking action ``a``
 from the current belief — and its decomposition into a *pragmatic* (goal-seeking)
 and an *epistemic* (information-seeking) part. Minimising ``G`` over actions is
-how a v0.3 agent will choose what to do.
+how an agent chooses what to do.
 
 ================================================================================
-THE DECISION THIS FILE ENCODES  (see DECISIONS.md ADR-005, and rfcs/004)
+THE DECISION THIS FILE ENCODES  (see DECISIONS.md ADR-005)
 ================================================================================
 There is *no single agreed formula* for EFE in the active-inference literature —
 the pragmatic term in particular has at least three forms in circulation, and
-sources disagree on signs and on whether risk is a cross-entropy or a KL. I have
-**chosen one route deliberately**, and it is, frankly, somewhat speculative: it
-sits in an area that is well-trodden but inconsistently written down, and well
-outside my core expertise. I am committing to it *and* to proving (or honestly
-bounding) that it is the right one — that proof is the job of
-rfcs/004 and the validation tests it will spawn. Until then, treat the choices
-flagged ``# FRAGILE(lit):`` below as load-bearing assumptions that may move as the
-literature is pinned down. Over-commented on purpose: this file is the shared
-reference for re-understanding the reasoning next session. Will trim it once it's
-more intuitive.
+sources disagree on signs and on whether risk is a cross-entropy or a KL. One
+route is chosen here deliberately, and the two questions that most affect what
+the objective *does* are settled rather than assumed: the cross-entropy and
+KL-risk groupings are the same objective (the derivation is below, and both forms
+are reproduced by the tests), and the sign convention follows from that. What
+stays genuinely open is flagged ``# FRAGILE(lit):`` — the preference domain, and
+the fork between the full pragmatic term and a mean-only one.
 
 --------------------------------------------------------------------------------
 THE LOCKED DEFINITION  (decomposition (b): cross-entropy − info-gain)
@@ -37,7 +34,7 @@ and an OBSERVATION-space preference ``(g, Λ)`` (goal observation ``g``, precisi
 
 ``S`` is computed once and feeds BOTH terms — there is no n×n work and no Σ_post
 or Kalman gain in the one-step EFE (those are only needed for belief propagation
-in the H-step rollout, Phase 3). The epistemic identity
+in the H-step rollout, ``policy_efe``). The epistemic identity
 ``½(ln det Σ⁺ − ln det Σ_post) = ½ ln(det S / det R)`` lets us stay in m×m.
 
 --------------------------------------------------------------------------------
@@ -50,17 +47,21 @@ THE FRAGILE CHOICES  (grep: ``FRAGILE(lit)``)
    two consumers of ``Preference`` (state-space LQR vs obs-space EFE) is an OPEN
    design point; for C = I (fully observed) they coincide.
 2. Pragmatic = FULL form (mean + ½tr(ΛS)), i.e. cross-entropy −E_Q[ln P(o)] up to a
-   fixed constant. CLARIFIED by rfcs/004: cross-entropy paired with −info-gain (as
-   here) and KL-risk paired with +ambiguity are the SAME objective — NOT a
-   behavioural fork. The genuine literature fork is FULL vs *mean-only* (drop the
-   ½tr(ΛS) term → an agent blind to predicted-observation variance/ambiguity). The
-   *forbidden mix* (KL-risk pragmatic − info-gain) is a double-counting BUG, not an
-   option. rfcs/004 holds the discriminating tests (they need a state-dep sensor).
+   fixed constant. Cross-entropy paired with −info-gain (as here) and KL-risk
+   paired with +ambiguity are the SAME objective — not a behavioural fork; the two
+   groupings differ by a constant, and each carries one half of the same entropy
+   gap. The genuine literature fork is FULL vs *mean-only* (drop the ½tr(ΛS) term →
+   an agent blind to predicted-observation variance/ambiguity). The *forbidden mix*
+   (KL-risk pragmatic − info-gain) double-counts H[Q(o)]: a bug, not an option.
 3. Epistemic = STATE information gain (salience), not parameter information gain
    (novelty). Only the state info-gain I(state; obs) is computed; parameter/novelty
    EFE is out of scope.
-4. The sensor is linearized at μ⁺ (the predicted mean). For a fixed sensor this is
-   irrelevant; for a nonlinear sensor *where* you linearize matters (Phase 2).
+4. The sensor is linearized at μ⁺ (the predicted mean). A fixed sensor is its own
+   linearization everywhere, so the point is immaterial there — but for a
+   state-dependent ``R(x)`` it is the modelling commitment the whole epistemic term
+   rests on: the action moves μ⁺, μ⁺ chooses R, and R sets the information. It is a
+   first-order rule, and a plug-in one: it drops the correction for R's curvature
+   across the belief's spread.
 5. Sign convention: G is MINIMISED; ``pragmatic`` is a cost (lower better) and
    ``epistemic`` is a value (higher better), so G = pragmatic − epistemic.
 
@@ -77,7 +78,7 @@ THE DATA FLOW  (top → bottom: what goes in → what comes out)
       ▼    GUARD      control is None?  ──►  raise ValueError
       │
       ▼    PREDICT    μ⁺ = A·μ + control·a     (action enters HERE only)
-      │               Σ⁺ = A·Σ·Aᵀ + Q          (action-independent)
+      │               Σ⁺ = A·Σ·Aᵀ + Q          (this step's Σ⁺ does not see the action)
       │
       ▼    SENSE      (C, R) = linearize(μ⁺)   or fixed (model.C, model.R)
       │               o⁺ = C·μ⁺
@@ -227,6 +228,30 @@ def policy_efe(
     return jnp.sum(gs), {"pragmatic": jnp.sum(prags), "epistemic": jnp.sum(epis)}
 
 
+def _logdet_pd(matrix: Float64[Array, "k k"]) -> Float64[Array, ""]:
+    """``ln det`` of a covariance, or NaN when it is not positive definite.
+
+    Every determinant the epistemic term takes is of a covariance, so a non-positive
+    ``slogdet`` sign means the caller handed over something that is not one — a
+    degenerate ``R(x)`` at a reachable state, say. Returning NaN rather than the real
+    ``ln|det|`` keeps a meaningless value out of the objective: it propagates to ``G``
+    and *loses* the nan-safe argmin at the selection boundary instead of winning it
+    with a plausible-looking number.
+
+    The test is a Cholesky factorisation, which succeeds with a strictly positive
+    diagonal exactly when the matrix is positive definite. A determinant sign would
+    be cheaper but would pass any matrix with an even number of negative eigenvalues
+    — ``diag(-1, -2)`` has a positive determinant and is not a covariance.
+    """
+    chol = jnp.linalg.cholesky(matrix)
+    diag = jnp.diagonal(chol)
+    definite = jnp.all(diag > 0)
+    # The inner guard keeps log() off a non-positive diagonal, so the NaN that comes
+    # back is the one this function chose rather than one the logarithm produced.
+    safe = jnp.where(definite, diag, 1.0)
+    return jnp.where(definite, 2.0 * jnp.sum(jnp.log(safe)), jnp.nan)
+
+
 def _state_info_gain(
     sigma_pred: Float64[Array, "n n"],
     sensor_model: Float64[Array, "m n"],
@@ -254,18 +279,22 @@ def _state_info_gain(
         target: the state indices whose marginal the info gain is about.
 
     Returns:
-        The scalar information gain (nats), ≥ 0 for nested target/observation.
+        The scalar information gain (nats), ≥ 0 for nested target/observation; NaN
+        where ``R`` is not positive definite, matching ``_efe_step``.
     """
     prior_info = jnp.linalg.inv(sigma_pred)  # Σ⁺⁻¹
     obs_info = sensor_model.T @ jnp.linalg.inv(sensor_noise) @ sensor_model  # Cᵀ R⁻¹ C
     sigma_post = jnp.linalg.inv(prior_info + obs_info)
 
     idx = jnp.asarray(list(target))
-    pred_block = sigma_pred[jnp.ix_(idx, idx)]
-    post_block = sigma_post[jnp.ix_(idx, idx)]
-    _, logdet_pred = jnp.linalg.slogdet(pred_block)
-    _, logdet_post = jnp.linalg.slogdet(post_block)
-    return 0.5 * (logdet_pred - logdet_post)
+    gain = 0.5 * (
+        _logdet_pd(sigma_pred[jnp.ix_(idx, idx)])
+        - _logdet_pd(sigma_post[jnp.ix_(idx, idx)])
+    )
+    # A non-positive-definite R still inverts to something finite above, so the two
+    # blocks can both come back positive definite and the gain look reasonable. The
+    # noise has to be checked on its own for the guard to mean anything.
+    return jnp.where(jnp.isnan(_logdet_pd(sensor_noise)), jnp.nan, gain)
 
 
 def _ffg_efe_step(
@@ -292,7 +321,8 @@ def _ffg_efe_step(
     ``expected_free_energy`` exactly; a node's block targets the epistemic at that
     latent — the factored analogue of the T-Maze cue (ADR-014 finding #3). Pure
     ``jnp``, so it rides ``jit``/``vmap`` over a grid of candidate actions (which vary
-    ``μ⁺``; ``Σ⁺`` is action-independent, ADR-003).
+    ``μ⁺``, while ``Σ⁺`` at this one step does not see the action (ADR-003)). What the
+    action does reach is ``R`` at ``μ⁺``, and through it the posterior.
 
     Args:
         mu_plus: μ⁺, the predicted joint mean under the candidate action (n-D).
@@ -330,8 +360,12 @@ def _efe_step(
 ) -> _EfeStep:
     # --- predict: push the belief one step through the dynamics under `action` ---
     # Mirrors the covariance predict in kalman._gain_and_posterior_cov (cov_pred);
-    # NB the action moves only the mean — Σ⁺ is action-independent, which is the
-    # whole reason the epistemic term collapses under a fixed sensor (ADR-003).
+    # NB within THIS step the action moves only the mean, so Σ⁺ here does not see it —
+    # the whole reason the epistemic term collapses under a fixed sensor (ADR-003). The
+    # independence is local: a state-dependent R(x) or Q(x) makes the noise, and so the
+    # posterior this step hands the next one, depend on where the action put the mean.
+    # Over a horizon the covariance does move with the policy; only the one-step
+    # predicted covariance is blind to it.
     mu_pred = model.A @ mu + control @ action
     process_q = (
         model.Q
@@ -343,8 +377,9 @@ def _efe_step(
 
     # --- sense: predicted-observation moments (o⁺, S) + conditional noise R at μ⁺ ---
     # The sensor owns its moment-matching (D1): the kernel never reconstructs o⁺/S.
-    # FRAGILE(lit) #4: everything is evaluated at μ⁺. Irrelevant for a fixed/linear
-    # sensor; for a nonlinear sensor (Phase 2.5) *where* you linearize matters.
+    # FRAGILE(lit) #4: everything is evaluated at μ⁺. Immaterial for a fixed sensor,
+    # which is its own linearization everywhere; for a state-dependent R(x) this point
+    # is what the action reaches, and so what the epistemic term ends up measuring.
     if model.observation is None:
         # FAST PATH — a bare matvec/matmul, byte-identical to Phase 1A. Kept inline
         # (no method dispatch) so the fixed-sensor hot path stays lean.
@@ -360,9 +395,9 @@ def _efe_step(
 
     # --- pragmatic: expected negative log-preference (cross-entropy form) ---
     # FRAGILE(lit) #1: `preference` is read in OBSERVATION space (g over o, Λ over o).
-    # FRAGILE(lit) #2: cross-entropy form = mean term + ½tr(ΛS). The ½tr(ΛS) piece
-    # is the variance penalty that distinguishes this from the mean-only form and,
-    # via −½ln det S, from the KL-risk form. rfcs/004 must prove this is the right one.
+    # FRAGILE(lit) #2: cross-entropy form = mean term + ½tr(ΛS). The ½tr(ΛS) piece is
+    # the variance penalty that distinguishes this from the mean-only form; against the
+    # KL-risk form it differs only by −½ln det S, which the epistemic term restores.
     residual = o_pred - goal
     pragmatic_mean = 0.5 * residual @ precision @ residual
     pragmatic_var = 0.5 * jnp.trace(precision @ pred_obs_cov)
@@ -370,15 +405,10 @@ def _efe_step(
 
     # --- epistemic: state information gain I(state; obs) = ½ ln(det S / det R) ---
     # FRAGILE(lit) #3: this is *salience* (state info gain), not *novelty* (parameter
-    # info gain). slogdet (not det) for numerical stability; keep the SIGN so a
-    # non-PD S or R (sign <= 0) — e.g. a degenerate R(x) at a reachable state — has no
-    # real ½ln det and yields NaN, not a plausible-but-wrong finite value. The NaN
-    # propagates to G and is caught at the selection boundary (the nan-safe argmin).
-    sign_s, logdet_pred_obs = jnp.linalg.slogdet(pred_obs_cov)
-    sign_r, logdet_noise = jnp.linalg.slogdet(sensor_noise)
-    logdet_pred_obs = jnp.where(sign_s > 0, logdet_pred_obs, jnp.nan)
-    logdet_noise = jnp.where(sign_r > 0, logdet_noise, jnp.nan)
-    epistemic = 0.5 * (logdet_pred_obs - logdet_noise)
+    # info gain). `_logdet_pd` carries the positive-definiteness guard, so a degenerate
+    # R(x) at a reachable state yields NaN rather than a plausible-but-wrong finite
+    # value; `_state_info_gain` guards the same way, so both epistemic routes agree.
+    epistemic = 0.5 * (_logdet_pd(pred_obs_cov) - _logdet_pd(sensor_noise))
 
     # FRAGILE(lit) #5: G = pragmatic − epistemic (minimise). Pairing cross-entropy
     # with −info-gain is decomposition (b); it is self-consistent (no double-count).

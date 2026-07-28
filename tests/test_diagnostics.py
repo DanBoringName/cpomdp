@@ -1,0 +1,219 @@
+"""The sensor conditions, probed over a sampled reachable set."""
+
+import jax.numpy as jnp
+import numpy as np
+import pytest
+
+from cpomdp import (
+    Belief,
+    CallableGaussianObservation,
+    CallableSensor,
+    Coupling,
+    CouplingGraph,
+    CouplingGraphBackend,
+    GaussianCoupling,
+    GaussianObservation,
+    GaussianTransition,
+    LinearGaussianModel,
+    probe_model,
+)
+from cpomdp.diagnostics import epistemic_value, is_positive_definite, loewner_order
+
+ACTIONS = [np.array([u]) for u in np.linspace(-3.0, 3.0, 13)]
+
+
+def range_noise(x, params):
+    """Sharpest at the origin, degrading with distance."""
+    return jnp.atleast_2d(1.0 + x[0] ** 2)
+
+
+def goes_indefinite(x, params):
+    """Positive definite only while |x₀| < 1 — a violation the control can reach."""
+    return jnp.atleast_2d(1.0 - x[0] ** 2)
+
+
+def ignores_the_state(x, params):
+    """Declared state-dependent, constant in fact."""
+    return jnp.atleast_2d(2.0) + 0.0 * x[0]
+
+
+def chain(noise_fn, *, control=1.0):
+    model = LinearGaussianModel(
+        dynamics=[[1.0]],
+        sensor_model=[[1.0]],
+        dynamics_noise=[[1.0]],
+        sensor_noise=[[1.0]],
+        prior=Belief([0.0], [[1.0]]),
+        control=[[control]],
+        observation=CallableSensor([[1.0]], noise_fn, None),
+    )
+    return model, Belief([0.0], [[1.0]])
+
+
+class TestPositiveDefinite:
+    @pytest.mark.parametrize(
+        ("matrix", "expected"),
+        [
+            (np.diag([1.0, 2.0]), True),
+            (np.diag([-1.0, 2.0]), False),
+            (np.diag([0.0, 2.0]), False),
+            (np.diag([-1.0, -2.0]), False),  # a positive determinant, still not one
+            (np.array([[1.0, 2.0], [0.0, 1.0]]), False),  # not symmetric
+        ],
+    )
+    def test_classifies(self, matrix, expected):
+        assert is_positive_definite(matrix) is expected
+
+
+class TestEpistemicValue:
+    def test_matches_the_closed_form(self):
+        pred, c, r = np.array([[2.0]]), np.array([[1.0]]), np.array([[1.0]])
+        assert epistemic_value(pred, c, r) == pytest.approx(0.5 * np.log(3.0))
+        assert epistemic_value(pred, c, np.array([[5.0]])) == pytest.approx(
+            0.5 * np.log(7.0 / 5.0)
+        )
+
+    def test_undefined_noise_gives_nan(self):
+        pred, c = np.array([[2.0]]), np.array([[1.0]])
+        assert np.isnan(epistemic_value(pred, c, np.array([[-1.0]])))
+
+
+class TestLoewnerOrder:
+    @pytest.mark.parametrize(
+        ("a", "b", "expected"),
+        [
+            (np.diag([1.0, 1.0]), np.diag([2.0, 2.0]), "a<b"),
+            (np.diag([2.0, 2.0]), np.diag([1.0, 1.0]), "b<a"),
+            (np.diag([1.0, 1.0]), np.diag([1.0, 1.0]), "equal"),
+            (np.diag([1.0, 3.0]), np.diag([3.0, 1.0]), "incomparable"),
+            (np.diag([1.0, 1.0]), np.diag([1.0, 2.0]), "incomparable"),  # not strict
+        ],
+    )
+    def test_compares(self, a, b, expected):
+        assert loewner_order(a, b) == expected
+
+
+class TestProbeFlatModel:
+    def test_state_dependent_sensor_passes_every_condition(self):
+        model, belief = chain(range_noise)
+        report = probe_model(model, belief, ACTIONS)
+        assert report.full_row_rank
+        assert report.definite
+        assert report.non_constant
+        assert report.epistemic_varies
+        assert report.loewner_comparable  # scalar noises are always ordered
+        assert not report.flattens
+
+    def test_fixed_sensor_flattens(self):
+        model = LinearGaussianModel(
+            dynamics=[[1.0]],
+            sensor_model=[[1.0]],
+            dynamics_noise=[[1.0]],
+            sensor_noise=[[1.0]],
+            prior=Belief([0.0], [[1.0]]),
+            control=[[1.0]],
+        )
+        report = probe_model(model, Belief([0.0], [[1.0]]), ACTIONS)
+        assert report.flattens
+        assert not report.non_constant
+        assert not report.epistemic_varies
+        assert report.epistemic_range[0] == pytest.approx(report.epistemic_range[1])
+
+    def test_noise_the_control_cannot_reach_flattens(self):
+        """Declared state-dependent, but no action moves the mean off the prior."""
+        model, belief = chain(range_noise, control=0.0)
+        report = probe_model(model, belief, ACTIONS)
+        assert report.flattens
+        assert report.noise_spread == pytest.approx(0.0)
+
+    def test_noise_that_ignores_the_state_flattens(self):
+        model, belief = chain(ignores_the_state)
+        assert probe_model(model, belief, ACTIONS).flattens
+
+    def test_reports_where_the_noise_stops_being_a_covariance(self):
+        model, belief = chain(goes_indefinite)
+        report = probe_model(model, belief, ACTIONS)
+        assert not report.definite
+        assert report.indefinite_at
+        # every flagged mean is genuinely outside the band where 1 − x² stays positive
+        assert all(abs(mu[0]) >= 1.0 for mu in report.indefinite_at)
+
+    def test_needs_an_action_to_predict_under(self):
+        model, belief = chain(range_noise)
+        with pytest.raises(ValueError, match="at least one action"):
+            probe_model(model, belief, [])
+
+    def test_summary_names_every_condition(self):
+        model, belief = chain(range_noise)
+        text = probe_model(model, belief, ACTIONS).summary()
+        for line in (
+            "full row rank",
+            "positive def",
+            "non-constant",
+            "epistemic varies",
+        ):
+            assert line in text
+
+
+class TestProbeGraphBackend:
+    @staticmethod
+    def build(*, alive):
+        cue = (
+            CallableGaussianObservation([[-1.0, 1.0]], range_noise, None)
+            if alive
+            else GaussianObservation([[-1.0, 1.0]], [[2.0]])
+        )
+        graph = CouplingGraph(
+            root=0,
+            dims=(1, 2),
+            couplings=(
+                Coupling(
+                    parent=0,
+                    child=1,
+                    factor=GaussianCoupling(
+                        coupling=[[0.0], [1.0]],
+                        coupling_noise=[[0.5, 0.0], [0.0, 0.5]],
+                    ),
+                    tau=1.0,
+                ),
+            ),
+            observations={1: cue},
+        )
+        transitions = (
+            GaussianTransition([[1.0]], [[0.1]]),
+            GaussianTransition([[1.0, 0.0], [0.0, 1.0]], [[0.1, 0.0], [0.0, 0.1]]),
+        )
+        return CouplingGraphBackend(graph, transitions, control=[[0.0], [1.0], [0.0]])
+
+    @staticmethod
+    def belief():
+        return Belief(jnp.zeros(3), jnp.eye(3))
+
+    def test_separates_a_live_sensor_from_a_frozen_one(self):
+        live = probe_model(self.build(alive=True), self.belief(), ACTIONS)
+        frozen = probe_model(self.build(alive=False), self.belief(), ACTIONS)
+        assert live.non_constant
+        assert live.epistemic_varies
+        assert frozen.flattens
+        assert not frozen.epistemic_varies
+
+    def test_reports_a_redundant_channel(self):
+        """Two channels reading the same row leave C short of full row rank."""
+        graph = CouplingGraph(
+            root=0,
+            dims=(2,),
+            couplings=(),
+            observations={
+                0: GaussianObservation(
+                    [[-1.0, 1.0], [-1.0, 1.0]], [[2.0, 0.0], [0.0, 2.0]]
+                )
+            },
+        )
+        backend = CouplingGraphBackend(
+            graph,
+            (GaussianTransition([[1.0, 0.0], [0.0, 1.0]], [[0.1, 0.0], [0.0, 0.1]]),),
+            control=[[1.0], [0.0]],
+        )
+        report = probe_model(backend, Belief(jnp.zeros(2), jnp.eye(2)), ACTIONS)
+        assert not report.full_row_rank
+        assert (report.rank, report.n_observations) == (1, 2)

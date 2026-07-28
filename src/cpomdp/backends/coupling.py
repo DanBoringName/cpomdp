@@ -40,6 +40,73 @@ class IncompatibleLinearizationError(ValueError):
     """
 
 
+@jax.tree_util.register_pytree_node_class
+class _JointObservation:
+    """The graph's per-node sensors read as one sensor over the joint state.
+
+    Satisfies the ``ObservationModel`` protocol, so the flat model a backend hands out
+    carries the graph's state-dependence instead of a noise block frozen at one
+    representative state. Each node's factor is linearized at that node's slice of the
+    joint mean — the same point the backend's own filter uses.
+
+    ``C`` is constant, so it rides as a leaf; the per-node factors are leaves in turn
+    (each is a pytree), and the column spans are static.
+    """
+
+    def __init__(
+        self,
+        sensor_model: jax.Array,
+        factors: tuple[ObservationFactor, ...],
+        blocks: tuple[tuple[int, int], ...],
+    ) -> None:
+        self.sensor_model = sensor_model
+        self.factors = factors
+        self.blocks = blocks
+        self.is_fixed = all(f.is_fixed for f in factors)
+
+    def linearize(
+        self, x: ArrayLike
+    ) -> tuple[Float64[jax.Array, "m n"], Float64[jax.Array, "m m"]]:
+        """Local ``(C, R(x))`` — constant ``C``, each node's ``R`` at its own block."""
+        x = jnp.asarray(x, dtype=float)
+        blocks = [
+            factor.linearize(x[lo:hi])[1]
+            for factor, (lo, hi) in zip(self.factors, self.blocks, strict=True)
+        ]
+        if not blocks:
+            return self.sensor_model, jnp.zeros((0, 0))
+        return self.sensor_model, jax.scipy.linalg.block_diag(*blocks)
+
+    def gaussianize(
+        self, x: ArrayLike, sigma: Float64[jax.Array, "n n"]
+    ) -> tuple[
+        Float64[jax.Array, "m"], Float64[jax.Array, "m m"], Float64[jax.Array, "m m"]
+    ]:
+        """Linear ingredients ``(C·x, C·Σ·Cᵀ + R(x), R(x))``."""
+        x = jnp.asarray(x, dtype=float)
+        sensor_model, sensor_noise = self.linearize(x)
+        return (
+            sensor_model @ x,
+            sensor_model @ sigma @ sensor_model.T + sensor_noise,
+            sensor_noise,
+        )
+
+    def tree_flatten(self):
+        """Children: ``(C, factors)``; aux: the column spans."""
+        return (self.sensor_model, self.factors), self.blocks
+
+    @classmethod
+    def tree_unflatten(cls, aux_data, children) -> "_JointObservation":
+        """Rebuild without re-deriving ``is_fixed`` from traced leaves."""
+        sensor_model, factors = children
+        obj = object.__new__(cls)
+        obj.sensor_model = sensor_model
+        obj.factors = factors
+        obj.blocks = aux_data
+        obj.is_fixed = all(getattr(f, "is_fixed", True) for f in factors)
+        return obj
+
+
 class CouplingGraphBackend:
     """FFG message-passing inference on a *branching* linear-Gaussian tree.
 
@@ -242,6 +309,10 @@ class CouplingGraphBackend:
         The validator reads only the model's dims, so this carries the *real* stacked
         observations (not the structural pseudo-observations ``to_flat_model`` adds);
         the prior is an unused placeholder.
+
+        A graph with any state-dependent sensor also gets a ``_JointObservation``, so
+        the model's ``R`` follows the state rather than sitting frozen at the
+        representative value the ``sensor_noise`` block carries for shape.
         """
         rows, noise_blocks = self._real_observation_blocks()
         sensor_model = jnp.vstack(rows) if rows else jnp.zeros((0, self.n_total))
@@ -249,6 +320,18 @@ class CouplingGraphBackend:
             sensor_noise = jax.scipy.linalg.block_diag(*noise_blocks)
         else:
             sensor_noise = jnp.zeros((0, 0))
+        factors = tuple(
+            self.graph.observations[node] for node, _lo, _hi in self._obs_layout
+        )
+        spans = tuple(
+            (self._offsets[node], self._offsets[node + 1])
+            for node, _lo, _hi in self._obs_layout
+        )
+        observation = (
+            None
+            if all(f.is_fixed for f in factors)
+            else _JointObservation(sensor_model, factors, spans)
+        )
         return LinearGaussianModel(
             dynamics=self._transition.dynamics,
             sensor_model=sensor_model,
@@ -256,6 +339,7 @@ class CouplingGraphBackend:
             sensor_noise=sensor_noise,
             prior=Belief(jnp.zeros(self.n_total), jnp.eye(self.n_total)),
             control=self._control,
+            observation=observation,
         )
 
     def _block(self, node: int) -> slice:
@@ -742,29 +826,33 @@ class CouplingGraphBackend:
         native FFG against. Pad a step's readings with ``flat_observation`` first; the
         returned prior is an unused placeholder (pass the real prior per step).
 
-        Fixed sensors only. With couplings present a state-dependent ``R(x)`` is a
-        *category error* for this route (``IncompatibleLinearizationError`` — the flat
-        Kalman linearizes at μ⁻, the FFG at μ⁺); a coupling-free ``R(x)`` would be
-        faithful (μ⁻ = μ⁺) but wants a ``CallableSensor`` flat model not emitted here.
+        With couplings present a state-dependent ``R(x)`` is a *category error* for this
+        route (``IncompatibleLinearizationError`` — the flat Kalman linearizes at μ⁻,
+        the FFG at μ⁺). Coupling-free, μ⁻ = μ⁺, so the emitted model carries the graph's
+        own state-dependent sensor and stays faithful; it is a state-dependent flat
+        model, not a fixed one, and no fixed one exists.
+
+        The refusal reads the sensor's *declared* state-dependence. Whether ``R`` really
+        varies over the means a policy can reach is a property of the noise function and
+        the reachable set, which this cannot decide — ``cpomdp.diagnostics.probe_model``
+        samples it.
         """
-        if not self._sensor_is_fixed:
-            if self.graph.couplings:
-                # A mean-shifting coupling makes μ⁺ ≠ μ⁻, so no fixed flat model
-                # reproduces R(μ⁺) -- inherent, not a missing feature.
-                raise IncompatibleLinearizationError(
-                    "Cannot flatten a state-dependent R(x) model with couplings: a "
-                    "mean-shifting coupling makes the prediction mean μ⁺ differ from "
-                    "the prior mean μ⁻, so no fixed linear-Gaussian model reproduces "
-                    "R(μ⁺)."
-                )
-            # Coupling-free: μ⁺ = μ⁻, so a CallableSensor flat model *would* be faithful
-            # — that emission is simply not wired (build KalmanBackend(CallableSensor)
-            # directly, as the single-node oracle test does).
-            raise NotImplementedError(
-                "to_flat_model does not emit a CallableSensor flat model yet; for a "
-                "coupling-free R(x) backend build KalmanBackend(CallableSensor) direct."
+        if not self._sensor_is_fixed and self.graph.couplings:
+            # A mean-shifting coupling makes μ⁺ ≠ μ⁻, so no fixed flat model
+            # reproduces R(μ⁺) -- inherent, not a missing feature.
+            raise IncompatibleLinearizationError(
+                "Cannot flatten a state-dependent R(x) model with couplings: a "
+                "mean-shifting coupling makes the prediction mean μ⁺ differ from "
+                "the prior mean μ⁻, so no fixed linear-Gaussian model reproduces "
+                "R(μ⁺). This reads the sensor's declared state-dependence; a "
+                "declared R(x) that ignores the state is constant in fact and does "
+                "flatten — see cpomdp.diagnostics.probe_model."
             )
         rows, noise_blocks = self._real_observation_blocks()
+        # Coupling-free R(x): μ⁻ = μ⁺, so handing the graph's own sensor to a flat
+        # backend reproduces this filter. With couplings the branch above has already
+        # refused, so this is None whenever a pseudo-observation is about to be added.
+        observation = None if self._sensor_is_fixed else self._flat_model.observation
         for edge in self.graph.couplings:  # child − W·parent ~ N(0, Q_struct)
             coupling = edge.factor.coupling  # W
             child_dim = coupling.shape[0]
@@ -780,6 +868,7 @@ class CouplingGraphBackend:
             sensor_noise=jax.scipy.linalg.block_diag(*noise_blocks),
             prior=Belief(jnp.zeros(self.n_total), jnp.eye(self.n_total)),
             control=self._control,
+            observation=observation,
         )
 
     def flat_observation(self, observation: ArrayLike) -> jax.Array:

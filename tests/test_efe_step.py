@@ -112,12 +112,34 @@ def _cases():
     ]
 
 
+def _frozen_logdet_pd(matrix):
+    """`ln det` of a covariance, NaN when it is not positive definite.
+
+    Independently reimplemented rather than imported, so the two sides of the
+    characterization stay genuinely separate copies.
+
+    The kernel's epistemic guard was a determinant *sign* when this snapshot was first
+    taken. A sign passes any matrix with an even number of negative eigenvalues —
+    `diag(-1, -2)` has a positive determinant and is not a covariance — so it was
+    replaced by a Cholesky test, which succeeds with a strictly positive diagonal
+    exactly when the matrix is positive definite. That is a deliberate arithmetic
+    change, mirrored here; everything else in this function stays frozen.
+    """
+    chol = jnp.linalg.cholesky(matrix)
+    diag = jnp.diagonal(chol)
+    definite = jnp.all(diag > 0)
+    safe = jnp.where(definite, diag, 1.0)
+    return jnp.where(definite, 2.0 * jnp.sum(jnp.log(safe)), jnp.nan)
+
+
 def _frozen_efe(model, belief, action, preference):
     """Verbatim snapshot of efe.py's kernel arithmetic (lines 147-204), pre-B1.
 
     The "before" half of the characterization test: an inert `_efe_step` extraction
     must make `expected_free_energy` reproduce this bit-for-bit. Do NOT refactor this
-    to call the new kernel — its whole value is being a frozen, independent copy.
+    to call the new kernel — its whole value is being a frozen, independent copy. The
+    one line that has moved since the snapshot is the epistemic determinant guard; see
+    `_frozen_logdet_pd`.
     """
     control = model.control
     assert control is not None  # mirrors the kernel arithmetic past the control guard
@@ -147,9 +169,9 @@ def _frozen_efe(model, belief, action, preference):
     pragmatic_var = 0.5 * jnp.trace(precision @ pred_obs_cov)
     pragmatic = pragmatic_mean + pragmatic_var
 
-    _, logdet_pred_obs = jnp.linalg.slogdet(pred_obs_cov)
-    _, logdet_noise = jnp.linalg.slogdet(sensor_noise)
-    epistemic = 0.5 * (logdet_pred_obs - logdet_noise)
+    epistemic = 0.5 * (
+        _frozen_logdet_pd(pred_obs_cov) - _frozen_logdet_pd(sensor_noise)
+    )
 
     g = pragmatic - epistemic
     return g, {"pragmatic": pragmatic, "epistemic": epistemic}

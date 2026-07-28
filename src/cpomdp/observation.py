@@ -1,8 +1,8 @@
 """Observation models: how a hidden state produces a sensor reading.
 
 The ``ObservationModel`` protocol is the seam the EFE core asks for a local
-linear-Gaussian ``(C, R)`` about a state. ``FixedSensor`` is the constant case
-(the v0.2 default); state-dependent sensors arrive in v0.3.
+linear-Gaussian ``(C, R)`` about a state. ``FixedSensor`` is the constant case;
+``CallableSensor`` lets the noise covariance follow the state.
 """
 
 from collections.abc import Callable
@@ -28,8 +28,8 @@ def _linear_gaussianize(
     """Exact predicted-observation moments for a LINEAR sensor: ``(C·x, C·Σ·Cᵀ + R)``.
 
     Shared by every linear-mean sensor (``FixedSensor``, ``CallableSensor``) so the
-    moment-matching lives in one place. ``NonlinearSensor`` (Phase 2.5) supplies its
-    own 2nd-order ``gaussianize`` instead of calling this.
+    moment-matching lives in one place. A sensor with a nonlinear mean would supply
+    its own second-order ``gaussianize`` instead of calling this.
     """
     return sensor_model @ x, sensor_model @ sigma @ sensor_model.T + sensor_noise
 
@@ -65,7 +65,7 @@ class ObservationModel(Protocol):
 
         The EFE kernel calls this, not ``linearize``: each sensor owns its own
         moment-matching, so the fixed/linear path stays a bare matvec and a
-        nonlinear sensor (Phase 2.5) can do 2nd-order without reopening the kernel.
+        sensor with a nonlinear mean could do second order without reopening it.
         Returns the predicted-observation mean ``o⁺``, its covariance ``S`` (feeds
         the pragmatic term), and the conditional observation noise ``R`` at ``x``
         (feeds the epistemic ``½(ln det S − ln det R)``) — all computed in one pass.
@@ -76,7 +76,7 @@ class ObservationModel(Protocol):
 @jax.tree_util.register_pytree_node_class
 @dataclass(frozen=True, init=False)
 class FixedSensor:
-    """A sensor whose (C, R) never change with state — the v0.2 default.
+    """A sensor whose (C, R) never change with state.
 
     ``linearize`` returns the same stored matrices for every ``x``: a fixed
     linear sensor *is* its own linear approximation everywhere. This is the
@@ -152,8 +152,7 @@ class CallableSensor:
     so on the action), the epistemic term is no longer action-invariant — the agent
     can act to reach states where the sensor is sharper. *Mean-exact,
     covariance-plug-in*: ``o⁺ = C·μ⁺`` is exact, while ``R(μ⁺)`` is a plug-in that
-    drops the ``½tr(H_R Σ⁺)`` Jensen term (a deliberate first-order choice; the
-    nonlinear-mean 2nd-order case is ``NonlinearSensor``, Phase 2.5).
+    drops the ``½tr(H_R Σ⁺)`` Jensen term — a deliberate first-order choice.
 
     ``noise_fn`` must return a **positive-definite** ``R(x)`` at every reachable state
     — it is a covariance the epistemic term inverts. A non-PD ``R(x)`` has no real

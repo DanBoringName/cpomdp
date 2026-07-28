@@ -4,6 +4,72 @@ Everything worth noting lands here. The format follows [Keep a Changelog](https:
 
 ## [Unreleased]
 
+## [0.4.3] — 2026-07-27
+
+Closes the code-side divergences found by auditing the library against the paper written
+about it (`PAPER_DIVERGENCE.md`). The paper's own quoted numbers are unchanged and both
+demonstrations' `--check` gates still pass; the paper-side items are tracked separately.
+
+### Added
+
+- `cpomdp.diagnostics` — the conditions a state-dependent sensor has to meet, asked over
+  the states an action can actually reach. `probe_model(model, belief, actions)` predicts
+  under each candidate action and reports a `SensorReport`: whether `C` has full row rank,
+  whether `R` stays positive definite, whether `R` moves at all across the reachable
+  means, and whether the epistemic value moves with it. `is_positive_definite`,
+  `epistemic_value` and `loewner_order` are exposed alongside for use on their own.
+  `probe_model` and `SensorReport` are re-exported at the top level. A declared `R(x)`
+  that no action can move now has something that says so.
+- `tests/test_theorem.py` — one test per published claim: the pinning result and its
+  rank-deficient counterexample, the dual effect on both the posterior covariance and the
+  gain, the impossibility of a fixed noise schedule, the scalar monotonicity, the
+  zero-innovation realisation, the planning-reduction equivalence, the level-set
+  construction where the covariance moves but the epistemic value does not, and the
+  worked one-step numbers (gains 2/3 and 2/7, ½ln3 and ½ln(7/5)).
+- `tests/test_diagnostics.py` covering the new module.
+- `examples/efe_collapse_figure.py --check` now also asserts the dual effect directly —
+  the posterior variance and the Kalman gain moving across the action grid — rather than
+  only the epistemic scalar that rides on it.
+
+### Fixed
+
+- **The FFG epistemic term had no positive-definiteness guard.** `_efe_step` mapped a
+  non-positive-definite `R` to NaN so it would lose the selector's argmin;
+  `_state_info_gain`, the term the coupling-graph path actually scores, discarded the
+  determinant signs and returned a finite, plausible-but-wrong value that could *win*.
+  Both now share one `_logdet_pd` helper, which tests positive definiteness by Cholesky
+  rather than by determinant sign — the sign passes any matrix with an even number of
+  negative eigenvalues, `diag(-1, -2)` among them.
+- **`CouplingGraphBackend.model` handed out a frozen `R`.** For a state-dependent graph
+  the flat model carried the noise evaluated once at a representative state, so anything
+  filtering with it silently used the wrong noise at every step. The model now carries a
+  `_JointObservation` that linearizes each node's `R` at that node's slice of the mean,
+  the same point the backend's own filter uses.
+- **`Agent` could not see a graph's state-dependence.** Because that flat model declared
+  no observation model, a coupled `R(x)` backend read as a fixed sensor and a `StateGoal`
+  was accepted onto it, silently selecting actions with the certainty-equivalent LQR
+  controller. It now raises, as it always did on the flat path.
+- **The theorem's own model class could not be flattened.** A single chain with no
+  couplings raised `NotImplementedError`; it now emits a faithful state-dependent flat
+  model, verified to reproduce the native filter to ~1e-16. It is a state-dependent
+  model, not a fixed one — no fixed one exists.
+- `examples/ffg/epistemic_dissociation_figure.py` numbered its first two results the
+  opposite way round to the write-up, and printed them out of order. Result 4 asserted
+  only that the *best* action B rates below the pragmatic-only agent is cue-ward; it now
+  asserts the claim actually made, that *every* such action is.
+
+### Changed
+
+- The `IncompatibleLinearizationError` message gains a closing sentence: the guard reads
+  the sensor's *declared* state-dependence, and a declared `R(x)` that ignores the state
+  is constant in fact and does flatten. The original two sentences are unchanged, so the
+  message is now a strict extension of what came before. Whether `R` really varies over
+  reachable means is what `cpomdp.diagnostics.probe_model` is for.
+- Trimmed prose in `src/` that had gone stale: references to an `rfcs/` directory that
+  does not exist, sensors and selectors described as arriving in a release that has
+  shipped, and the unqualified claim that the predicted covariance is action-independent
+  — true of a single step, false over a horizon under `R(x)` or `Q(x)`.
+
 ## [0.4.2] — 2026-07-18
 
 Archival release accompanying the paper. No library code changed — the public API and
