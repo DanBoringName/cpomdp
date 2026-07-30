@@ -42,6 +42,8 @@ __all__ = [
     "EnumeratedSearchResult",
     "FiniteActionSet",
     "IncompleteEnumerationError",
+    "OpenLoopSelector",
+    "RecedingHorizonSelector",
     "SearchWarrant",
 ]
 
@@ -249,3 +251,113 @@ class EnumeratedEfeSearch:
     def certificate(self) -> CompletenessCertificate:
         """The front-loaded completeness certificate (ADR-030)."""
         return self._certificate
+
+
+class RecedingHorizonSelector:
+    """Receding-horizon driver over ``EnumeratedEfeSearch`` (an ``ActionSelector``).
+
+    Every ``select`` re-runs the full ``A^H`` search on the current belief and returns
+    the first action of the best sequence. The belief drives every choice, so the plan
+    is recomputed each step. Kept separate from ``OpenLoopSelector`` because item E's
+    matched-horizon bracket depends on which mode is running (ADR-031).
+    """
+
+    def __init__(self, search: EnumeratedEfeSearch) -> None:
+        self._search = search
+
+    def select(self, belief: Belief, preference: "Preference") -> Float64[Array, "p"]:
+        """Re-plan on ``belief`` and return the first action of the best sequence."""
+        return self._search.evaluate(belief, preference).best_policy[0]
+
+    @property
+    def horizon(self) -> int:
+        """The planning horizon H."""
+        return self._search.horizon
+
+    @property
+    def warrant(self) -> SearchWarrant:
+        """``PROVED`` — inherited from the enumerated search."""
+        return self._search.warrant
+
+    @property
+    def certificate(self) -> CompletenessCertificate:
+        """The search's completeness certificate (ADR-030)."""
+        return self._search.certificate
+
+    @property
+    def cost_per_plan(self) -> int:
+        """Step-evals for one search = ``|A|^H * H`` (RFC-001 attributable work)."""
+        return self._search.cost_per_cycle
+
+    @property
+    def replan_interval(self) -> int:
+        """Cycles between re-plans. 1: this driver plans every step."""
+        return 1
+
+    @property
+    def cost_per_cycle(self) -> int:
+        """Per-cycle step-evals = ``|A|^H * H``. It plans every cycle."""
+        return self.cost_per_plan // self.replan_interval
+
+
+class OpenLoopSelector:
+    """Open-loop driver over ``EnumeratedEfeSearch`` (an ``ActionSelector``).
+
+    Plans once on the belief of the first ``select``, commits to the whole best
+    sequence, and returns its actions in order while ignoring the interim beliefs. It
+    re-plans only when the committed sequence is exhausted, or after ``reset``. Ignoring
+    the interim beliefs is what makes it open-loop, and the distinction from
+    ``RecedingHorizonSelector`` is item E's matched-horizon bracket (ADR-031).
+
+    Stateful: it holds the committed plan and a step counter. The ``Agent`` drives it
+    eagerly, one ``select`` per step, so the mutation is safe.
+    """
+
+    def __init__(self, search: EnumeratedEfeSearch) -> None:
+        self._search = search
+        self._plan: Float64[Array, "H p"] | None = None
+        self._step = 0
+
+    def select(self, belief: Belief, preference: "Preference") -> Float64[Array, "p"]:
+        """Return the next committed action, re-planning on ``belief`` when spent."""
+        if self._plan is None or self._step >= self._search.horizon:
+            self._plan = self._search.evaluate(belief, preference).best_policy
+            self._step = 0
+        action = self._plan[self._step]
+        self._step += 1
+        return action
+
+    def reset(self) -> None:
+        """Drop the committed plan so the next ``select`` re-plans from scratch."""
+        self._plan = None
+        self._step = 0
+
+    @property
+    def horizon(self) -> int:
+        """The planning horizon H, which is also the re-plan interval."""
+        return self._search.horizon
+
+    @property
+    def warrant(self) -> SearchWarrant:
+        """``PROVED`` — inherited from the enumerated search."""
+        return self._search.warrant
+
+    @property
+    def certificate(self) -> CompletenessCertificate:
+        """The search's completeness certificate (ADR-030)."""
+        return self._search.certificate
+
+    @property
+    def cost_per_plan(self) -> int:
+        """Step-evals for one search = ``|A|^H * H`` (RFC-001 attributable work)."""
+        return self._search.cost_per_cycle
+
+    @property
+    def replan_interval(self) -> int:
+        """Cycles between re-plans = H. It commits to the whole sequence."""
+        return self._search.horizon
+
+    @property
+    def cost_per_cycle(self) -> int:
+        """Amortised per-cycle step-evals = ``|A|^H`` (one ``|A|^H * H`` plan per H)."""
+        return self.cost_per_plan // self.replan_interval

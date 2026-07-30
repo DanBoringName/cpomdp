@@ -89,13 +89,20 @@ the certificate (M3's completeness proof).
       = CORROBORATED. Supports `p >= 1` and varying sequences; a varying policy
       provably wins on the beacon fixture. `tests/test_enumeration.py` (20 tests).
       ADR-030 + ADR-031 written.
-- [ ] **M4. Receding-horizon driver + honest cost accounting.** *(Required.)*
+- [x] **M4. Receding-horizon driver + honest cost accounting.** *(Required.)*
       Keep open-loop (apply the whole sequence) and receding-horizon (apply first,
       re-plan) as separate, both available — item E's matched-horizon bracket
       depends on the distinction and R10 must declare its mode before measurement.
       `cost_per_cycle` becomes |A|^H × H step-evals on the enumerated path; it
       must **not** silently keep reporting `n_candidates × horizon`. A cost number
       under-reporting by |A|^(H−1) is worse than none (RFC-001).
+      **Done:** `RecedingHorizonSelector` and `OpenLoopSelector` in `enumeration.py`,
+      both `ActionSelector`s wrapping `EnumeratedEfeSearch`, both drivable by `Agent`
+      via `selector=`. Open-loop commits to the sequence and ignores interim beliefs
+      (with `reset()`); receding re-plans each step. Honest cost: both expose
+      `cost_per_plan = |A|^H × H` and `replan_interval` (1 / H); `cost_per_cycle` is
+      the amortised per-cycle cost (|A|^H × H receding, |A|^H open-loop), never the
+      grid's `n_candidates × horizon`. `tests/test_enumerated_drivers.py` (12 tests).
 - [ ] **M5. The crossover statistic, defined before it is measured.** *(Required.
       The standing-rule item.)* Write down — in code and in the pre-registration —
       what "epistemic pull" and "pragmatic gradient" mean at H > 1. It must
