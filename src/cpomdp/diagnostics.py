@@ -38,16 +38,25 @@ reachable state". A negative is evidence, not proof.
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import numpy as np
 from numpy.typing import ArrayLike
 
+if TYPE_CHECKING:
+    # Annotation-only: the rollout diagnostic reads a trace's fields by duck typing,
+    # so diagnostics does not depend on efe at runtime (efe already depends on nothing
+    # here). Keeps the dependency one-way.
+    from cpomdp.efe import PolicyEfeTrace
+
 __all__ = [
+    "RolloutConditioning",
     "SensorReport",
     "epistemic_value",
     "is_positive_definite",
     "loewner_order",
     "probe_model",
+    "rollout_conditioning",
 ]
 
 
@@ -290,4 +299,62 @@ def probe_model(
         epistemic_varies=bool(finite) and (hi - lo) > tol,
         epistemic_range=(lo, hi),
         loewner_comparable=comparable,
+    )
+
+
+@dataclass(frozen=True)
+class RolloutConditioning:
+    """Per-step conditioning of an H-step rollout, computed on the host.
+
+    Every array field is length-H, indexed by rollout step. The condition numbers and
+    the smallest eigenvalue are what a monotonically contracting ``Σ_post`` degrades
+    first; ``all_positive_definite`` folds a per-step positive-definiteness check over
+    ``Σ⁺``, ``S`` and ``Σ_post`` into one flag, so a matrix that has gone non-PD
+    anywhere in the horizon is visible without inspecting every step.
+
+    Attributes:
+        cond_sigma_pred: 2-norm condition number of each predicted covariance ``Σ⁺``.
+        cond_s: condition number of each innovation covariance ``S``.
+        cond_sigma_post: condition number of each contracted covariance ``Σ_post``.
+        min_eig_sigma_post: smallest eigenvalue of each ``Σ_post``.
+        all_positive_definite: whether every ``Σ⁺``, ``S`` and ``Σ_post`` is PD.
+    """
+
+    cond_sigma_pred: np.ndarray
+    cond_s: np.ndarray
+    cond_sigma_post: np.ndarray
+    min_eig_sigma_post: np.ndarray
+    all_positive_definite: bool
+
+
+def rollout_conditioning(trace: "PolicyEfeTrace") -> RolloutConditioning:
+    """Per-step condition numbers and PD flags of a rollout trace, on the host.
+
+    Reads the per-step matrices ``policy_efe_trace`` already returns and applies the
+    condition-number discipline to the rollout. The assertions a caller builds on top —
+    a ceiling on the condition numbers, a floor under ``min_eig_sigma_post`` — belong
+    here on the host, outside any ``jit``/``vmap``, which is the only place they can
+    raise. Pure NumPy.
+
+    Args:
+        trace: a :class:`~cpomdp.efe.PolicyEfeTrace` — read for its ``sigma_pred``
+            (``Σ⁺``), ``s`` (``S``) and ``sigma_post`` (``Σ_post``) columns.
+
+    Returns:
+        A :class:`RolloutConditioning`.
+    """
+    sigma_pred = np.asarray(trace.sigma_pred, dtype=float)
+    s = np.asarray(trace.s, dtype=float)
+    sigma_post = np.asarray(trace.sigma_post, dtype=float)
+
+    return RolloutConditioning(
+        cond_sigma_pred=np.array([np.linalg.cond(m) for m in sigma_pred]),
+        cond_s=np.array([np.linalg.cond(m) for m in s]),
+        cond_sigma_post=np.array([np.linalg.cond(m) for m in sigma_post]),
+        min_eig_sigma_post=np.array([np.linalg.eigvalsh(m).min() for m in sigma_post]),
+        all_positive_definite=all(
+            is_positive_definite(m)
+            for column in (sigma_pred, s, sigma_post)
+            for m in column
+        ),
     )

@@ -62,12 +62,15 @@ the certificate (M3's completeness proof).
       shared `_rollout_body`; `tests/test_policy_efe_trace.py` (19 tests). Notation
       follows `efe.py` (μ⁺/Σ⁺ predicted, Σ_post contracted); global unification is
       the follow-up checklist below.
-- [ ] **M2. The Σ(π) policy-dependence witness.** *(Required, cheap.)* Make the
+- [x] **M2. The Σ(π) policy-dependence witness.** *(Required, cheap.)* Make the
       "planner manipulates the open-loop planning covariances Σ⁻ₖ(π), Σ⁺ₖ(π)"
       claim a check, not a doc sentence: under a fixed sensor two distinct
       policies give **byte-identical** Σ trajectories; under `R(x)` the same two
       separate by more than a declared margin. Theorem 1(i) stated at H > 1,
       checkable today with no grid; prices the cost driver in the same run.
+      **Done:** `tests/test_sigma_policy_dependence.py` (4 tests) — fixed sensor
+      `assert_array_equal` on Σ⁺/Σ_post/S across two policies (means still differ);
+      `R(x)` separates Σ_post and `Q(x)` separates Σ⁺ past a declared 1e-2 margin.
 - [ ] **M3. Exhaustive enumeration over a declared finite action set.**
       *(Required. Largest item; the one R10 actually needs.)* Enumerate A^H over a
       **finite, declared, versioned** action set — a distinct object from
@@ -99,7 +102,7 @@ the certificate (M3's completeness proof).
       declared refinement of the finite action set** — if inserting intermediate
       actions moves H\*, the crossover is a property of the enumeration, not the
       agent. Pre-register it as a falsifier rather than have a reviewer find it.
-- [ ] **M6. Numerical hygiene across the scan.** *(Required, cheap; gates the
+- [x] **M6. Numerical hygiene across the scan.** *(Required, cheap; gates the
       honesty of everything above.)* Three `S` re-inversions under `R(x)` against a
       contracting Σ are where twelve orders of magnitude go missing. Print
       `cond(Σ⁺ₖ)` and `cond(Sₖ)` per step from the trace and assert a declared
@@ -110,6 +113,13 @@ the certificate (M3's completeness proof).
       agree on — return it as a diagnostic flag, assert outside the `vmap`);
       assert `jax_enable_x64` in the check suite (a silent float32 downcast is
       invisible at H = 1, fatal at H = 3).
+      **Done:** `diagnostics.rollout_conditioning` (per-step cond(Σ⁺)/cond(S)/
+      cond(Σ_post), min-eig, PD flag, host-side); `tests/test_rollout_hygiene.py`
+      (7 tests) asserts a 1e8 cond ceiling, a 1e-9 min-eig floor (assert, not clamp),
+      and x64-on (float64 is the default). **Correction:** the slogdet sign is
+      *already* guarded in both the kernel (`_logdet_pd`, cholesky→NaN) and the oracle
+      (`epistemic_value`, PD-checked), so that became a regression test, not a fix — no
+      rollout-kernel change, byte-identity untouched.
 - [ ] **M7. The H-sweep harness and the measured budget.** *(Required. Most
       justifies doing this early.)* One harness running the enumerated planner at
       H = 1…H_max, printing per H: |A|^H, wall time, peak memory, the M5 statistic
