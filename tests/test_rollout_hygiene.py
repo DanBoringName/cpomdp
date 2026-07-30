@@ -10,8 +10,8 @@ The locks:
 
 - `TestRolloutConditioning`: per-step `cond(Σ⁺)`, `cond(S)`, `cond(Σ_post)` stay under a
   declared ceiling and `Σ_post`'s smallest eigenvalue stays above a declared floor, and
-  every matrix is positive definite across the horizon. `rollout_conditioning` computes
-  it on the host from the trace.
+  every matrix is positive definite (PD) across the horizon. `rollout_conditioning`
+  computes it on the host from the trace.
 - `TestSlogdetSignGuarded`: the log-determinant guards do NOT discard the sign — a
   non-positive-definite matrix yields NaN, not a plausible-looking number, in both the
   kernel's `_logdet_pd` and the host oracle `epistemic_value`.
@@ -36,7 +36,7 @@ from cpomdp.observation import CallableSensor
 from cpomdp.selection import Preference
 from cpomdp.types import Belief, LinearGaussianModel
 
-# Declared bars (see the fixtures' measured values in the module tests below):
+# Declared bars; full justification in warrant_ledger.md.
 # float64 loses ~half its significant digits by a condition number of ~1e8; the healthy
 # fixtures here sit near 6, so this ceiling flags real degradation, not benign models.
 COND_CEILING = 1e8
@@ -159,8 +159,13 @@ class TestSlogdetSignGuarded:
     """A non-PD matrix yields NaN, not a plausible log-det (the sign is kept)."""
 
     def test_kernel_logdet_is_nan_on_non_pd(self):
-        indefinite = jnp.array([[-1.0, 0.0], [0.0, 1.0]])  # det > 0 but not PD
-        assert bool(jnp.isnan(_logdet_pd(indefinite)))
+        # diag(-1, -2): det = +2 > 0, two negative eigenvalues. A determinant-sign
+        # shortcut sees the positive det and returns a finite log|det|, which is wrong.
+        # _logdet_pd uses Cholesky, so it catches the non-PD matrix and returns NaN.
+        not_pd = jnp.array([[-1.0, 0.0], [0.0, -2.0]])
+        sign_shortcut = np.linalg.slogdet(np.asarray(not_pd))[1]
+        assert np.isfinite(sign_shortcut)  # the sign shortcut is fooled
+        assert bool(jnp.isnan(_logdet_pd(not_pd)))  # the Cholesky guard is not
 
     def test_kernel_logdet_correct_on_pd(self):
         # ln det(2·I₂) = ln 4.

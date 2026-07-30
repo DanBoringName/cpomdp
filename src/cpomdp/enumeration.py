@@ -1,0 +1,251 @@
+"""Exhaustive EFE search over a declared finite action set (ADR-030, ADR-031).
+
+The enumerated counterpart of ``EFESelector``'s continuous grid, and a deliberately
+*different object* so the two cannot be confused. ``EFESelector`` samples a continuous
+action box and tiles each sample into a **constant-action** policy — a sample of a
+continuum, warrant ``CORROBORATED`` (Prover 3a: corroborates, never decides).
+``EnumeratedEfeSearch`` enumerates **every** length-H sequence of a finite, declared,
+versioned ``FiniteActionSet`` — all ``|A|^H`` of them, *varying* sequences included — so
+"no policy in this set flips" is **decided**, not sampled: warrant ``PROVED`` (Prover
+3b). A ``CompletenessCertificate`` records ``expected = |A|^H`` against the ``visited``
+count and asserts they match (ADR-030), so the decisive warrant is earned, not assumed.
+
+The set is versioned because it is a modelling commitment: an action added after results
+are seen must show up in the diff, not be discovered by a reviewer. The ``PROVED``
+warrant is scoped to the *declared* set — whether that set is fine enough is a separate
+question a refinement-stability check answers, not this certificate.
+
+Internal seam: imported from ``cpomdp.enumeration``, not re-exported at the top level.
+"""
+
+import itertools
+from dataclasses import dataclass
+from enum import Enum
+from typing import TYPE_CHECKING, NamedTuple
+
+import jax
+import jax.numpy as jnp
+import numpy as np
+from jaxtyping import Array, Float64
+
+from cpomdp.efe import policy_efe
+from cpomdp.types import Belief, LinearGaussianModel
+
+if TYPE_CHECKING:
+    # Duck-typed at runtime (read for .goal/.precision via policy_efe), so no runtime
+    # dependency on selection — keeps selection -> enumeration the only edge.
+    from cpomdp.selection import Preference
+
+__all__ = [
+    "CompletenessCertificate",
+    "EnumeratedEfeSearch",
+    "EnumeratedSearchResult",
+    "FiniteActionSet",
+    "IncompleteEnumerationError",
+    "SearchWarrant",
+]
+
+
+class SearchWarrant(Enum):
+    """How well a search's ``no policy flips`` claim is warranted (standing rule 6).
+
+    ``PROVED`` — a finite set enumerated in full **decides** its universal (Prover 3b).
+    ``CORROBORATED`` — a grid sample of a continuum only **corroborates** it (Prover
+    3a); the optimum could sit between the sampled points. The two must print in
+    different vocabulary, never both as a bare ``PASS``.
+    """
+
+    PROVED = "PROVED"
+    CORROBORATED = "CORROBORATED"
+
+
+class IncompleteEnumerationError(Exception):
+    """Fewer than ``|A|^H`` policies enumerated: a sample, not a decision."""
+
+
+@dataclass(frozen=True, init=False)
+class FiniteActionSet:
+    """A finite, declared, **versioned** set of actions to enumerate over.
+
+    A distinct type from the continuous grid's ``(lo, hi, n_candidates)`` config, so the
+    enumerated (``PROVED``) and sampled (``CORROBORATED``) families cannot be mixed up
+    at a call site. Construction-time only (not a pytree).
+
+    Args:
+        actions: the declared actions, shape ``(A, p)`` — ``A`` actions of dimension
+            ``p``. At least two (a set of one is no choice to search).
+        version: a non-empty tag, so an action added later shows up in the diff.
+    """
+
+    actions: Float64[Array, "A p"]
+    version: str
+
+    def __init__(self, actions, *, version: str) -> None:
+        object.__setattr__(self, "actions", jnp.asarray(actions, dtype=float))
+        object.__setattr__(self, "version", version)
+        self._validate()
+
+    def _validate(self) -> None:
+        if self.actions.ndim != 2:
+            raise ValueError(
+                f"actions must be a 2-D (A, p) array, got shape {self.actions.shape}"
+            )
+        if self.actions.shape[0] < 2:
+            raise ValueError(
+                f"a FiniteActionSet needs at least 2 actions to search, got "
+                f"{self.actions.shape[0]}"
+            )
+        if not isinstance(self.version, str) or not self.version:
+            raise ValueError(
+                "version must be a non-empty string — the set is declared and versioned"
+            )
+
+    @property
+    def size(self) -> int:
+        """The action count ``A`` (the base of ``|A|^H``)."""
+        return int(self.actions.shape[0])
+
+    @property
+    def action_dim(self) -> int:
+        """The action dimension ``p``."""
+        return int(self.actions.shape[1])
+
+
+@dataclass(frozen=True)
+class CompletenessCertificate:
+    """Evidence an enumeration was exhaustive: ``expected`` vs ``visited`` (ADR-030).
+
+    ``expected = |A|^H`` is computed independently from the set size and horizon;
+    ``visited`` is the number of policies actually enumerated. Equal ⇒ the search
+    decided its universal, so it carries ``PROVED``. Printed in the warrant's own
+    vocabulary, never a bare ``PASS``.
+    """
+
+    expected: int
+    visited: int
+    warrant: SearchWarrant
+
+    @property
+    def complete(self) -> bool:
+        """Whether every expected policy was visited."""
+        return self.expected == self.visited
+
+    def __str__(self) -> str:
+        """The certificate as a one-line warrant string in its own vocabulary."""
+        return (
+            f"{self.warrant.value} (finite set, |A|^H = {self.expected}, "
+            f"visited {self.visited})"
+        )
+
+
+class EnumeratedSearchResult(NamedTuple):
+    """The outcome of one exhaustive search.
+
+    Attributes:
+        best_policy: the argmin sequence, shape ``(H, p)``.
+        g: the full EFE vector over every enumerated policy, shape ``(|A|^H,)`` — G-D's
+            dual reporting at H > 1 for free.
+    """
+
+    best_policy: Float64[Array, "H p"]
+    g: Float64[Array, "N"]
+
+
+class EnumeratedEfeSearch:
+    """Exhaustive EFE search over ``A^H`` for a declared finite action set (ADR-031).
+
+    Front-loads (ADR-002) the full ``|A|^H`` enumeration of *varying* sequences at
+    construction, with its completeness certificate; ``evaluate`` scores them all with
+    ``policy_efe`` and returns the argmin policy and the full ``G`` vector. Because the
+    set is finite and fully enumerated the search **decides** its universal — warrant
+    ``PROVED``, distinct from ``EFESelector``'s ``CORROBORATED`` grid.
+
+    Unlike ``EFESelector`` this supports ``p >= 1`` and *varying* sequences: it can
+    express a detour-then-exploit policy the constant-action family cannot.
+    """
+
+    def __init__(
+        self,
+        model: LinearGaussianModel,
+        action_set: FiniteActionSet,
+        *,
+        horizon: int,
+    ) -> None:
+        if model.control is None:
+            raise ValueError(
+                "EnumeratedEfeSearch needs a model with a control matrix; an "
+                "action has no effect on a control-free (pure-tracking) model."
+            )
+        p_model = model.control.shape[1]
+        if action_set.action_dim != p_model:
+            raise ValueError(
+                f"the action set is p={action_set.action_dim} but the model's control "
+                f"is p={p_model}; the declared actions must match the action dimension."
+            )
+        if horizon < 1:
+            raise ValueError(f"horizon must be >= 1, got {horizon}")
+
+        self._model = model
+        self._action_set = action_set
+        self._horizon = int(horizon)
+        # Front-load the enumeration: one row per A^H sequence, built once at
+        # construction (host-side itertools; never in the hot path).
+        index_grid = np.array(
+            list(itertools.product(range(action_set.size), repeat=self._horizon))
+        )  # (N, H)
+        self._policies = action_set.actions[jnp.asarray(index_grid)]  # (N, H, p)
+
+        expected = action_set.size**self._horizon
+        visited = int(self._policies.shape[0])
+        if visited != expected:  # ADR-030: the certificate is asserted, not assumed
+            raise IncompleteEnumerationError(
+                f"enumeration visited {visited} of an expected {expected} = |A|^H "
+                "policies; the search would be a sample, not a decision."
+            )
+        self._certificate = CompletenessCertificate(
+            expected=expected, visited=visited, warrant=SearchWarrant.PROVED
+        )
+
+    def evaluate(
+        self, belief: Belief, preference: "Preference"
+    ) -> EnumeratedSearchResult:
+        """Score every enumerated policy; return the argmin and the full ``G`` vector.
+
+        One ``vmap`` of ``policy_efe`` over the front-loaded ``|A|^H`` policies, then a
+        NaN-safe ``argmin`` (a NaN-scoring policy must not silently win).
+        """
+        g = jax.vmap(lambda pol: policy_efe(self._model, belief, pol, preference)[0])(
+            self._policies
+        )
+        best = jnp.argmin(jnp.where(jnp.isnan(g), jnp.inf, g))
+        return EnumeratedSearchResult(best_policy=self._policies[best], g=g)
+
+    @property
+    def policies(self) -> Float64[Array, "N H p"]:
+        """The enumerated ``A^H`` policies, shape ``(|A|^H, H, p)`` (front-loaded)."""
+        return self._policies
+
+    @property
+    def n_policies(self) -> int:
+        """The enumerated policy count ``|A|^H`` — attributable work (RFC-001)."""
+        return int(self._policies.shape[0])
+
+    @property
+    def horizon(self) -> int:
+        """The sequence length H."""
+        return self._horizon
+
+    @property
+    def cost_per_cycle(self) -> int:
+        """Per-cycle step-evals = ``|A|^H * H`` — the honest exponential cost."""
+        return self.n_policies * self._horizon
+
+    @property
+    def warrant(self) -> SearchWarrant:
+        """``PROVED`` — a finite set enumerated in full decides its universal."""
+        return SearchWarrant.PROVED
+
+    @property
+    def certificate(self) -> CompletenessCertificate:
+        """The front-loaded completeness certificate (ADR-030)."""
+        return self._certificate

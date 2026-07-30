@@ -1644,3 +1644,82 @@ modules stay docstring-only (no re-export layer to keep in sync).
   `n_candidates`/`horizon`/`cost_per_cycle` introspection, same top-level visibility.
 
 *Can refine in future.*
+
+## ADR-030 — the enumeration completeness certificate
+
+**Date:** 2026-07-30
+**Status:** Accepted
+**Phase:** v0.4.4 preliminary (multi-step EFE, horizon > 1) — item A
+**Extends:** ADR-002 (construction/loop split); realises the warrant-vocabulary standing
+rule for the enumerated search
+
+### The question
+
+A finite search over `|A|^H` policies wants to state "no policy in this set flips the
+crossover sign". That is a universal, and a universal is only *decided* (Prover 3b) if
+the search was exhaustive. Without evidence of exhaustiveness the same run is a *sample*
+(Prover 3a) wearing a decision's clothes — and the crossover result would inherit a 3a
+licence it must not have.
+
+### Decision
+
+`EnumeratedEfeSearch` emits a `CompletenessCertificate` at construction: `expected =
+|A|^H` computed independently from the action-set size and the horizon, `visited` = the
+count of policies actually enumerated, and it raises `IncompleteEnumerationError` if they
+differ. The certificate carries the `PROVED` warrant and prints in that vocabulary
+(`PROVED (finite set, |A|^H = N, visited N)`), never a bare `PASS`.
+
+This lands now rather than at v0.6. It is about ten lines, and deferring it risks the
+crossover being computed under a 3a licence and needing a re-run once the certificate
+finally arrives.
+
+### Consequences
+
+- The enumerated family can state `PROVED` honestly; a later change that samples,
+  deduplicates, or prunes the enumeration trips the assertion instead of silently
+  downgrading the warrant.
+- The certificate is scoped to the *declared* set. Whether the set is fine enough is a
+  separate question — a refinement-stability check, pre-registered as a falsifier — not
+  something this certificate can or should settle.
+
+## ADR-031 — the search-family seam
+
+**Date:** 2026-07-30
+**Status:** Accepted
+**Phase:** v0.4.4 preliminary (multi-step EFE, horizon > 1) — item A
+**Extends:** ADR-030 (the certificate); relates to ADR-021 (the selector family)
+
+### The question
+
+`EFESelector` searches a *continuous* action box by sampling an evenly-spaced grid and
+tiling each sample into a constant-action policy — a sample of a continuum, warrant
+`CORROBORATED`. The crossover needs a *decisive* search over a finite declared set,
+warrant `PROVED`. These are different objects with different warrants. If the API lets
+them be confused, a sampled result reads as a decided one and the certificate ADR-030
+earns is eroded at exactly the point it matters.
+
+### Decision
+
+Keep them physically and typographically distinct:
+
+- A separate module, `cpomdp.enumeration`, holds the enumerated family — an internal
+  seam, not re-exported at the top level (a public surface is scheduled, not assumed).
+- `FiniteActionSet` (declared, finite, **versioned**) is a distinct type from the grid's
+  `(lo, hi, n_candidates)` config, so the two cannot be passed to the wrong search.
+- Two families with two warrants, both self-describing via a `SearchWarrant`-valued
+  `.warrant`: `EFESelector` (grid, `CORROBORATED`, constant-action, `p = 1`) and
+  `EnumeratedEfeSearch` (finite set, `PROVED`, varying `A^H`, `p >= 1`).
+- Two cost vocabularies: `n_candidates * horizon` (grid) versus `|A|^H * H`
+  (enumerated) — the honest exponential cost of an exhaustive search.
+- The action set is versioned so an action added after results are seen shows up in the
+  diff, not in a reviewer's objection.
+
+### Consequences
+
+- The two warrants cannot leak into each other; a continuous-action search
+  (`GradientEfeSelector`, still 3a) stays out of the enumerated evidence by construction.
+- `EnumeratedEfeSearch` supports `p >= 1` and *varying* sequences, so it expresses a
+  detour-then-exploit policy the constant-action grid cannot — the capability the
+  crossover model actually needs.
+- `selection` gains a one-way import of `SearchWarrant` from `enumeration`; the reverse
+  edge stays type-only (`Preference` under `TYPE_CHECKING`), so there is no cycle.

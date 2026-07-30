@@ -71,7 +71,7 @@ the certificate (M3's completeness proof).
       **Done:** `tests/test_sigma_policy_dependence.py` (4 tests) — fixed sensor
       `assert_array_equal` on Σ⁺/Σ_post/S across two policies (means still differ);
       `R(x)` separates Σ_post and `Q(x)` separates Σ⁺ past a declared 1e-2 margin.
-- [ ] **M3. Exhaustive enumeration over a declared finite action set.**
+- [x] **M3. Exhaustive enumeration over a declared finite action set.**
       *(Required. Largest item; the one R10 actually needs.)* Enumerate A^H over a
       **finite, declared, versioned** action set — a distinct object from
       `EFESelector`'s continuous grid; the API must not let them be confused.
@@ -82,6 +82,13 @@ the certificate (M3's completeness proof).
       `PROVED (finite set, |A|^H = N, visited N)` for the enumerated search,
       `CORROBORATED (grid sample of a continuum)` for the action sweep — never
       both as `PASS`. Return the argmin policy **and** the full `G` vector.
+      **Done:** new `cpomdp/enumeration.py` (internal seam) — `FiniteActionSet`
+      (versioned), `EnumeratedEfeSearch.evaluate` → `(best_policy, G)`,
+      `CompletenessCertificate` (asserts `visited == |A|^H`, raises
+      `IncompleteEnumerationError`), `SearchWarrant` PROVED; `EFESelector.warrant`
+      = CORROBORATED. Supports `p >= 1` and varying sequences; a varying policy
+      provably wins on the beacon fixture. `tests/test_enumeration.py` (20 tests).
+      ADR-030 + ADR-031 written.
 - [ ] **M4. Receding-horizon driver + honest cost accounting.** *(Required.)*
       Keep open-loop (apply the whole sequence) and receding-horizon (apply first,
       re-plan) as separate, both available — item E's matched-horizon bracket
@@ -132,9 +139,12 @@ the certificate (M3's completeness proof).
       is a flat corridor, so nothing needs it. Release notes say **unsupported**,
       not untested (standing rule 5).
 - [ ] **M9. What must not be built in this window.** Pruning (defer, don't
-      half-build). `GradientEFESelector` / any continuous varying-sequence search
-      (3a licence; mixing it into R10's evidence downgrades the certificate M3
-      earns). Any documentation of `Q(x)` at H > 1, however cleanly it falls out.
+      half-build). Any continuous varying-sequence search **folded into R10's
+      enumerated evidence** — `GradientEfeSelector` is a 3a licence and must never
+      contaminate M3's PROVED cells. It is not banned outright: it ships as a
+      separate, clearly-labelled corroboration track (see "Continuous-action
+      corroboration track" below), walled off from the crossover decision. Any
+      documentation of `Q(x)` at H > 1, however cleanly it falls out.
 
 ### Gate for the window (soft — all five hold together)
 
@@ -157,9 +167,9 @@ path touches a grid, so nothing waits on the v0.4.4 certified-discretisation gat
 
 ### ADRs
 
-- [ ] **ADR-030** (enumeration completeness certificate) — lands here, not v0.6;
+- [x] **ADR-030** (enumeration completeness certificate) — lands here, not v0.6;
       same content, earlier.
-- [ ] **ADR-031** (new) — the search-family seam: enumerated finite set vs
+- [x] **ADR-031** (new) — the search-family seam: enumerated finite set vs
       continuous grid, their two warrant classes and two output vocabularies, and
       cost attribution at H > 1.
 - [ ] **ADR-029** (three-valued check outcomes) — consumed by M7; exists before it
@@ -192,3 +202,41 @@ meaning. The trace matches variant 1 (its own file) so it adds no new divergence
 - [ ] Sweep comments/docstrings across `src/` to the chosen convention; verify it is a
       pure doc/comment change (arithmetic byte-identical, whole suite unmodified,
       `ruff`/`ty` clean).
+
+### Continuous-action corroboration track (v0.5 preliminary, parallel, non-blocking)
+
+A continuous-state agent should also exercise genuinely continuous action spaces, not
+only declared finite repertoires. `GradientEfeSelector` — gradient ascent on the
+differentiable `policy_efe` over a continuous action box — is that selector. This track
+covers the continuous-action regime, kept honest about what it can and cannot claim.
+
+**Warrant: 3a / CORROBORATED only.** Gradient ascent finds a *local* optimum of a
+non-convex objective; like the grid it searches a continuum without exhausting it, so it
+can never *decide* a universal over the action space. Every result it produces carries
+the CORROBORATED label — never PROVED, never a bare PASS (standing rule 6).
+
+**Home: the self-acting regimes, not the p\* scoring harness.** The p\* harness (item B)
+runs in exogenous action mode — it *severs* the control loop and drives a common
+control sequence into every agent — so action *selection* is not part of the
+decomposition (continuous action *values* already are). `GradientEfeSelector` belongs to
+the self-acting brackets: a corroborating companion to item A (the crossover) and,
+principally, item E (the control bracket), where a self-acting agent under `R(x)` steers
+toward low-noise regions and changes its own gap.
+
+**Wall: strictly separated from M3's PROVED evidence.** R10's crossover decision rides
+on M3's finite enumeration. A gradient-selected policy may corroborate alongside but
+must never enter the decisive cells, or the 3b certificate M3 earns is contaminated back
+to 3a (M9).
+
+- [ ] `GradientEfeSelector` — gradient ascent on `policy_efe` over a continuous action
+      box (`p >= 1`); returns the optimized sequence and its `G`. Labelled CORROBORATED.
+- [ ] Warrant label travels with every continuous-action result (printed and asserted),
+      so a corroboration is never read as a certification.
+- [ ] Walled off from M3: no gradient result enters R10's enumerated evidence; the two
+      families' outputs stay separately labelled in any shared harness.
+
+**Not this track — register, do not build.** *Certified* continuous-action coverage
+(deciding "no action in the compact box flips") is Prover 3c — validated numerics, a
+certified branch-and-bound with Lipschitz/interval bounds on `policy_efe` over the
+box. That is a distinct, larger, later (Paper 2-scale) workstream; `GradientEfeSelector`
+does not deliver it and nothing here should imply it does.

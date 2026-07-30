@@ -1,0 +1,201 @@
+# Warrant ledger
+
+Every check in the certifiability programme rests on a declared number: a margin, a
+ceiling, a floor, or a tolerance. This ledger records what each number is, the magnitude
+it gates, how much headroom it clears, and the first-principles reason it sits where it
+does. The point is that no bar is fitted to make a fixture pass. A reviewer should be able
+to read any number here and see it was chosen from a stated fact, not tuned.
+
+I keep this as a growing tracker alongside `DECISIONS.md` and `BUILD_PLAN.md`. ADR-030 and
+ADR-031 record the warrant *classes*. This ledger records the *numbers*. It grows one
+section per workstream. The first section covers multi-step EFE. Sections still to come:
+single-horizon EFE (the H=1 anchors of 1.72 and 4.49 nats that the crossover statistic
+must reduce to), the p\* scoring harness (its calibration zeros, the four-term additivity
+bound, and the separation-cell condition numbers), the control bracket, and the certified
+discretisation bound. None of those numbers is asserted in the suite yet, so none appears
+below.
+
+## How to read a warrant
+
+Two vocabularies, kept apart on purpose.
+
+**Prover class** (how well a claim is warranted, from Paper 1's taxonomy):
+
+- **3a** corroborates. A sample of a continuum, or a local optimum. It can refute a
+  universal by counterexample but never decide one.
+- **3b** decides. An exhaustive enumeration over a finite set. "No member does X" is a
+  proof, not a sample.
+- **byte-identity** (RFC-001). Two code paths that run the identical IEEE-754 operations
+  in the identical order return bit-for-bit equal results. Asserted with
+  `assert_array_equal`, not `allclose`.
+- **numerical agreement**. Two paths that compute the same value by different rounding (a
+  different library, or a different XLA transform) agree to a stated tolerance.
+
+**Certified vs computed.** A number is *certified* only with a stated tolerance beside it.
+Without one the honest word is *computed*.
+
+## Terms
+
+- **eps**: machine epsilon for float64, 2.22e-16. The float64 mantissa is 53 bits, about
+  15.95 decimal digits.
+- **ULP**: unit in the last place, the gap between adjacent float64 values at a given
+  scale. A one-ULP disagreement is the smallest a float64 result can move.
+- **PD**: positive definite.
+- **cond**: the 2-norm condition number. At `cond ~ 1/sqrt(eps) = 6.7e7` a solve has lost
+  about half its significant digits. At `cond ~ 1e8` the relative error `cond*eps` is
+  roughly 2e-8, so about eight of the sixteen digits are gone.
+- **nat**: a unit of information or free energy in natural-log units.
+
+## Multi-step EFE (horizon > 1)
+
+The numbers gating the M1-M6 checks: the rollout trace, the Σ(π) witness, the numerical
+hygiene, and the enumerated search.
+
+### Margins
+
+Two one-sided witness thresholds. Each asks whether a quantity moves by a structurally
+large amount, not whether it matches a tight target.
+
+**`SEPARATION_MARGIN = 1e-2`** (`tests/test_sigma_policy_dependence.py`). Gates three
+lower-bound separations. Under a fixed sensor two distinct policies must carry the same
+covariance trajectory while their means differ (measured mean separation 1.4). Under
+`R(x)` the same two policies must separate `Σ_post` (measured 0.261). Under `Q(x)` they
+must separate `Σ⁺` (measured 0.336). The tightest gated case clears the margin by 26x, the
+others by 34x and 140x. On the log scale the real separations sit about 15 orders above
+eps while the margin sits about 13.6 orders above eps, so a full 1.4 decades of headroom
+separate the margin from the smallest real signal. The only inverted matrix on these paths
+is the scalar innovation `S` at condition number 1, so nothing here is numerically fragile.
+The fixed-sensor side is not gated by this margin. There the covariance agreement is
+asserted exactly (see the byte-identity locks); the margin only gates the mean separation
+that proves the two policies genuinely differ.
+
+**`VARYING_WIN_MARGIN = 1.0`** (`tests/test_enumeration.py`). Gates the claim that a
+genuinely varying policy beats every constant one. On the beacon fixture the best varying
+sequence scores about 27 nats below the best constant sequence (`G` 7.16 versus 34.12). I
+compare best-varying against best-constant over the whole enumerated set, so the result
+does not depend on `argmin`'s tie-break or the order the actions are listed in. A one-nat
+bar is cleared 27x and sits about 15 orders above eps. One nat is a large, unambiguous
+free-energy gap, so a win this size is a real objective difference rather than a rounding
+artifact. See the corrections section for why the earlier version of this test was wrong.
+
+### Numerical-hygiene bars
+
+Two-sided tripwires on the conditioning of the rollout covariances, read from the trace on
+the host in `tests/test_rollout_hygiene.py`.
+
+**`COND_CEILING = 1e8`**. Every per-step `cond(Σ⁺)`, `cond(S)`, and `cond(Σ_post)` must
+stay below this. The value is the float64 half-precision knee. At `cond ~ 1e8` a solve
+keeps only about half its digits, so a covariance this ill-conditioned is a real
+degradation flag. The fixtures peak near `cond 6`, roughly seven orders of magnitude below
+the ceiling. The gap is deliberate. The bar flags catastrophic conditioning, it is not a
+snug fit to the fixtures. One caveat to carry forward. With `p = 1` and the 1-D `Q(x)`
+model, `cond(S)` and all `Q(x)` condition numbers are exactly 1, so `cond(Σ_post)` on the
+fixed and `R(x)` fixtures is the only column doing any work today.
+
+**`MIN_EIG_FLOOR = 1e-9`**. The smallest eigenvalue of every `Σ_post` must stay above this.
+The healthy fixtures keep it near 0.1, clearing the floor by about eight orders of
+magnitude. A planted near-singular step at 1e-15 (the `bad_post` negative control) falls
+six orders below the floor, which is what makes the bite-test meaningful. The floor itself
+sits about seven orders above eps, so an eigenvalue this small is heading toward singular
+while it still carries real signal. A reviewer can note that 1e-9 is a round number rather
+than a specific power of eps. They cannot call it tuned when the fixtures pass by a factor
+of 1e8.
+
+### Byte-identity locks (exact, tolerance 0)
+
+These use `assert_array_equal`, so the tolerance is exactly zero. Each is an architectural
+fact, not a small number. A tolerance would understate it and could mask the very coupling
+the check forbids.
+
+| Lock | Where | Measured |
+| --- | --- | --- |
+| Fixed-sensor `Σ⁺`/`Σ_post`/`S` are policy-independent | `test_sigma_policy_dependence.py` | 0.0 across 200 random policies; means separate by up to 21.5 |
+| Trace column sums equal `policy_efe`'s scalars | `test_policy_efe_trace.py` | 0 ULP across all 27 model/H combinations |
+| H=1 trace moments equal `_efe_step`'s fields | `test_policy_efe_trace.py` | 0 ULP on all three branches |
+| Enumerated policy set equals the itertools product | `test_enumeration.py` | exact; pure integer index-gather |
+
+The fixed-sensor lock is the clearest. There the covariance recursion never reads the
+mean, so two distinct policies feed the same `lax.scan` body the identical operands, and
+deterministic float64 arithmetic returns the identical bytes. The action moves only the
+mean. That is why the exact assertion is correct and a tolerance would be wrong. One
+portability caveat. Byte-identity across two separately compiled XLA graphs is a
+CPU-backend fact. A GPU or TPU fused-multiply-add change could cost a ULP. If that happens
+the companion NumPy-oracle test at `atol=1e-9` carries the cross-implementation agreement
+instead.
+
+### Numerical-agreement tolerances
+
+Where two paths compute the same value by different rounding, I use a generic float64
+allowance rather than a fitted number:
+
+- **`atol=1e-9`** for cross-implementation agreement (a JAX path against a plain-NumPy
+  loop).
+- **`atol=1e-12`** for cross-transform agreement (jit against eager, vmap against a
+  per-item loop, a JAX solve against a NumPy solve).
+
+On every fixture the measured disagreement is either exactly 0.0 or a single ULP (about
+2.2e-16 for order-one values), because the inputs stay well-conditioned (`cond(S) = 1`,
+`cond(Σ⁺) <= 3.3`). The tolerances therefore sit three to seven orders of magnitude above
+the real floor. They are loose safety bars against a gross regression such as an
+accidental float32 fallback, which would diverge by order 1e-7 and miss them by orders. One
+honest wrinkle. `numpy.testing.assert_allclose` keeps its default `rtol=1e-7`. For
+order-one values the relative term governs, so the stated `atol` only binds near zero. The
+bars are still safe, since a real formula error moves the result by order one and fails
+hard.
+
+### Exact counts and structural bounds
+
+Integer identities, so eps never enters. Both operands are Python ints, which stay exact
+past the float64 `2^53` ceiling where a float count would drift.
+
+| Number | Value | Gates |
+| --- | --- | --- |
+| `certificate.expected == visited` | `\|A\|^H` | completeness (ADR-030), warrant 3b |
+| `n_policies == \|A\|^H` | e.g. 9, 27 | the enumerated count |
+| `cost_per_cycle == \|A\|^H * H` | e.g. 81 | the honest exponential cost (RFC-001) |
+| `FiniteActionSet` size `>= 2` | 2 | a set of one is no choice to search |
+| `horizon >= 1` | 1 | a policy needs at least one step |
+
+### Negative-control fixtures
+
+Not tolerances. Each is an input chosen to make a guard fire, and each is asserted to
+actually fire.
+
+- **`diag(-1, -2)`** for the log-determinant guard. Its determinant is +2, so a
+  determinant-sign shortcut returns a finite `log|det|` and passes. The test asserts the
+  shortcut is fooled and that `_logdet_pd` (Cholesky) returns NaN. This is what proves the
+  guard keeps the sign rather than trusting the determinant.
+- **`R = -0.5`** for the oracle epistemic guard. It keeps the innovation `S = 0.5` still
+  PD, so the required NaN can only come from the `R` guard, not from `S`.
+- **`bad_post = 1e-15`** for the eigenvalue floor. At about 4.5 eps the covariance is
+  near-singular yet still strictly PD, so the eigenvalue floor is the thing that bites
+  rather than the PD flag.
+
+### Corrections from the adversarial pass
+
+An adversarial review recomputed every number above and attacked each as tuned. Two tests
+failed that review and were rewritten. I record them because the fix changed what the test
+actually decides.
+
+1. **The varying-wins test was an `argmin` tie-break.** The earlier fixture used a
+   velocity-control, position-sensor model at horizon 2. There the last action never
+   reaches an observation, so every sequence sharing the first action scores a
+   bit-identical `G`. Asserting only "the argmin is non-constant" passed because `argmin`
+   returns the first tied index, which the action listing happened to make varying.
+   Reordering the same action set flipped the winner to a constant. The rewrite uses a 1-D
+   direct-control model and asserts a strict `G` margin between best-varying and
+   best-constant, which is independent of the tie-break and the ordering.
+2. **The indefinite fixture did not discriminate.** The earlier fixture was `diag(-1, 1)`,
+   labelled "det > 0 but not PD". Its determinant is actually -1, so a determinant-sign
+   guard returns NaN on it exactly as Cholesky does. It could not tell a sign shortcut from
+   the real guard. The rewrite uses `diag(-1, -2)`, whose determinant is +2, and asserts
+   the sign shortcut passes while Cholesky does not.
+
+### Reporting rule for downstream cells (F1-F3)
+
+The pytest asserts here evaluate a bare comparison, since a passing assertion prints
+nothing. Any report that consumes these numbers is different. A cell must print the moving
+term, the pinned term beside it, their ratio, and the condition numbers of any inverted
+matrices. It must never print a bare pass, and never the small number on its own. A term
+that is naturally near zero clears a small-number bar trivially, so the ratio and the
+conditioning are what make the cell evidence. This binds the H-sweep harness when it lands.
