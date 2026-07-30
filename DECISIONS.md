@@ -1723,3 +1723,71 @@ Keep them physically and typographically distinct:
   crossover model actually needs.
 - `selection` gains a one-way import of `SearchWarrant` from `enumeration`; the reverse
   edge stays type-only (`Preference` under `TYPE_CHECKING`), so there is no cycle.
+
+## ADR-032 — the multi-step FFG rollout (node-targeted EFE over a horizon)
+
+**Date:** 2026-07-30
+**Status:** Accepted
+**Phase:** v0.4.4 preliminary (multi-step EFE, horizon > 1) — the crossover statistic's
+prerequisite
+**Extends:** ADR-019 (R(x) linearized at μ⁺), issue #26 (`_ffg_efe_step`, node-targeted
+epistemic); mirrors the flat rollout `policy_efe` / `policy_efe_trace`
+
+### The question
+
+The crossover the horizon-sweep measures is a fact about the coupled T-maze: its anchors
+are the node-restricted epistemic (info gain about the CONTEXT marginal, ~1.72 nats) read
+at the coupling-resolved predictive mean μ⁺. That quantity lives only on the FFG path —
+`_ffg_efe_step` fed by `CouplingGraphBackend.predicted_belief` — and that path was
+single-step. `policy_efe` is a genuine H-step rollout, but on a flat `LinearGaussianModel`
+its epistemic is the *whole-state* observation-space term (the same contrast reads ~2.42
+nats), and a flat corridor has no context node to sense at all. So the crossover cannot be
+measured on the flat rollout; a multi-step FFG rollout is the missing piece.
+
+The fork it opens: how to propagate the joint belief between steps, and how much to reuse
+versus reinvent.
+
+### Decision
+
+Add `policy_efe_ffg` (summed) and `policy_efe_ffg_trace` (per-step) to `cpomdp.efe`,
+sharing one `lax.scan` step `_ffg_rollout_body`, exactly mirroring the flat trio so the
+two rollouts read as parallel.
+
+- **Propagation is predict-then-contract on the coupled joint.** Each step:
+  `backend.predicted_belief` gives μ⁺/Σ⁺ with the couplings folded in;
+  `backend.observation_noise_at(μ⁺)` gives R(μ⁺); `_ffg_efe_step` scores the
+  node-targeted EFE; the carry contracts the *joint* covariance by the Kalman update at
+  `(C, R(μ⁺))` with the mean held at μ⁺ (zero expected innovation). This is the flat
+  `_rollout_body` with three swaps — flat predict → `predicted_belief`, `_efe_step` →
+  `_ffg_efe_step`, flat C/R → the backend's.
+- **Reuse `PolicyEfeTrace` unchanged.** Same seven fields; the only semantic shift is that
+  the `epistemic` column is node-restricted, not whole-state.
+- **The backend is duck-typed.** `EfeBackend` is imported under `TYPE_CHECKING` only
+  (`backends` does not import `efe`, so no cycle); the backend is not a JAX pytree, so it
+  is held as a closure constant, and the functions compose under `jit`/`vmap`/`grad` over
+  the array arguments — the way `FfgEfeSelector` already `vmap`s its per-candidate score.
+- **Two oracle reductions gate it.** H=1 is byte-identical to a single `_ffg_efe_step`
+  (holds *with* couplings); a single-node backend with the whole-state target agrees with
+  `policy_efe` to `allclose` at H=2,3 (numerical, not byte-identical: the FFG predicts
+  through the precision form, the flat rollout through `AΣAᵀ + Q`).
+- **The hot path stays lean.** `policy_efe_ffg` keeps only the three scalars in the scan's
+  `ys`, so a future H-step selector's `vmap` never stacks the H×n×n covariances (RFC-001).
+- Internal seam: in `efe.__all__`, not re-exported at the top level.
+
+### Consequences
+
+- The deferred H-step `FfgEfeSelector` (today `horizon = 1`) now has its rollout: the lean
+  `policy_efe_ffg` is the object it will search over. Wiring it is a later step, out of
+  this ADR's scope.
+- Cost is `|A|^H` step-evaluations, and under R(x) the planning covariance is
+  policy-dependent (Theorem 1(i)), so per-branch covariance trajectories are mandatory —
+  there is no single precomputed trajectory to share. This is the rollout's own labeled
+  work, attributable rather than buried in the filter loop; pruning is deferred and fine
+  at H ≤ 3 with a small action set.
+- The crossover statistic reads this trace's node-restricted `epistemic` column and must
+  reduce to the anchors at H=1. The whole-state 2.42 is the flat path's number, not this
+  one; the two paths are kept distinct on purpose.
+- One deliberate redundancy: `_ffg_efe_step` returns only `(G, parts)`, not its `S` or the
+  posterior it forms internally, so the body recomputes `S = CΣ⁺Cᵀ + R` for the
+  contraction. Chosen over widening the single-step API that the selector and this scan
+  both depend on.

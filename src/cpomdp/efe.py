@@ -104,12 +104,21 @@ from jaxtyping import Array, Float64
 from cpomdp.types import Belief, LinearGaussianModel
 
 if TYPE_CHECKING:
-    # Type-only import: the kernel reads preference.goal/.precision by duck-typing,
-    # so it does NOT depend on selection at runtime. This keeps the dependency
-    # one-way (selectors -> kernel) and lets EFESelector import this module.
+    # Type-only imports: the kernel reads preference.goal/.precision and the backend's
+    # predict/observation methods by duck-typing, so it does NOT depend on selection or
+    # the backends package at runtime. This keeps the dependency one-way (selectors and
+    # backends -> kernel) and lets EFESelector / FfgEfeSelector import this module.
+    from cpomdp.backends.base import EfeBackend
     from cpomdp.selection import Preference
 
-__all__ = ["PolicyEfeTrace", "expected_free_energy", "policy_efe", "policy_efe_trace"]
+__all__ = [
+    "PolicyEfeTrace",
+    "expected_free_energy",
+    "policy_efe",
+    "policy_efe_ffg",
+    "policy_efe_ffg_trace",
+    "policy_efe_trace",
+]
 
 
 class PolicyEfeTrace(NamedTuple):
@@ -341,6 +350,149 @@ def _rollout_body(
             sigma_pred=r.sigma_pred,
             sigma_post=sigma_post,
             s=r.s,
+        )
+
+    return step
+
+
+def policy_efe_ffg(
+    backend: "EfeBackend",
+    belief: Belief,
+    policy: Float64[Array, "H p"],
+    preference: "Preference",
+    *,
+    target: Sequence[int],
+) -> tuple[Float64[Array, ""], dict[str, Float64[Array, ""]]]:
+    """Summed EFE of a horizon-H ``policy`` over a branching FFG backend.
+
+    The FFG counterpart of ``policy_efe``: instead of ``_efe_step`` on a flat model it
+    drives ``_ffg_efe_step`` over the backend's predicted joint each step, aiming the
+    epistemic at ``target`` — a node's block (via ``backend.block``) or the whole state.
+    A ``lax.scan`` over the ``policy`` rows sums each step's ``G`` while propagating the
+    joint belief predict-only between steps: the mean carries as the coupling-resolved
+    ``μ⁺``, the covariance contracts by the Kalman update at ``R(μ⁺)``. At ``H = 1`` it
+    reduces exactly to ``_ffg_efe_step``; with no couplings and a whole-state
+    ``target`` it reproduces ``policy_efe``.
+
+    The ``backend`` is held as a closure constant (it is not a JAX pytree), so this
+    composes under ``jit`` / ``vmap`` / ``grad`` over the array arguments — the way
+    ``FfgEfeSelector`` already ``vmap``s its per-candidate score.
+
+    Args:
+        backend: The FFG inference backend — supplies ``predicted_belief`` (μ⁺, Σ⁺),
+            ``observation_model`` (the constant sensor C), ``observation_noise_at``
+            (R at μ⁺), and ``block``.
+        belief: The starting joint belief ``(μ, Σ)`` over the ``n_total``-D joint state.
+        policy: The ``H`` actions to roll out, shape ``(H, p)``.
+        preference: The OBSERVATION-space goal — ``goal`` (g) and ``precision`` (Λ).
+        target: The joint-state indices whose info gain is the per-step epistemic value.
+
+    Returns:
+        ``(G, {"pragmatic": ..., "epistemic": ...})`` — the summed EFE and its summed
+        components over the horizon.
+    """
+    goal, precision = preference.goal, preference.precision
+    policy = jnp.asarray(policy, dtype=float)
+    body = _ffg_rollout_body(backend, goal, precision, target)
+
+    # Lean projection: keep only the three scalars in the scan's ys, so a vmap over
+    # candidate policies never stacks the H×n×n covariances (RFC-001, the H-step
+    # selector).
+    def scalars_only(carry, action):
+        new_carry, tr = body(carry, action)
+        return new_carry, (tr.g, tr.pragmatic, tr.epistemic)
+
+    _, (gs, prags, epis) = lax.scan(scalars_only, belief, policy)
+    return jnp.sum(gs), {"pragmatic": jnp.sum(prags), "epistemic": jnp.sum(epis)}
+
+
+# One FFG rollout scan step: (joint belief, action) -> (next joint belief, trace).
+# The carry is the whole Belief (a registered pytree), unlike the flat rollout's bare
+# (mean, cov) tuple, because ``predicted_belief`` consumes and returns a Belief.
+_FfgRolloutStep = Callable[
+    [Belief, Float64[Array, "p"]],
+    tuple[Belief, PolicyEfeTrace],
+]
+
+
+def policy_efe_ffg_trace(
+    backend: "EfeBackend",
+    belief: Belief,
+    policy: Float64[Array, "H p"],
+    preference: "Preference",
+    *,
+    target: Sequence[int],
+) -> PolicyEfeTrace:
+    """Per-step trace of the FFG rollout — the diagnostic sibling of ``policy_efe_ffg``.
+
+    Runs the same ``lax.scan`` as ``policy_efe_ffg`` (both drive ``_ffg_rollout_body``)
+    but keeps the whole per-step record as its ``ys`` instead of summing it. Because the
+    arithmetic is shared, ``jnp.sum`` of each returned scalar column equals the matching
+    ``policy_efe_ffg`` scalar bit-for-bit. The ``epistemic`` column is the
+    node-restricted info gain about ``target`` — not the whole-state term the flat
+    ``policy_efe_trace`` carries — and the moment columns are the coupling-resolved
+    ``μ⁺``/``Σ⁺`` and the contracted ``Σ_post``. Composes under ``jit`` / ``vmap`` /
+    ``grad`` with the backend held fixed.
+
+    Returns:
+        A ``PolicyEfeTrace`` (the same type the flat rollout emits) of arrays stacked
+        along a leading H axis.
+    """
+    goal, precision = preference.goal, preference.precision
+    policy = jnp.asarray(policy, dtype=float)
+    body = _ffg_rollout_body(backend, goal, precision, target)
+
+    _, trace = lax.scan(body, belief, policy)
+    return trace
+
+
+def _ffg_rollout_body(
+    backend: "EfeBackend",
+    goal: Float64[Array, "m"],
+    precision: Float64[Array, "m m"],
+    target: Sequence[int],
+) -> _FfgRolloutStep:
+    """Build the shared ``lax.scan`` step for the FFG H-step rollout.
+
+    One per-step arithmetic driven by both ``policy_efe_ffg`` (which keeps only the
+    three scalars) and ``policy_efe_ffg_trace`` (which keeps all of it), so the two
+    agree by construction. The step predicts the joint (``backend.predicted_belief`` →
+    μ⁺, Σ⁺, the structural couplings folded in), scores the node-targeted EFE
+    (``_ffg_efe_step`` at ``R(μ⁺)``), then contracts the covariance predict-only for the
+    next step. The sensor ``C`` is constant, so it is fetched once here; ``R(μ⁺)`` is
+    re-read per step (it may be state-dependent). The carried mean is ``μ⁺`` — zero
+    expected innovation, so the observation moves only the covariance.
+    """
+    sensor_model, _ = backend.observation_model  # C (constant, front-loaded)
+
+    def step(belief, action):
+        predicted = backend.predicted_belief(belief, action)  # μ⁺, Σ⁺
+        sensor_noise = backend.observation_noise_at(predicted.mean)  # R(μ⁺)
+        g, parts = _ffg_efe_step(
+            predicted.mean,
+            predicted.cov,
+            sensor_model,
+            sensor_noise,
+            goal,
+            precision,
+            target,
+        )
+        # Predict-only contraction for the carry: mean stays μ⁺, cov contracts by the
+        # Kalman update at (C, R(μ⁺)). ``_ffg_efe_step`` forms this posterior internally
+        # for the epistemic (information form); it is recomputed here in moment form to
+        # carry the joint belief forward without widening that step's single-step API.
+        s = sensor_model @ predicted.cov @ sensor_model.T + sensor_noise  # S=CΣ⁺Cᵀ+R
+        p_xo = predicted.cov @ sensor_model.T
+        sigma_post = predicted.cov - p_xo @ jnp.linalg.solve(s, p_xo.T)
+        sigma_post = 0.5 * (sigma_post + sigma_post.T)
+        return Belief(mean=predicted.mean, cov=sigma_post), PolicyEfeTrace(
+            g=g,
+            pragmatic=parts["pragmatic"],
+            epistemic=parts["epistemic"],
+            mu_pred=predicted.mean,
+            sigma_pred=predicted.cov,
+            sigma_post=sigma_post,
+            s=s,
         )
 
     return step

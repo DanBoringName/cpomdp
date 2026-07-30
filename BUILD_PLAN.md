@@ -153,6 +153,30 @@ the certificate (M3's completeness proof).
       corroboration track" below), walled off from the crossover decision. Any
       documentation of `Q(x)` at H > 1, however cleanly it falls out.
 
+### Correction (Paper 1 handoff): the crossover model is the coupled tree
+
+This plan's crossover items assume a **flat corridor** (M5 (ii) "computable from M1's
+trace"; M8 "R10's crossover model is a flat corridor, so nothing needs [the FFG H-step
+rollout]"). The Paper 1 handoff supersedes that premise:
+
+- The anchors 1.72 / 4.49 are read on the **two-node coupled tree** T-maze, not a
+  corridor. The epistemic is **node-restricted** (info gain about the CONTEXT marginal at
+  the coupling-resolved μ⁺). Flattening the model deletes the context node the epistemic
+  targets, so the crossover cannot be measured on the flat path.
+- M1's `policy_efe_trace` carries the **whole-state** epistemic, which reads ~2.42 nats
+  for the same contrast — not the headline 1.72. So M5's statistic reads the **FFG**
+  trace, not M1's flat one. Requirement (ii) becomes "computable from the FFG rollout's
+  trace".
+- The FFG H-step **rollout** (M8's deferred item, the EFE math over a horizon) is
+  therefore needed, and is **built now**: `policy_efe_ffg` / `policy_efe_ffg_trace`
+  (ADR-032), tests green. What stays genuinely deferred is only wiring it into a
+  closed-loop `FfgEfeSelector` above H = 1 — the sweep drives the rollout directly.
+
+Cascade still to re-scope (flagged, not yet applied — needs a decision): M5 (ii)'s wording;
+whether `EnumeratedEfeSearch` (M3, today scoring via flat `policy_efe`) scores the
+crossover via `policy_efe_ffg` on the coupled tree; M7's sweep running on that model; and
+M8's partial un-deferral.
+
 ### Gate for the window (soft — all five hold together)
 
 - [ ] Every H = 1 path byte-identical to v0.4.3 (`assert_array_equal`); whole
@@ -179,6 +203,11 @@ path touches a grid, so nothing waits on the v0.4.4 certified-discretisation gat
 - [x] **ADR-031** (new) — the search-family seam: enumerated finite set vs
       continuous grid, their two warrant classes and two output vocabularies, and
       cost attribution at H > 1.
+- [x] **ADR-032** (new) — the multi-step FFG rollout: `policy_efe_ffg` /
+      `policy_efe_ffg_trace` over `_ffg_rollout_body`, node-targeted epistemic at the
+      coupling-resolved μ⁺, gated by H=1→`_ffg_efe_step` (byte-identical) and
+      no-coupling→`policy_efe` (allclose) oracles. Built as M5's prerequisite; see the
+      correction note below.
 - [ ] **ADR-029** (three-valued check outcomes) — consumed by M7; exists before it
       runs.
 
