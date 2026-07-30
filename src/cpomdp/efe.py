@@ -93,9 +93,9 @@ THE DATA FLOW  (top → bottom: what goes in → what comes out)
 
 """
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 import jax.numpy as jnp
 from jax import lax
@@ -109,7 +109,46 @@ if TYPE_CHECKING:
     # one-way (selectors -> kernel) and lets EFESelector import this module.
     from cpomdp.selection import Preference
 
-__all__ = ["expected_free_energy", "policy_efe"]
+__all__ = ["PolicyEfeTrace", "expected_free_energy", "policy_efe", "policy_efe_trace"]
+
+
+class PolicyEfeTrace(NamedTuple):
+    """One H-step rollout's per-step record, each field stacked along a leading H axis.
+
+    ``policy_efe`` sums each step's ``(g, pragmatic, epistemic)`` and discards the
+    moments it propagates between steps; ``policy_efe_trace`` returns this instead, so
+    the per-step quantities the ``lax.scan`` already computes can be inspected — the
+    covariance trajectory a policy carries, the per-step pragmatic/epistemic split, and
+    the matrices whose conditioning the rollout depends on.
+
+    A ``NamedTuple`` because it is a JAX pytree with no registration: ``lax.scan`` emits
+    it directly as its ``ys`` (stacking each field along the leading H axis) and it
+    survives ``jit`` / ``vmap`` / ``grad``, gaining any outer ``vmap`` axis too. That is
+    the difference from ``_EfeStep``, which is a plain dataclass precisely because it
+    never crosses a scan/transform boundary.
+
+    Moments use this module's convention: ``⁺`` marks the one-step *prediction* (after
+    the dynamics and action, before any observation); ``Σ_post`` is the covariance after
+    the predict-only Kalman contraction.
+
+    Attributes:
+        g: Per-step EFE ``G = pragmatic − epistemic`` — (H,).
+        pragmatic: Per-step pragmatic (goal) term — (H,).
+        epistemic: Per-step epistemic (state information gain) term — (H,).
+        mu_pred: Predicted mean μ⁺ = ``A·μ + control·a`` — (H, n).
+        sigma_pred: Predicted covariance Σ⁺ = ``A·Σ·Aᵀ + Q`` — (H, n, n).
+        sigma_post: Post-observation covariance Σ_post, the contraction carried to the
+            next step — (H, n, n).
+        s: Innovation covariance S = ``C·Σ⁺·Cᵀ + R`` (observation space) — (H, m, m).
+    """
+
+    g: Float64[Array, "H"]
+    pragmatic: Float64[Array, "H"]
+    epistemic: Float64[Array, "H"]
+    mu_pred: Float64[Array, "H n"]  # μ⁺ (predicted mean)
+    sigma_pred: Float64[Array, "H n n"]  # Σ⁺ (predicted cov)
+    sigma_post: Float64[Array, "H n n"]  # Σ_post (Kalman-contracted, post-observation)
+    s: Float64[Array, "H m m"]  # S (innovation cov)
 
 
 @dataclass(frozen=True)
@@ -208,6 +247,78 @@ def policy_efe(
     control = model.control
     goal, precision = preference.goal, preference.precision
     policy = jnp.asarray(policy, dtype=float)
+    body = _rollout_body(model, control, goal, precision)
+
+    # Lean projection: keep only the three scalars in the scan's ys, so EFESelector's
+    # vmap over |A|^H candidate policies never stacks the H×n×n covariances.
+    def scalars_only(carry, action):
+        new_carry, tr = body(carry, action)
+        return new_carry, (tr.g, tr.pragmatic, tr.epistemic)
+
+    _, (gs, prags, epis) = lax.scan(scalars_only, (belief.mean, belief.cov), policy)
+    return jnp.sum(gs), {"pragmatic": jnp.sum(prags), "epistemic": jnp.sum(epis)}
+
+
+# The rollout's scan carry: the propagated belief moments (mean μ, cov Σ) threaded
+# from one step to the next.
+_RolloutCarry = tuple[Float64[Array, "n"], Float64[Array, "n n"]]
+
+# One rollout scan step: (carry, action) -> (next carry, that step's trace record).
+_RolloutStep = Callable[
+    [_RolloutCarry, Float64[Array, "p"]],
+    tuple[_RolloutCarry, PolicyEfeTrace],
+]
+
+
+def policy_efe_trace(
+    model: LinearGaussianModel,
+    belief: Belief,
+    policy: Float64[Array, "H p"],
+    preference: "Preference",
+) -> PolicyEfeTrace:
+    """Per-step trace of the H-step rollout — the diagnostic sibling of ``policy_efe``.
+
+    Runs the same ``lax.scan`` as ``policy_efe`` (both drive ``_rollout_body``) but
+    keeps the whole per-step record as its ``ys`` instead of summing it away. Because
+    the arithmetic is shared, ``jnp.sum`` of each returned scalar column equals the
+    matching ``policy_efe`` scalar bit-for-bit. Composes under ``jit`` / ``vmap`` /
+    ``grad``.
+
+    Not on the selector hot path: stacking the H×n×n covariances is the memory cost, so
+    ``EFESelector`` stays on ``policy_efe`` and this is called only for diagnostics.
+
+    Returns:
+        A ``PolicyEfeTrace`` of arrays stacked along a leading H axis.
+    """
+    if model.control is None:
+        raise ValueError(
+            "policy_efe_trace needs a model with a control matrix; an action has no "
+            "effect on a control-free (pure-tracking) model."
+        )
+    control = model.control
+    goal, precision = preference.goal, preference.precision
+    policy = jnp.asarray(policy, dtype=float)
+    body = _rollout_body(model, control, goal, precision)
+
+    _, trace = lax.scan(body, (belief.mean, belief.cov), policy)
+    return trace
+
+
+def _rollout_body(
+    model: LinearGaussianModel,
+    control: Float64[Array, "n p"],
+    goal: Float64[Array, "m"],
+    precision: Float64[Array, "m m"],
+) -> _RolloutStep:
+    """Build the shared ``lax.scan`` step for the H-step rollout.
+
+    One per-step arithmetic driven by both ``policy_efe`` (which keeps only the three
+    scalars of the returned trace) and ``policy_efe_trace`` (which keeps all of it), so
+    the two agree by construction rather than by a second implementation. The step
+    predicts the belief one step, scores the EFE via ``_efe_step``, then contracts the
+    covariance predict-only for the next step, fetching its own ``C`` and reusing the
+    ``(Σ⁺, S)`` that ``_efe_step`` returns.
+    """
 
     def step(carry, action):
         mu, sigma = carry
@@ -222,10 +333,17 @@ def policy_efe(
         p_xo = r.sigma_pred @ c.T
         sigma_post = r.sigma_pred - p_xo @ jnp.linalg.solve(r.s, p_xo.T)
         sigma_post = 0.5 * (sigma_post + sigma_post.T)
-        return (r.mu_pred, sigma_post), (r.g, r.pragmatic, r.epistemic)
+        return (r.mu_pred, sigma_post), PolicyEfeTrace(
+            g=r.g,
+            pragmatic=r.pragmatic,
+            epistemic=r.epistemic,
+            mu_pred=r.mu_pred,
+            sigma_pred=r.sigma_pred,
+            sigma_post=sigma_post,
+            s=r.s,
+        )
 
-    _, (gs, prags, epis) = lax.scan(step, (belief.mean, belief.cov), policy)
-    return jnp.sum(gs), {"pragmatic": jnp.sum(prags), "epistemic": jnp.sum(epis)}
+    return step
 
 
 def _logdet_pd(matrix: Float64[Array, "k k"]) -> Float64[Array, ""]:

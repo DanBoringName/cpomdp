@@ -50,14 +50,18 @@ the certificate (M3's completeness proof).
 
 ### Items
 
-- [ ] **M1. Per-step trace from the rollout.** *(Required, cheap, first —
+- [x] **M1. Per-step trace from the rollout.** *(Required, cheap, first —
       everything below reads it.)* Return the `lax.scan` `ys` currently discarded:
-      per-step `(g, pragmatic, epistemic, μ⁻, Σ⁻, Σ⁺, S)` as stacked arrays,
+      per-step `(g, pragmatic, epistemic, μ⁺, Σ⁺, Σ_post, S)` as stacked arrays,
       behind a static flag / a separate `policy_efe_trace`, **not** in the hot
       path (under `vmap` over |A|^H policies, stacking H × n × n covariances is
       the memory driver; the selector stays allocation-free). *Gate:* the trace's
       sums equal the returned scalars under `assert_array_equal` — proof it is the
       same arithmetic, not a second implementation. Unblocks M2, M5, M6.
+      **Done:** `policy_efe_trace` → `PolicyEfeTrace` NamedTuple, both driving a
+      shared `_rollout_body`; `tests/test_policy_efe_trace.py` (19 tests). Notation
+      follows `efe.py` (μ⁺/Σ⁺ predicted, Σ_post contracted); global unification is
+      the follow-up checklist below.
 - [ ] **M2. The Σ(π) policy-dependence witness.** *(Required, cheap.)* Make the
       "planner manipulates the open-loop planning covariances Σ⁻ₖ(π), Σ⁺ₖ(π)"
       claim a check, not a doc sentence: under a fixed sensor two distinct
@@ -150,3 +154,31 @@ path touches a grid, so nothing waits on the v0.4.4 certified-discretisation gat
       cost attribution at H > 1.
 - [ ] **ADR-029** (three-valued check outcomes) — consumed by M7; exists before it
       runs.
+
+### Notation unification (follow-up, non-blocking)
+
+Surfaced while writing the rollout trace: the `μ`/`Σ` predict/update superscript
+convention is inconsistent across the codebase. Three variants coexist today:
+
+1. `efe.py` and its neighbours (`observation.py`, `dynamics.py`, `selection.py`,
+   `ffg/factors/`, `backends/base.py`): `μ⁺`/`Σ⁺` = the **predicted** (post-dynamics,
+   pre-observation) moment; the post-observation covariance is `Σ_post`.
+2. `kalman.py`, `ffg/chain.py`, `diagnostics.py`: standard Kalman — `μ⁻`/`Σ⁻` for
+   predicted, `post` for updated.
+3. `coupling.py`: uses **both** `μ⁻` and `μ⁺`, but there they mean pre-coupling vs
+   coupling-resolved *predicted* mean (ADR-019), a distinction orthogonal to
+   predict/update.
+
+Not folded into the trace work: it is a cross-file semantics change, not an additive
+feature, and variant 3 is a trap — a naive `μ⁺`→`μ⁻` sweep would corrupt ADR-019's
+meaning. The trace matches variant 1 (its own file) so it adds no new divergence.
+
+- [ ] Pick one canonical convention (standard Kalman `Σ⁻`/`Σ⁺` is the textbook default
+      and what external readers expect) and record it as an ADR — it touches ADR-003's
+      epistemic-collapse wording and ADR-019.
+- [ ] Give `coupling.py`'s pre-coupling vs coupling-resolved means a **separate**
+      disambiguator (not the predict/update superscript), so ADR-019's distinction
+      survives the rename.
+- [ ] Sweep comments/docstrings across `src/` to the chosen convention; verify it is a
+      pure doc/comment change (arithmetic byte-identical, whole suite unmodified,
+      `ruff`/`ty` clean).
