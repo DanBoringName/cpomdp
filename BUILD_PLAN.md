@@ -9,7 +9,7 @@ Conventions: `[x]` done, `[ ]` open, `[~]` partial.
 
 ## v0.4.4 — multi-step EFE preliminary window (item A)
 
-Source: `.claude/v0.5_context/multistep_efe_preliminary_plan.md`. Items are
+Source: `.claude/research/multistep_efe_preliminary_plan.md`. Items are
 prefixed **M** because the repo's Workstream B (the rollout seam) and the p\*
 build plan's item B (the scoring harness) already overload the letter.
 
@@ -103,7 +103,7 @@ the certificate (M3's completeness proof).
       `cost_per_plan = |A|^H × H` and `replan_interval` (1 / H); `cost_per_cycle` is
       the amortised per-cycle cost (|A|^H × H receding, |A|^H open-loop), never the
       grid's `n_candidates × horizon`. `tests/test_enumerated_drivers.py` (12 tests).
-- [ ] **M5. The crossover statistic, defined before it is measured.** *(Required.
+- [x] **M5. The crossover statistic, defined before it is measured.** *(Required.
       The standing-rule item.)* Write down — in code and in the pre-registration —
       what "epistemic pull" and "pragmatic gradient" mean at H > 1. It must
       (i) reduce **exactly** to Paper 1's H = 1 anchors of 1.72 and 4.49 nats,
@@ -116,6 +116,18 @@ the certificate (M3's completeness proof).
       declared refinement of the finite action set** — if inserting intermediate
       actions moves H\*, the crossover is a property of the enumeration, not the
       agent. Pre-register it as a falsifier rather than have a reviewer find it.
+      **Done:** `cpomdp.crossover` (`crossover_statistic`, `crossover_horizon`,
+      `CrossoverStatistic`) + `tests/test_crossover.py` (11 tests). Aggregation is the
+      symmetric between-policy contrast `ΔG = Δc − Δε` (ADR-033); it collapses at H=1 to
+      the measured anchors Δε=1.7232, Δc=4.4910, ΔG=+2.7678 nats (whole-state reads
+      2.4166), pinned at `ANCHOR_TOL = 1e-4`. Sign asserted (`ΔG = Δc − Δε` at tol 0);
+      reach/walk are `a_myopic=−2.0` (argmin G) and `a_sense=+1.0` (argmax ε), declared
+      members of `crossover-v1`. All four D3 falsifiers registered (the two testable at
+      H=1 asserted; the H\* pair bind M7). **Re (ii):** it reads the *FFG* rollout's
+      trace (`policy_efe_ffg`, node-restricted CONTEXT epistemic), not M1's flat trace —
+      see the correction note. Anchors + statistic + commit marker recorded in
+      `warrant_numbers.md`; **the M5 pre-registration commit id must be filled into the
+      ledger after committing, before M7 runs.**
 - [x] **M6. Numerical hygiene across the scan.** *(Required, cheap; gates the
       honesty of everything above.)* Three `S` re-inversions under `R(x)` against a
       contracting Σ are where twelve orders of magnitude go missing. Print

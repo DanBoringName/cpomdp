@@ -1791,3 +1791,62 @@ two rollouts read as parallel.
   posterior it forms internally, so the body recomputes `S = CΣ⁺Cᵀ + R` for the
   contraction. Chosen over widening the single-step API that the selector and this scan
   both depend on.
+
+## ADR-033 — the crossover statistic (the horizon aggregation)
+
+**Date:** 2026-07-31
+**Status:** Accepted
+**Phase:** v0.4.4 preliminary (multi-step EFE, horizon > 1) — item M5
+**Extends:** ADR-032 (the FFG rollout it reads); realises the standing-rule
+pre-registration for the crossover result
+
+### The question
+
+Paper 1 defines the per-step epistemic value ε_k and, in its own words, leaves the
+horizon aggregation to future work. So the H > 1 statistic is genuinely undefined, and the
+only constraint on it is that it collapse to the H = 1 anchors (the epistemic pull 1.72
+nats, the pragmatic gradient 4.49 nats). A plausible alternative — sum ε across the
+horizon, against the change in the pragmatic term from step 0 to H−1 — fails twice: at
+H = 1 the pragmatic span is empty, so it reads 0 rather than 4.49, and it is a
+within-policy temporal difference, a different object from a between-policy contrast. The
+aggregation has to be chosen, and chosen *before* the sweep measures H*, or the headline
+crossover inherits a fitted statistic.
+
+### Decision
+
+The statistic is the symmetric between-policy contrast, summed over the horizon:
+
+    Δε(H) = Σ_k [ε_k(walk) − ε_k(reach)]        the accumulated epistemic pull
+    Δc(H) = Σ_k [c_k(walk) − c_k(reach)]        the accumulated pragmatic gradient
+    ΔG(H) = Δc(H) − Δε(H) = G(walk) − G(reach)
+    H*    = min{H : ΔG(H) < 0}
+
+- Both sides contrast the *same* two policies. That symmetry is what makes it collapse:
+  at H = 1, `Δε = 1.7232`, `Δc = 4.4910`, `ΔG = +2.7678` (measured, `tests/test_crossover.py`).
+- The epistemic is read from the FFG rollout (ADR-032) at the node-restricted CONTEXT
+  target, so under R(x) it rides the coupling-resolved planning covariance. The whole-state
+  target reads 2.4166 for the same contrast; the two are kept distinct, and the
+  node-restricted number is the headline.
+- `ΔG` is *defined* as `Δc − Δε` (which equals `G(walk) − G(reach)`), so its sign flip is
+  exactly the argmin flip — the horizon at which the planner's chosen policy changes. The
+  code asserts this identity at tolerance 0.
+- `reach` / `walk` are constant-action policies over declared members of a versioned
+  `FiniteActionSet`: `a_myopic = argmin G` (prior-ward), `a_sense = argmax ε` (cue-ward). A
+  two-phase walk would beat the constant one but breaks the H = 1 collapse, so it is a
+  separate labelled variant, never the registered pair.
+- Lives in `cpomdp.crossover` (internal seam, not re-exported). `crossover_horizon`
+  *defines* H* but does not *measure* it — the H-sweep harness (M7) does, with the cost
+  and conditioning table.
+
+### Consequences
+
+- Pre-registered: the statistic, the sign convention, the anchor magnitudes, and the
+  reach/walk pair are fixed in code and in `warrant_numbers.md` before M7 runs. The commit
+  that introduces them timestamps the pre-registration; its id is recorded in the ledger.
+- "No crossover at any feasible H" is an explicit outcome — `crossover_horizon` returns
+  `None`, not a laundered number, so that D3 falsifier stays visible to the harness.
+- The tie caveat (two policies can differ per step yet tie on the horizon sum) is a
+  property of the registered pair. Asserting `|Δε(H)|` stays bounded from zero across the
+  sweep is registered for M7, not asserted here.
+- The statistic reads only the summed rollout components, so it is cheap; the cost driver
+  is the rollouts themselves (ADR-032, `|A|^H`).

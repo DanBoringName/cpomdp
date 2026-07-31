@@ -35,3 +35,4 @@ config:
 ignores:
   - "docs/index.md"
   - "docs/changelog.md"
+  - "research/**"

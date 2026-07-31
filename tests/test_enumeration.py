@@ -49,7 +49,7 @@ from cpomdp.types import Belief, LinearGaussianModel
 # The beacon fixture's best varying policy beats its best constant policy by ~27 nats,
 # so a strict win of at least 1 nat is cleared ~27x and sits ~15 orders above float64
 # noise. This is compared best-varying vs best-constant over the whole set, so it does
-# not depend on argmin's tie-break or the action ordering. See warrant_ledger.md.
+# not depend on argmin's tie-break or the action ordering. See warrant_numbers.md.
 VARYING_WIN_MARGIN = 1.0
 
 

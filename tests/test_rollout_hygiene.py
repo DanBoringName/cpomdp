@@ -36,7 +36,7 @@ from cpomdp.observation import CallableSensor
 from cpomdp.selection import Preference
 from cpomdp.types import Belief, LinearGaussianModel
 
-# Declared bars; full justification in warrant_ledger.md.
+# Declared bars; full justification in warrant_numbers.md.
 # float64 loses ~half its significant digits by a condition number of ~1e8; the healthy
 # fixtures here sit near 6, so this ceiling flags real degradation, not benign models.
 COND_CEILING = 1e8

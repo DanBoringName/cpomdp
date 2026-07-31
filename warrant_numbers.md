@@ -1,19 +1,15 @@
 # Warrant ledger
 
-Every check in the certifiability programme rests on a declared number: a margin, a
-ceiling, a floor, or a tolerance. This ledger records what each number is, the magnitude
-it gates, how much headroom it clears, and the first-principles reason it sits where it
-does. The point is that no bar is fitted to make a fixture pass. A reviewer should be able
-to read any number here and see it was chosen from a stated fact, not tuned.
+Every declared number in the cpomdp test suite — a margin, a ceiling, a floor, or a
+tolerance — is recorded here with its reason: what it is, the magnitude it gates, how much
+headroom it clears, and the first-principles basis for its value. The point is that no bar
+is fitted to make a fixture pass. A reader should be able to read any number here and see
+it was chosen from a stated fact, not tuned.
 
-I keep this as a growing tracker alongside `DECISIONS.md` and `BUILD_PLAN.md`. ADR-030 and
-ADR-031 record the warrant *classes*. This ledger records the *numbers*. It grows one
-section per workstream. The first section covers multi-step EFE. Sections still to come:
-single-horizon EFE (the H=1 anchors of 1.72 and 4.49 nats that the crossover statistic
-must reduce to), the p\* scoring harness (its calibration zeros, the four-term additivity
-bound, and the separation-cell condition numbers), the control bracket, and the certified
-discretisation bound. None of those numbers is asserted in the suite yet, so none appears
-below.
+A growing tracker alongside `DECISIONS.md` (the architecture decisions) and `BUILD_PLAN.md`
+(the roadmap), one section per workstream. It opens with the multi-step EFE thresholds and
+the crossover statistic's H=1 anchors; more sections land as new declared numbers enter the
+suite.
 
 ## How to read a warrant
 
@@ -199,3 +195,63 @@ term, the pinned term beside it, their ratio, and the condition numbers of any i
 matrices. It must never print a bare pass, and never the small number on its own. A term
 that is naturally near zero clears a small-number bar trivially, so the ratio and the
 conditioning are what make the cell evidence. This binds the H-sweep harness when it lands.
+
+## The crossover statistic and its H=1 anchors
+
+The crossover statistic (`cpomdp.crossover`) contrasts a walk policy against a reach policy
+over an EFE horizon; `tests/test_crossover.py` pins it. This section records the anchors it
+must reduce to, the reach/walk declaration, and the one tolerance the reduction is checked
+at. ADR-033 records the aggregation *decision*; this records its *numbers*.
+
+### The anchors
+
+All four are read on the two-node coupled-tree T-maze
+(`examples/ffg/epistemic_dissociation_figure.py`, Result 4) with the cue off the prior path
+(`CUE_DETOUR_X = +1.0`), on Agent B, the R(x) agent. The boundary scan carries no
+observation draw, so these are exact facts rather than sampled ones — recomputing returns
+them bit-for-bit, which the suite asserts.
+
+| Anchor | Value (nats) | What it is |
+| --- | --- | --- |
+| pull `Δε(1)` | 1.7232 | epistemic value of the sense action over the myopic one, node-restricted to the CONTEXT marginal |
+| gradient `Δc(1)` | 4.4910 | pragmatic cost of the same contrast |
+| crossover `ΔG(1)` | 2.7678 | `gradient − pull`, positive, so the reach wins at H=1 — which is what forces `H* > 1` |
+| whole-state pull | 2.4166 | the same epistemic contrast aimed at the whole state, not the CONTEXT node |
+
+The two epistemic numbers are the point of the node-restricted versus whole-state
+distinction. 1.72 is the information about the CONTEXT latent that an agent choosing between
+arms is actually served by; 2.42 is the whole-state observation-space reading of the same
+move. I record both so a reviewer never mistakes one for the other. The pragmatic 4.49 is
+identical either way, since it does not depend on the epistemic target.
+
+### The statistic and its sign
+
+`Δε(H) = Σ_k [ε_k(walk) − ε_k(reach)]`, `Δc(H) = Σ_k [c_k(walk) − c_k(reach)]`, and
+`ΔG(H) = Δc − Δε`. The pragmatic term is a cost (lower better) and the epistemic a value
+(higher better), so `ΔG < 0` is the crossover. `ΔG` is defined as `Δc − Δε`, asserted at
+tolerance 0, so the sign flip is exactly the planner's argmin flip. At H=1 the pair
+collapses to the pull and gradient above.
+
+### The reach/walk declaration
+
+Constant-action policies over declared members of a versioned action set
+(`crossover-v1 = {−2, −1, 0, 1, 2}`, a superset of the two anchor actions):
+
+- `a_sense = +1.0` — `argmax ε` over the grid, cue-ward. Its resolved μ⁺ lands on the cue
+  (`+0.9999` against `CUE_DETOUR_X = +1.0`). WALK holds it.
+- `a_myopic = −2.0` — `argmin G` over the grid, prior-ward. The prior points left, so the
+  myopic optimum runs to the grid edge. REACH holds it.
+
+Both are members of the declared set, and `argmax ε` / `argmin G` over the coarse set still
+land on them (asserted). So the pair is a property of the model, not of the grid resolution
+or of whichever two an action sweep happens to surface.
+
+### The one tolerance
+
+**`ANCHOR_TOL = 1e-4`** (`tests/test_crossover.py`). The H=1 reduction asserts the statistic
+matches each anchor to this. It is a numerical-agreement bar, not a fitted margin. The
+statistic at H=1 runs through `policy_efe_ffg`, which is byte-identical to the single-step
+`_ffg_efe_step` the anchors were measured with (ADR-032), so the real disagreement sits at
+the ULP. `1e-4` sits about twelve orders above that floor and four decimals below the
+anchors' own precision, so it is a loose guard against a gross regression — an accidental
+float32 fallback, or a changed model constant — not a snug fit to the fixtures.

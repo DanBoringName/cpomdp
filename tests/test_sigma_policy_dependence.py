@@ -35,7 +35,7 @@ from cpomdp.types import Belief, LinearGaussianModel
 
 # The R(x)/Q(x) covariance trajectories separate by ~0.06–0.34 across these two
 # policies; the fixed-sensor separation is exactly 0. This margin sits well below the
-# real separation and ~13 orders above float64 noise. See warrant_ledger.md.
+# real separation and ~13 orders above float64 noise. See warrant_numbers.md.
 SEPARATION_MARGIN = 1e-2
 
 

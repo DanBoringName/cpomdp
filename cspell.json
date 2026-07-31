@@ -165,6 +165,7 @@
     ".coverage",
     ".remember/**",
     ".claude/**",
+    "research/**",
     "**/*.svg",
     "**/*.png",
     "**/*.gif",
