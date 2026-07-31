@@ -1850,3 +1850,54 @@ The statistic is the symmetric between-policy contrast, summed over the horizon:
   sweep is registered for M7, not asserted here.
 - The statistic reads only the summed rollout components, so it is cheap; the cost driver
   is the rollouts themselves (ADR-032, `|A|^H`).
+
+## ADR-034 — the enumerated-search scoring seam (flat vs FFG)
+
+**Date:** 2026-07-31
+**Status:** Accepted
+**Phase:** v0.4.4 preliminary (multi-step EFE, horizon > 1) — the exhaustive-sweep
+prerequisite
+**Extends:** ADR-031 (the search-family seam); ADR-032 (the FFG rollout it scores with)
+
+### The question
+
+`EnumeratedEfeSearch` (ADR-031) scores every `A^H` policy with `policy_efe` on a flat
+`LinearGaussianModel`. The crossover model is the two-node coupled tree, whose headline is
+the node-restricted epistemic at the coupling-resolved μ⁺ — `policy_efe_ffg`, not
+`policy_efe`. So the exhaustive sweep that finds H\* (the horizon at which the argmin over
+`A^H` becomes a two-phase walk) cannot run on the crossover model without a way to score
+enumerated policies on an FFG backend. Three routes: a parallel `FfgEnumeratedEfeSearch`
+(duplicates the enumeration and the certificate), a model-vs-backend branch inside the
+class (branchy, violates Open-Closed), or inject the scoring as a strategy.
+
+### Decision
+
+Inject scoring as a strategy. `EnumeratedEfeSearch` owns the enumeration, the completeness
+certificate, the argmin, and the cost — all model-independent. *How* a policy is scored is
+a `_PolicyScorer` (internal):
+
+- `_FlatScorer(model)` scores with `policy_efe`.
+- `_FfgScorer(backend, target)` scores with `policy_efe_ffg`, epistemic aimed at `target`.
+
+The default constructor `EnumeratedEfeSearch(model, action_set, *, horizon)` is unchanged —
+it builds a `_FlatScorer`, so every M3/M4 test keeps passing untouched. The FFG path is a
+classmethod `over_backend(backend, action_set, *, target, horizon)` building a `_FfgScorer`;
+both funnel through one `_setup` (validation, `A^H` front-load, certificate). `evaluate`
+`vmap`s `scorer.score`, the scorer holding the model or the backend as a closure constant.
+
+The reduce-to-flat oracle gates it: on a coupling-free single-node backend with the
+whole-state target, `over_backend` reproduces the flat search — same argmin policy, same
+`G` vector at `allclose` — under both a fixed sensor and `R(x)`.
+
+### Consequences
+
+- The exhaustive `A^H` sweep now runs on the coupled-tree crossover model with the same
+  `PROVED` completeness certificate — the prerequisite for M7b's H\*.
+- Open-Closed: a further scorer (a new backend, a different objective) needs no change to
+  the enumeration or the certificate.
+- The receding-horizon and open-loop drivers wrap the search and call `.evaluate`, so they
+  now work over an FFG-backed search unchanged. That opens M8's deferred receding-horizon
+  FFG selector for free — but it stays deferred; M7b drives the enumeration open-loop.
+- Cost is `|A|^H` FFG rollouts, each an H-step `policy_efe_ffg`; under R(x) the per-branch
+  covariance is mandatory (ADR-032). Same `|A|^H · H` accounting, and the certificate keeps
+  it honest.

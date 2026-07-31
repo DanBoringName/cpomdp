@@ -19,21 +19,24 @@ Internal seam: imported from ``cpomdp.enumeration``, not re-exported at the top 
 """
 
 import itertools
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, NamedTuple, Protocol
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 from jaxtyping import Array, Float64
 
-from cpomdp.efe import policy_efe
+from cpomdp.efe import policy_efe, policy_efe_ffg
 from cpomdp.types import Belief, LinearGaussianModel
 
 if TYPE_CHECKING:
-    # Duck-typed at runtime (read for .goal/.precision via policy_efe), so no runtime
-    # dependency on selection — keeps selection -> enumeration the only edge.
+    # Duck-typed at runtime (read for .goal/.precision via the efe kernels, and the
+    # backend's predict/observation methods), so no runtime dependency on selection or
+    # the backends package — keeps selection/backends -> enumeration the only edges.
+    from cpomdp.backends.base import EfeBackend
     from cpomdp.selection import Preference
 
 __all__ = [
@@ -153,14 +156,70 @@ class EnumeratedSearchResult(NamedTuple):
     g: Float64[Array, "N"]
 
 
+class _PolicyScorer(Protocol):
+    """Scores one policy to its summed EFE ``G`` — the seam that swaps flat for FFG.
+
+    The enumerated search owns the enumeration, the certificate, and the argmin; *how* a
+    policy is scored is injected here (ADR-034). ``action_dim`` lets the search validate
+    the declared action set against the scorer's control dimension.
+    """
+
+    action_dim: int
+
+    def score(
+        self, belief: Belief, policy: Float64[Array, "H p"], preference: "Preference"
+    ) -> Float64[Array, ""]: ...
+
+
+@dataclass(frozen=True)
+class _FlatScorer:
+    """Scores with ``policy_efe`` on a flat ``LinearGaussianModel``."""
+
+    model: LinearGaussianModel
+
+    @property
+    def action_dim(self) -> int:
+        return self.model.n_controls
+
+    def score(
+        self, belief: Belief, policy: Float64[Array, "H p"], preference: "Preference"
+    ) -> Float64[Array, ""]:
+        return policy_efe(self.model, belief, policy, preference)[0]
+
+
+@dataclass(frozen=True)
+class _FfgScorer:
+    """Scores with ``policy_efe_ffg`` on an FFG backend, aimed at ``target``."""
+
+    backend: "EfeBackend"
+    target: tuple[int, ...]
+
+    @property
+    def action_dim(self) -> int:
+        return self.backend.model.n_controls
+
+    def score(
+        self, belief: Belief, policy: Float64[Array, "H p"], preference: "Preference"
+    ) -> Float64[Array, ""]:
+        return policy_efe_ffg(
+            self.backend, belief, policy, preference, target=self.target
+        )[0]
+
+
 class EnumeratedEfeSearch:
     """Exhaustive EFE search over ``A^H`` for a declared finite action set (ADR-031).
 
     Front-loads (ADR-002) the full ``|A|^H`` enumeration of *varying* sequences at
-    construction, with its completeness certificate; ``evaluate`` scores them all with
-    ``policy_efe`` and returns the argmin policy and the full ``G`` vector. Because the
-    set is finite and fully enumerated the search **decides** its universal — warrant
-    ``PROVED``, distinct from ``EFESelector``'s ``CORROBORATED`` grid.
+    construction, with its completeness certificate; ``evaluate`` scores them all and
+    returns the argmin policy and the full ``G`` vector. Because the set is finite and
+    fully enumerated the search **decides** its universal — warrant ``PROVED``, distinct
+    from ``EFESelector``'s ``CORROBORATED`` grid.
+
+    Scoring is a strategy (ADR-034): the default constructor scores on a flat
+    ``LinearGaussianModel`` (``policy_efe``); ``over_backend`` scores on an FFG backend
+    (``policy_efe_ffg``, aimed at a node's block) so the same exhaustive search runs the
+    coupled-tree crossover model a flat model cannot express. The enumeration,
+    the certificate, and the cost are shared — only the per-policy scoring differs.
 
     Unlike ``EFESelector`` this supports ``p >= 1`` and *varying* sequences: it can
     express a detour-then-exploit policy the constant-action family cannot.
@@ -178,16 +237,48 @@ class EnumeratedEfeSearch:
                 "EnumeratedEfeSearch needs a model with a control matrix; an "
                 "action has no effect on a control-free (pure-tracking) model."
             )
-        p_model = model.control.shape[1]
-        if action_set.action_dim != p_model:
+        self._setup(_FlatScorer(model), action_set, horizon)
+
+    @classmethod
+    def over_backend(
+        cls,
+        backend: "EfeBackend",
+        action_set: FiniteActionSet,
+        *,
+        target: Sequence[int],
+        horizon: int,
+    ) -> "EnumeratedEfeSearch":
+        """Exhaustive search that scores on an FFG ``backend`` via ``policy_efe_ffg``.
+
+        The FFG counterpart of the flat constructor: it enumerates the same ``A^H`` set
+        with the same completeness certificate, but scores each policy on a coupling
+        graph with the epistemic aimed at ``target`` — a node's block (via
+        ``backend.block``) or the whole state. This runs the coupled-tree model the flat
+        constructor cannot express.
+        """
+        if backend.model.control is None:
             raise ValueError(
-                f"the action set is p={action_set.action_dim} but the model's control "
-                f"is p={p_model}; the declared actions must match the action dimension."
+                "EnumeratedEfeSearch.over_backend needs a backend with a control "
+                "matrix; an action has no effect without one."
+            )
+        search = cls.__new__(cls)
+        search._setup(_FfgScorer(backend, tuple(target)), action_set, horizon)
+        return search
+
+    def _setup(
+        self, scorer: _PolicyScorer, action_set: FiniteActionSet, horizon: int
+    ) -> None:
+        """Shared construction: validate, front-load ``A^H``, assert the certificate."""
+        if action_set.action_dim != scorer.action_dim:
+            raise ValueError(
+                f"the action set is p={action_set.action_dim} but the control is "
+                f"p={scorer.action_dim}; the declared actions must match the action "
+                "dimension."
             )
         if horizon < 1:
             raise ValueError(f"horizon must be >= 1, got {horizon}")
 
-        self._model = model
+        self._scorer = scorer
         self._action_set = action_set
         self._horizon = int(horizon)
         # Front-load the enumeration: one row per A^H sequence, built once at
@@ -213,10 +304,12 @@ class EnumeratedEfeSearch:
     ) -> EnumeratedSearchResult:
         """Score every enumerated policy; return the argmin and the full ``G`` vector.
 
-        One ``vmap`` of ``policy_efe`` over the front-loaded ``|A|^H`` policies, then a
-        NaN-safe ``argmin`` (a NaN-scoring policy must not silently win).
+        One ``vmap`` of the scorer over the front-loaded ``|A|^H`` policies, then a
+        NaN-safe ``argmin`` (a NaN-scoring policy must not silently win). The scorer
+        holds the flat model or the FFG backend as a closure constant, so the ``vmap``
+        maps only over the policies.
         """
-        g = jax.vmap(lambda pol: policy_efe(self._model, belief, pol, preference)[0])(
+        g = jax.vmap(lambda pol: self._scorer.score(belief, pol, preference))(
             self._policies
         )
         best = jnp.argmin(jnp.where(jnp.isnan(g), jnp.inf, g))

@@ -1,0 +1,149 @@
+"""The exhaustive enumerated search, scoring on an FFG backend (the scorer seam).
+
+``EnumeratedEfeSearch`` scores every ``A^H`` policy. On a flat model it scores with
+``policy_efe``; ``over_backend`` scores with ``policy_efe_ffg`` on a coupling graph,
+aimed at a node's block. The enumeration, the certificate, and the cost are shared —
+only the per-policy scoring changes.
+
+The oracle mirrors the rollout's: on a coupling-free single-node backend with the
+whole-state target the FFG search reduces to the flat search, both under a fixed sensor
+and under ``R(x)`` — same argmin policy, same ``G`` vector at ``allclose`` (the FFG path
+predicts through the precision form, the flat through ``AΣAᵀ + Q``). A coupled-tree
+smoke confirms it runs where the flat search cannot.
+
+Collection-red until ``over_backend`` lands.
+"""
+
+import jax.numpy as jnp
+import numpy as np
+
+from cpomdp.backends.coupling import CouplingGraphBackend
+from cpomdp.enumeration import EnumeratedEfeSearch, FiniteActionSet, SearchWarrant
+from cpomdp.ffg.factors.linear_gaussian import (
+    CallableGaussianObservation,
+    GaussianCoupling,
+    GaussianObservation,
+    GaussianTransition,
+)
+from cpomdp.ffg.graph import Coupling, CouplingGraph
+from cpomdp.observation import CallableSensor
+from cpomdp.selection import Preference
+from cpomdp.types import Belief, LinearGaussianModel
+
+
+# --- fixtures (mirror tests/test_policy_efe_ffg.py) --------------------------------
+def _rx_noise(x, params):
+    return params["R0"] * (1.0 + params["gain"] * jnp.dot(x, x))
+
+
+def _single_node_pair(*, state_dependent):
+    """An equivalent (FFG backend, flat model) pair — one node, no couplings."""
+    a = np.array([[1.0, 0.1], [0.0, 1.0]])
+    q = np.array([[0.1, 0.0], [0.0, 0.1]])
+    c = np.array([[1.0, 0.0]])
+    b = np.array([[1.0], [0.0]])  # drives observed state[0], so G varies with action
+    r0 = np.array([[0.5]])
+    params = {"R0": r0, "gain": 0.4}
+    if state_dependent:
+        obs_ffg = CallableGaussianObservation(c, _rx_noise, params)
+        obs_flat = CallableSensor(c, _rx_noise, params)
+    else:
+        obs_ffg = GaussianObservation(c, r0)
+        obs_flat = None
+    graph = CouplingGraph(root=0, dims=(2,), couplings=(), observations={0: obs_ffg})
+    backend = CouplingGraphBackend(graph, (GaussianTransition(a, q),), control=b)
+    model = LinearGaussianModel(
+        dynamics=a,
+        sensor_model=c,
+        dynamics_noise=q,
+        sensor_noise=r0,
+        prior=Belief(mean=np.zeros(2), cov=np.eye(2)),
+        control=b,
+        observation=obs_flat,
+    )
+    return backend, model
+
+
+def _coupled_backend():
+    graph = CouplingGraph(
+        root=0,
+        dims=(1, 1),
+        couplings=(Coupling(0, 1, GaussianCoupling([[0.8]], [[0.05]]), 1.0),),
+        observations={1: GaussianObservation([[1.0]], [[0.1]])},
+    )
+    transitions = (
+        GaussianTransition([[0.7]], [[0.1]]),
+        GaussianTransition([[0.5]], [[0.08]]),
+    )
+    return CouplingGraphBackend(graph, transitions, control=[[1.0], [0.0]])
+
+
+def _action_set():
+    return FiniteActionSet([[-1.0], [0.0], [1.0]], version="v1")
+
+
+def _single_belief():
+    return Belief(mean=[0.3, -0.2], cov=[[0.7, 0.1], [0.1, 0.4]])
+
+
+def _pref():
+    return Preference(goal=[1.0], precision=[[2.0]])
+
+
+# --- oracle: no couplings + whole-state target reduces to the flat search ----------
+class TestOverBackendReducesToFlat:
+    def _check(self, *, state_dependent):
+        backend, model = _single_node_pair(state_dependent=state_dependent)
+        action_set, belief, pref = _action_set(), _single_belief(), _pref()
+        for h in (2, 3):
+            flat = EnumeratedEfeSearch(model, action_set, horizon=h)
+            ffg = EnumeratedEfeSearch.over_backend(
+                backend, action_set, target=range(2), horizon=h
+            )
+            r_flat = flat.evaluate(belief, pref)
+            r_ffg = ffg.evaluate(belief, pref)
+            np.testing.assert_allclose(
+                np.asarray(r_ffg.g), np.asarray(r_flat.g), atol=1e-9
+            )
+            np.testing.assert_array_equal(r_ffg.best_policy, r_flat.best_policy)
+
+    def test_fixed_sensor(self):
+        self._check(state_dependent=False)
+
+    def test_state_dependent_sensor(self):
+        self._check(state_dependent=True)
+
+
+# --- the certificate / cost / warrant are the shared enumeration, unchanged --------
+class TestOverBackendSharedAccounting:
+    def test_certificate_cost_and_warrant(self):
+        backend, _ = _single_node_pair(state_dependent=False)
+        ffg = EnumeratedEfeSearch.over_backend(
+            backend, _action_set(), target=range(2), horizon=2
+        )
+        assert ffg.warrant is SearchWarrant.PROVED
+        assert ffg.certificate.complete
+        assert ffg.n_policies == 9  # 3^2
+        assert ffg.cost_per_cycle == 18  # |A|^H * H = 9 * 2
+
+    def test_rejects_wrong_action_dim(self):
+        backend, _ = _single_node_pair(state_dependent=False)  # p = 1
+        wrong = FiniteActionSet([[-1.0, 0.0], [1.0, 0.0]], version="v1")  # p = 2
+        with np.testing.assert_raises(ValueError):
+            EnumeratedEfeSearch.over_backend(backend, wrong, target=range(2), horizon=2)
+
+
+# --- it runs on the coupled tree, where the flat search cannot ---------------------
+class TestOverBackendOnCoupledTree:
+    def test_runs_and_enumerates_varying_sequences(self):
+        backend = _coupled_backend()
+        belief = Belief(mean=[0.2, -0.1], cov=[[0.7, 0.1], [0.1, 0.4]])
+        pref = Preference(goal=[0.5], precision=[[2.0]])
+        target = tuple(backend.block(0))
+        ffg = EnumeratedEfeSearch.over_backend(
+            backend, _action_set(), target=target, horizon=2
+        )
+        result = ffg.evaluate(belief, pref)
+        assert result.best_policy.shape == (2, 1)
+        assert result.g.shape == (9,)
+        assert ffg.certificate.complete
