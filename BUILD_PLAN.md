@@ -147,16 +147,28 @@ the certificate (M3's completeness proof).
       (`epistemic_value`, PD-checked), so that became a regression test, not a fix — no
       rollout-kernel change, byte-identity untouched.
 - [ ] **M7. The H-sweep harness and the measured budget.** *(Required. Most
-      justifies doing this early.)* One harness running the enumerated planner at
-      H = 1…H_max, printing per H: |A|^H, wall time, peak memory, the M5 statistic
-      with its bar, F4's three-valued outcome. **H_max is measured, not chosen.**
-      If H\* lies beyond the feasible budget that is a D3 falsifier — learning it
-      now costs a week; learning it in v0.5 costs the headline result. M5 must be
-      *written* before M7 is *run*.
-- [ ] **M8. FFG H-step rollout — register, do not build.** *(Deferred, explicit.)*
-      `FfgEfeSelector` raises above H = 1 and keeps raising; R10's crossover model
-      is a flat corridor, so nothing needs it. Release notes say **unsupported**,
-      not untested (standing rule 5).
+      justifies doing this early.)* Two steps, headline first — M5 must be *written*
+      before M7 is *run* (done: pre-registered at `38df72d`).
+  - [ ] **M7a. The reach/walk H\* headline.** Run `crossover_horizon` on the
+        coupled-tree crossover model: find H\*, **assert the sign flip at H\* and
+        H\* − 1**, and print the per-H crossover statistic with its bar and the
+        three-valued outcome for the registered reach/walk pair. Runs on
+        `policy_efe_ffg` today, no enumerator change needed. Register H\* here, commit,
+        then M7b.
+  - [ ] **M7b. The exhaustive 3b sweep + measured budget.** Bring
+        `EnumeratedEfeSearch` to the FFG backend (score via `policy_efe_ffg`, reusing
+        the completeness certificate — the scorer seam, ADR-034), then run the full
+        |A|^H enumeration per H: |A|^H, wall time, peak memory (**H_max measured, not
+        chosen**), and the argmin flip. Upgrades "the reach/walk pair flips at H\*" to
+        the **PROVED (3b)** "no policy in the declared set flips before H\*". If H\*
+        lies beyond the feasible budget, that is a D3 falsifier.
+- [ ] **M8. Closed-loop FFG selector above H = 1 — register, do not build.**
+      *(Deferred, explicit.)* **Correction:** the FFG H-step *rollout* is built
+      (`policy_efe_ffg`, ADR-032) — R10's crossover model is the coupled tree, not a
+      flat corridor, so it was needed. What stays deferred is a receding-horizon
+      `FfgEfeSelector` above H = 1: M7b drives the enumerated rollout directly
+      (open-loop), so no closed-loop FFG selector is needed for R10. Release notes say
+      **unsupported**, not untested (standing rule 5).
 - [ ] **M9. What must not be built in this window.** Pruning (defer, don't
       half-build). Any continuous varying-sequence search **folded into R10's
       enumerated evidence** — `GradientEfeSelector` is a 3a licence and must never
