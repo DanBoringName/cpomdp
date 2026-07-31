@@ -177,7 +177,7 @@ R10 — the multi-step horizon H\* at which the epistemic pull overtakes the pra
 
 **Pre-registration commit.** A reader verifies the order from the cpomdp commit that introduced `cpomdp/crossover.py` and `tests/test_crossover.py`, which predates any sweep-harness commit.
 
-**Crossover pre-registration commit:** `<fill after the cpomdp commit that adds cpomdp/crossover.py>`
+**Crossover pre-registration commit:** `38df72deb57f8f2417b69fdb0d5acee4bbbbf91a`
 
 **The registered falsifiers (D3).** The crossover is falsified, not confirmed, by any of these. The testable ones are asserted at H=1 in cpomdp now; the rest bind the sweep harness when it lands:
 
