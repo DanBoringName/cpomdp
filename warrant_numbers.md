@@ -255,3 +255,23 @@ statistic at H=1 runs through `policy_efe_ffg`, which is byte-identical to the s
 the ULP. `1e-4` sits about twelve orders above that floor and four decimals below the
 anchors' own precision, so it is a loose guard against a gross regression — an accidental
 float32 fallback, or a changed model constant — not a snug fit to the fixtures.
+
+### The multi-step crossover H\* (v0.4.4)
+
+The H=1 anchors force `H* > 1`; the exhaustive varying-sequence search finds where the argmin
+actually flips. `examples/ffg/crossover.py` pins these; the horizon is the free variable of
+the statistic, not a tuned parameter.
+
+| number | value | what it is |
+| --- | --- | --- |
+| `H*` (registered set) | 7 | first horizon whose exhaustive argmin over `crossover-v1^H` is cue-ward — a two-phase walk `[+1,−2,−2,0,0,0,0]`. Cue-ward at H = 7, 8, 9 |
+| `H*` (with optimal reach) | 6 | on `{−3,…,2}`, which contains the unconstrained optimal reach `−3`. So the registered 7 is an upper bound (the grid clips the reach at `−2`) |
+| `ΔG(7)` | −0.1520 | `G(walk) − G(reach)` at H=7; the flip margin. Relative size 3.6e−4 against `G ≈ 425`, so the margin is small and must be shown well-conditioned |
+| pragmatic-only crossing | H ≈ 10 | with the epistemic term zeroed, the argmin is prior-ward through H = 9 and crosses near 10 — so the ~1.7-nat epistemic pull is what advances the flip to 7 |
+| `H_max` | 9 | declared feasibility bound; enumeration cost `5⁹·9 = 17,578,125` scored steps, measured. Larger H_max is a declared budget increase |
+
+The conditioning of the H=7 walk clears the numerical-hygiene bars (recorded above): every
+`Σ⁺`, `S`, `Σ_post` positive definite; `min_eig(Σ_post) = 3.66e−3` against `MIN_EIG_FLOOR =
+1e-9` (about 6.6 orders of margin); max `cond = 1003` (`Σ⁺` at the sharp-sensing step)
+against `COND_CEILING = 1e8`. An independent NumPy kernel (slogdet `ln det`, where the shipped
+kernel uses Cholesky) reproduces `G(walk_7)` and `G(reach_7)` within `atol = 1e-9`.
