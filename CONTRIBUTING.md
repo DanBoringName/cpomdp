@@ -55,7 +55,8 @@ save, point it at ruff yourself; just don't rely on it, the hooks are what count
 ## Running things by hand
 
 ```bash
-uv run pytest -m "not rxinfer"   # the fast, pure-Python suite
+uv run pytest -m "not rxinfer and not slow"   # the fast, pure-Python suite
+uv run pytest -m "not rxinfer"                # + the slow crossover gate (H*=7)
 uv run ty check                  # type checking
 uv run pre-commit run --all-files
 ```
