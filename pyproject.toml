@@ -134,4 +134,5 @@ testpaths = ["tests"]
 addopts = "-ra"
 markers = [
     "rxinfer: tests that require the RxInfer/Julia backend (deselect with '-m \"not rxinfer\"')",
+    "slow: slow paper-number regression gates, e.g. the exhaustive crossover enumeration (deselect with '-m \"not slow\"'); run on merge-to-main and release, not on PRs",
 ]

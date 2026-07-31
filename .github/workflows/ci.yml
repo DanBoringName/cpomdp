@@ -50,9 +50,11 @@ jobs:
       - run: uv sync --locked
       # The pure-Python suite: no Julia installed, so this also proves the
       # rxinfer-marked tests deselect cleanly when the optional extra is absent.
+      # `slow` (the exhaustive crossover enumeration) is deselected here to keep PR
+      # feedback fast; it gates on merge-to-main (docs.yml) and release (publish.yml).
       - name: pytest + coverage gate
         run: >-
-          uv run pytest -m "not rxinfer"
+          uv run pytest -m "not rxinfer and not slow"
           --cov=cpomdp --cov-report=term-missing --cov-fail-under=80
 
   oracle:

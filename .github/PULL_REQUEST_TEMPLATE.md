@@ -46,7 +46,7 @@ checked against, or why no oracle applies. -->
 
 ```text
 # Paste the relevant pytest output, e.g.
-# uv run --no-sync pytest -m "not rxinfer"
+# uv run --no-sync pytest -m "not rxinfer and not slow"
 ```
 
 ## Energy / hot-path impact

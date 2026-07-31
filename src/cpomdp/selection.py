@@ -13,6 +13,7 @@ from cpomdp._validation import validate_covariance
 from cpomdp.backends.base import EfeBackend, InadmissiblePartitionError
 from cpomdp.control import LQRController
 from cpomdp.efe import _ffg_efe_step, expected_free_energy, policy_efe
+from cpomdp.enumeration import SearchWarrant
 from cpomdp.types import Belief, LinearGaussianModel
 
 __all__ = [
@@ -206,6 +207,16 @@ class EFESelector:
     def cost_per_cycle(self) -> int:
         """Per-cycle step-evals = n_candidates * horizon."""
         return self.n_candidates * self._horizon
+
+    @property
+    def warrant(self) -> SearchWarrant:
+        """``CORROBORATED`` — the grid samples a continuum, it does not decide it.
+
+        The counterpart to ``EnumeratedEfeSearch.warrant`` (``PROVED``): the two search
+        families print in different vocabulary so a sampled result is never read as a
+        decided one (standing rule 6; ADR-031).
+        """
+        return SearchWarrant.CORROBORATED
 
 
 class FfgEfeSelector:

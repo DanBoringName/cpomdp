@@ -1644,3 +1644,260 @@ modules stay docstring-only (no re-export layer to keep in sync).
   `n_candidates`/`horizon`/`cost_per_cycle` introspection, same top-level visibility.
 
 *Can refine in future.*
+
+## ADR-030 — the enumeration completeness certificate
+
+**Date:** 2026-07-30
+**Status:** Accepted
+**Phase:** v0.4.4 preliminary (multi-step EFE, horizon > 1) — item A
+**Extends:** ADR-002 (construction/loop split); realises the warrant-vocabulary standing
+rule for the enumerated search
+
+### The question
+
+A finite search over `|A|^H` policies wants to state "no policy in this set flips the
+crossover sign". That is a universal, and a universal is only *decided* (Prover 3b) if
+the search was exhaustive. Without evidence of exhaustiveness the same run is a *sample*
+(Prover 3a) wearing a decision's clothes — and the crossover result would inherit a 3a
+licence it must not have.
+
+### Decision
+
+`EnumeratedEfeSearch` emits a `CompletenessCertificate` at construction: `expected =
+|A|^H` computed independently from the action-set size and the horizon, `visited` = the
+count of policies actually enumerated, and it raises `IncompleteEnumerationError` if they
+differ. The certificate carries the `PROVED` warrant and prints in that vocabulary
+(`PROVED (finite set, |A|^H = N, visited N)`), never a bare `PASS`.
+
+This lands now rather than at v0.6. It is about ten lines, and deferring it risks the
+crossover being computed under a 3a licence and needing a re-run once the certificate
+finally arrives.
+
+### Consequences
+
+- The enumerated family can state `PROVED` honestly; a later change that samples,
+  deduplicates, or prunes the enumeration trips the assertion instead of silently
+  downgrading the warrant.
+- The certificate is scoped to the *declared* set. Whether the set is fine enough is a
+  separate question — a refinement-stability check, pre-registered as a falsifier — not
+  something this certificate can or should settle.
+
+## ADR-031 — the search-family seam
+
+**Date:** 2026-07-30
+**Status:** Accepted
+**Phase:** v0.4.4 preliminary (multi-step EFE, horizon > 1) — item A
+**Extends:** ADR-030 (the certificate); relates to ADR-021 (the selector family)
+
+### The question
+
+`EFESelector` searches a *continuous* action box by sampling an evenly-spaced grid and
+tiling each sample into a constant-action policy — a sample of a continuum, warrant
+`CORROBORATED`. The crossover needs a *decisive* search over a finite declared set,
+warrant `PROVED`. These are different objects with different warrants. If the API lets
+them be confused, a sampled result reads as a decided one and the certificate ADR-030
+earns is eroded at exactly the point it matters.
+
+### Decision
+
+Keep them physically and typographically distinct:
+
+- A separate module, `cpomdp.enumeration`, holds the enumerated family — an internal
+  seam, not re-exported at the top level (a public surface is scheduled, not assumed).
+- `FiniteActionSet` (declared, finite, **versioned**) is a distinct type from the grid's
+  `(lo, hi, n_candidates)` config, so the two cannot be passed to the wrong search.
+- Two families with two warrants, both self-describing via a `SearchWarrant`-valued
+  `.warrant`: `EFESelector` (grid, `CORROBORATED`, constant-action, `p = 1`) and
+  `EnumeratedEfeSearch` (finite set, `PROVED`, varying `A^H`, `p >= 1`).
+- Two cost vocabularies: `n_candidates * horizon` (grid) versus `|A|^H * H`
+  (enumerated) — the honest exponential cost of an exhaustive search.
+- The action set is versioned so an action added after results are seen shows up in the
+  diff, not in a reviewer's objection.
+
+### Consequences
+
+- The two warrants cannot leak into each other; a continuous-action search
+  (`GradientEfeSelector`, still 3a) stays out of the enumerated evidence by construction.
+- `EnumeratedEfeSearch` supports `p >= 1` and *varying* sequences, so it expresses a
+  detour-then-exploit policy the constant-action grid cannot — the capability the
+  crossover model actually needs.
+- `selection` gains a one-way import of `SearchWarrant` from `enumeration`; the reverse
+  edge stays type-only (`Preference` under `TYPE_CHECKING`), so there is no cycle.
+
+## ADR-032 — the multi-step FFG rollout (node-targeted EFE over a horizon)
+
+**Date:** 2026-07-30
+**Status:** Accepted
+**Phase:** v0.4.4 preliminary (multi-step EFE, horizon > 1) — the crossover statistic's
+prerequisite
+**Extends:** ADR-019 (R(x) linearized at μ⁺), issue #26 (`_ffg_efe_step`, node-targeted
+epistemic); mirrors the flat rollout `policy_efe` / `policy_efe_trace`
+
+### The question
+
+The crossover the horizon-sweep measures is a fact about the coupled T-maze: its anchors
+are the node-restricted epistemic (info gain about the CONTEXT marginal, ~1.72 nats) read
+at the coupling-resolved predictive mean μ⁺. That quantity lives only on the FFG path —
+`_ffg_efe_step` fed by `CouplingGraphBackend.predicted_belief` — and that path was
+single-step. `policy_efe` is a genuine H-step rollout, but on a flat `LinearGaussianModel`
+its epistemic is the *whole-state* observation-space term (the same contrast reads ~2.42
+nats), and a flat corridor has no context node to sense at all. So the crossover cannot be
+measured on the flat rollout; a multi-step FFG rollout is the missing piece.
+
+The fork it opens: how to propagate the joint belief between steps, and how much to reuse
+versus reinvent.
+
+### Decision
+
+Add `policy_efe_ffg` (summed) and `policy_efe_ffg_trace` (per-step) to `cpomdp.efe`,
+sharing one `lax.scan` step `_ffg_rollout_body`, exactly mirroring the flat trio so the
+two rollouts read as parallel.
+
+- **Propagation is predict-then-contract on the coupled joint.** Each step:
+  `backend.predicted_belief` gives μ⁺/Σ⁺ with the couplings folded in;
+  `backend.observation_noise_at(μ⁺)` gives R(μ⁺); `_ffg_efe_step` scores the
+  node-targeted EFE; the carry contracts the *joint* covariance by the Kalman update at
+  `(C, R(μ⁺))` with the mean held at μ⁺ (zero expected innovation). This is the flat
+  `_rollout_body` with three swaps — flat predict → `predicted_belief`, `_efe_step` →
+  `_ffg_efe_step`, flat C/R → the backend's.
+- **Reuse `PolicyEfeTrace` unchanged.** Same seven fields; the only semantic shift is that
+  the `epistemic` column is node-restricted, not whole-state.
+- **The backend is duck-typed.** `EfeBackend` is imported under `TYPE_CHECKING` only
+  (`backends` does not import `efe`, so no cycle); the backend is not a JAX pytree, so it
+  is held as a closure constant, and the functions compose under `jit`/`vmap`/`grad` over
+  the array arguments — the way `FfgEfeSelector` already `vmap`s its per-candidate score.
+- **Two oracle reductions gate it.** H=1 is byte-identical to a single `_ffg_efe_step`
+  (holds *with* couplings); a single-node backend with the whole-state target agrees with
+  `policy_efe` to `allclose` at H=2,3 (numerical, not byte-identical: the FFG predicts
+  through the precision form, the flat rollout through `AΣAᵀ + Q`).
+- **The hot path stays lean.** `policy_efe_ffg` keeps only the three scalars in the scan's
+  `ys`, so a future H-step selector's `vmap` never stacks the H×n×n covariances (RFC-001).
+- Internal seam: in `efe.__all__`, not re-exported at the top level.
+
+### Consequences
+
+- The deferred H-step `FfgEfeSelector` (today `horizon = 1`) now has its rollout: the lean
+  `policy_efe_ffg` is the object it will search over. Wiring it is a later step, out of
+  this ADR's scope.
+- Cost is `|A|^H` step-evaluations, and under R(x) the planning covariance is
+  policy-dependent (Theorem 1(i)), so per-branch covariance trajectories are mandatory —
+  there is no single precomputed trajectory to share. This is the rollout's own labeled
+  work, attributable rather than buried in the filter loop; pruning is deferred and fine
+  at H ≤ 3 with a small action set.
+- The crossover statistic reads this trace's node-restricted `epistemic` column and must
+  reduce to the anchors at H=1. The whole-state 2.42 is the flat path's number, not this
+  one; the two paths are kept distinct on purpose.
+- One deliberate redundancy: `_ffg_efe_step` returns only `(G, parts)`, not its `S` or the
+  posterior it forms internally, so the body recomputes `S = CΣ⁺Cᵀ + R` for the
+  contraction. Chosen over widening the single-step API that the selector and this scan
+  both depend on.
+
+## ADR-033 — the crossover statistic (the horizon aggregation)
+
+**Date:** 2026-07-31
+**Status:** Accepted
+**Phase:** v0.4.4 preliminary (multi-step EFE, horizon > 1) — item M5
+**Extends:** ADR-032 (the FFG rollout it reads); realises the standing-rule
+pre-registration for the crossover result
+
+### The question
+
+Paper 1 defines the per-step epistemic value ε_k and, in its own words, leaves the
+horizon aggregation to future work. So the H > 1 statistic is genuinely undefined, and the
+only constraint on it is that it collapse to the H = 1 anchors (the epistemic pull 1.72
+nats, the pragmatic gradient 4.49 nats). A plausible alternative — sum ε across the
+horizon, against the change in the pragmatic term from step 0 to H−1 — fails twice: at
+H = 1 the pragmatic span is empty, so it reads 0 rather than 4.49, and it is a
+within-policy temporal difference, a different object from a between-policy contrast. The
+aggregation has to be chosen, and chosen *before* the sweep measures H*, or the headline
+crossover inherits a fitted statistic.
+
+### Decision
+
+The statistic is the symmetric between-policy contrast, summed over the horizon:
+
+    Δε(H) = Σ_k [ε_k(walk) − ε_k(reach)]        the accumulated epistemic pull
+    Δc(H) = Σ_k [c_k(walk) − c_k(reach)]        the accumulated pragmatic gradient
+    ΔG(H) = Δc(H) − Δε(H) = G(walk) − G(reach)
+    H*    = min{H : ΔG(H) < 0}
+
+- Both sides contrast the *same* two policies. That symmetry is what makes it collapse:
+  at H = 1, `Δε = 1.7232`, `Δc = 4.4910`, `ΔG = +2.7678` (measured, `tests/test_crossover.py`).
+- The epistemic is read from the FFG rollout (ADR-032) at the node-restricted CONTEXT
+  target, so under R(x) it rides the coupling-resolved planning covariance. The whole-state
+  target reads 2.4166 for the same contrast; the two are kept distinct, and the
+  node-restricted number is the headline.
+- `ΔG` is *defined* as `Δc − Δε` (which equals `G(walk) − G(reach)`), so its sign flip is
+  exactly the argmin flip — the horizon at which the planner's chosen policy changes. The
+  code asserts this identity at tolerance 0.
+- `reach` / `walk` are constant-action policies over declared members of a versioned
+  `FiniteActionSet`: `a_myopic = argmin G` (prior-ward), `a_sense = argmax ε` (cue-ward). A
+  two-phase walk would beat the constant one but breaks the H = 1 collapse, so it is a
+  separate labelled variant, never the registered pair.
+- Lives in `cpomdp.crossover` (internal seam, not re-exported). `crossover_horizon`
+  *defines* H* but does not *measure* it — the H-sweep harness (M7) does, with the cost
+  and conditioning table.
+
+### Consequences
+
+- Pre-registered: the statistic, the sign convention, the anchor magnitudes, and the
+  reach/walk pair are fixed in code and in `warrant_numbers.md` before M7 runs. The commit
+  that introduces them timestamps the pre-registration; its id is recorded in the ledger.
+- "No crossover at any feasible H" is an explicit outcome — `crossover_horizon` returns
+  `None`, not a laundered number, so that D3 falsifier stays visible to the harness.
+- The tie caveat (two policies can differ per step yet tie on the horizon sum) is a
+  property of the registered pair. Asserting `|Δε(H)|` stays bounded from zero across the
+  sweep is registered for M7, not asserted here.
+- The statistic reads only the summed rollout components, so it is cheap; the cost driver
+  is the rollouts themselves (ADR-032, `|A|^H`).
+
+## ADR-034 — the enumerated-search scoring seam (flat vs FFG)
+
+**Date:** 2026-07-31
+**Status:** Accepted
+**Phase:** v0.4.4 preliminary (multi-step EFE, horizon > 1) — the exhaustive-sweep
+prerequisite
+**Extends:** ADR-031 (the search-family seam); ADR-032 (the FFG rollout it scores with)
+
+### The question
+
+`EnumeratedEfeSearch` (ADR-031) scores every `A^H` policy with `policy_efe` on a flat
+`LinearGaussianModel`. The crossover model is the two-node coupled tree, whose headline is
+the node-restricted epistemic at the coupling-resolved μ⁺ — `policy_efe_ffg`, not
+`policy_efe`. So the exhaustive sweep that finds H\* (the horizon at which the argmin over
+`A^H` becomes a two-phase walk) cannot run on the crossover model without a way to score
+enumerated policies on an FFG backend. Three routes: a parallel `FfgEnumeratedEfeSearch`
+(duplicates the enumeration and the certificate), a model-vs-backend branch inside the
+class (branchy, violates Open-Closed), or inject the scoring as a strategy.
+
+### Decision
+
+Inject scoring as a strategy. `EnumeratedEfeSearch` owns the enumeration, the completeness
+certificate, the argmin, and the cost — all model-independent. *How* a policy is scored is
+a `_PolicyScorer` (internal):
+
+- `_FlatScorer(model)` scores with `policy_efe`.
+- `_FfgScorer(backend, target)` scores with `policy_efe_ffg`, epistemic aimed at `target`.
+
+The default constructor `EnumeratedEfeSearch(model, action_set, *, horizon)` is unchanged —
+it builds a `_FlatScorer`, so every M3/M4 test keeps passing untouched. The FFG path is a
+classmethod `over_backend(backend, action_set, *, target, horizon)` building a `_FfgScorer`;
+both funnel through one `_setup` (validation, `A^H` front-load, certificate). `evaluate`
+`vmap`s `scorer.score`, the scorer holding the model or the backend as a closure constant.
+
+The reduce-to-flat oracle gates it: on a coupling-free single-node backend with the
+whole-state target, `over_backend` reproduces the flat search — same argmin policy, same
+`G` vector at `allclose` — under both a fixed sensor and `R(x)`.
+
+### Consequences
+
+- The exhaustive `A^H` sweep now runs on the coupled-tree crossover model with the same
+  `PROVED` completeness certificate — the prerequisite for M7b's H\*.
+- Open-Closed: a further scorer (a new backend, a different objective) needs no change to
+  the enumeration or the certificate.
+- The receding-horizon and open-loop drivers wrap the search and call `.evaluate`, so they
+  now work over an FFG-backed search unchanged. That opens M8's deferred receding-horizon
+  FFG selector for free — but it stays deferred; M7b drives the enumeration open-loop.
+- Cost is `|A|^H` FFG rollouts, each an H-step `policy_efe_ffg`; under R(x) the per-branch
+  covariance is mandatory (ADR-032). Same `|A|^H · H` accounting, and the certificate keeps
+  it honest.
