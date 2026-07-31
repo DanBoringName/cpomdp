@@ -147,14 +147,21 @@ the certificate (M3's completeness proof).
       (`epistemic_value`, PD-checked), so that became a regression test, not a fix — no
       rollout-kernel change, byte-identity untouched.
 - [ ] **M7. The H-sweep harness and the measured budget.** *(Required. Most
-      justifies doing this early.)* Two steps, headline first — M5 must be *written*
-      before M7 is *run* (done: pre-registered at `38df72d`).
-  - [ ] **M7a. The reach/walk H\* headline.** Run `crossover_horizon` on the
-        coupled-tree crossover model: find H\*, **assert the sign flip at H\* and
-        H\* − 1**, and print the per-H crossover statistic with its bar and the
-        three-valued outcome for the registered reach/walk pair. Runs on
-        `policy_efe_ffg` today, no enumerator change needed. Register H\* here, commit,
-        then M7b.
+      justifies doing this early.)* Two steps: the constant-family null (M7a), then the
+      exhaustive crossover where H\* actually lives (M7b). M5 must be *written* before M7
+      is *run* (done: pre-registered at `38df72d`).
+  - [x] **M7a. The constant-family null (motivates the exhaustive search).**
+        *Reframed after measuring:* the constant reach/walk pair produces **no
+        crossover** — ΔG > 0 at every H ≤ 6, with a **flat Δε (~1.7, it does not
+        accumulate)**. A constant walk overshoots the cue, senses once, and never
+        exploits, so R10's detour-then-exploit sequence is unreachable in the
+        constant-action family. This is the search-family artefact the plan warned of,
+        **not** a real D3 falsifier — the concrete reason the varying-sequence search
+        (M7b) is necessary. **Done:** `examples/ffg/crossover_sweep.py` — `check()`
+        prints the per-H table and asserts the null (`crossover_horizon` → None, every
+        ΔG > 0, Δε range < 0.2); gated by
+        `tests/test_example_checks.py::test_crossover_sweep_check`. The real H\* is M7b's
+        argmin flip.
   - [ ] **M7b. The exhaustive 3b sweep + measured budget.** Bring
         `EnumeratedEfeSearch` to the FFG backend (score via `policy_efe_ffg`, reusing
         the completeness certificate — the scorer seam, ADR-034), then run the full

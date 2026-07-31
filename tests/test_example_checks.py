@@ -8,6 +8,7 @@ the ``examples`` extra. ``conftest.py`` puts ``examples/`` and ``examples/ffg/``
 path.
 """
 
+import crossover_sweep
 import efe_collapse_figure
 import epistemic_dissociation_figure
 
@@ -21,3 +22,9 @@ def test_single_chain_theorem_check():
 def test_epistemic_dissociation_check():
     """The four T-maze results, including Result 4's horizon-1 pull < gradient order."""
     epistemic_dissociation_figure.check()
+
+
+def test_crossover_sweep_check():
+    """The constant reach/walk pair never crosses over — the search-family artefact that
+    makes the exhaustive varying-sequence search necessary."""
+    crossover_sweep.check()
