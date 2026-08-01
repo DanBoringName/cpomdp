@@ -57,6 +57,52 @@ jobs:
           uv run pytest -m "not rxinfer and not slow"
           --cov=cpomdp --cov-report=term-missing --cov-fail-under=80
 
+  review:
+    name: claude review
+    needs: [lint, test]
+    # `!cancelled()` drops the implicit all-needs-succeeded gate, so a red `test`
+    # still reaches the review — that's the point, the failures go in the comment.
+    # A red `lint` does block it: style noise would drown the real findings.
+    if: >-
+      !cancelled()
+      && github.event_name == 'pull_request'
+      && github.event.action == 'opened'
+      && needs.lint.result == 'success'
+      && needs.test.result != 'cancelled'
+      && github.event.pull_request.head.repo.fork == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+      actions: read # `gh run view` on this run's own test logs
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+      - uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            Review this PR. Prioritise correctness bugs, broken invariants,
+            and API-contract changes. Skip formatting and naming nits —
+            those are handled by lint.
+
+            The test job finished with result: ${{ needs.test.result }}.
+            If that is not `success`, run
+            `gh run view ${{ github.run_id }} --log-failed` first and lead the
+            review with the failures: name each failing test, point to the
+            change in the diff that caused it, and say whether the test or the
+            code is the thing that's wrong.
+
+            Post the review with `gh pr comment`.
+          claude_args: >-
+            --max-turns 10 --allowed-tools "Bash(gh pr diff:*),Bash(gh pr
+            view:*),Bash(gh pr comment:*),Bash(gh run view:*)"
+
   oracle:
     name: rxinfer oracle (Julia)
     runs-on: ubuntu-latest
