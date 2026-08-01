@@ -236,6 +236,51 @@ def epistemic_counterfactual(horizon=FLIP_H, actions=None):
     return cue_ward(g_all), cue_ward(prag_all), bool(np.all(np.isfinite(g_all)))
 
 
+# --- the registered falsifiers, reported by both the bare run and the gate ----------
+# The four D3 falsifiers registered for this crossover, one line each in the
+# three-valued vocabulary of ADR-029: NOT TRIGGERED (the check ran and the condition did
+# not obtain), FIRED (it obtained, and the claim is refuted), NOT APPLICABLE (void by
+# construction, so it is evidence for nothing and does not count as a survivor). A
+# falsifier this gate does not run says so and names where it was measured, rather than
+# vanishing into a summary line. The two NOT TRIGGERED rows are backed by the assertions
+# in check() steps 1 and 2, so nothing here is decoration.
+FALSIFIERS = (
+    (
+        "1. no crossover at feasible H",
+        "NOT TRIGGERED",
+        f"argmin is cue-ward at H* = {FLIP_H}, inside H_MAX = {H_MAX} (step 1)",
+    ),
+    (
+        "2. flip not clean at H*/H*-1",
+        "NOT TRIGGERED",
+        "ΔG changes sign once, argmin flips at the same step (step 2)",
+    ),
+    (
+        "3. not reproducible across seeds",
+        "NOT APPLICABLE",
+        "no observation draw: the open-loop enumeration is deterministic",
+    ),
+    (
+        "4. H* unstable under refinement",
+        "NOT RUN HERE",
+        f"step-0.5 refinement costs {9**7 * 7} steps; see the write-up",
+    ),
+)
+
+
+def _print_falsifiers() -> None:
+    """Print the registered falsifiers with an ADR-029 outcome each, never one PASS."""
+    tested = sum(1 for _, outcome, _ in FALSIFIERS if outcome == "NOT TRIGGERED")
+    print(
+        f"\nRegistered D3 falsifiers ({len(FALSIFIERS)} registered, {tested} tested "
+        "here, none fired):"
+    )
+    for name, outcome, why in FALSIFIERS:
+        print(f"   {name:<33} {outcome:<14} {why}")
+    print("   full accounting: research/r10_open_loop_crossover.md, chapter 7")
+
+
+# --- the four measurement tables ----------------------------------------------------
 def _print_tables() -> None:
     flip = exhaustive_flip()
     mech = mechanism_curve()
@@ -315,12 +360,14 @@ def _print_tables() -> None:
     print("\n5. Action-set dependence and feasibility:")
     print(f"   optimal reach -3 -> H* = {edge_star}; the registered set clips the")
     print(f"   reach to -2, so H* = {FLIP_H} is an upper bound.")
-    print(f"   step-0.5 refinement (same range, cost {refine_cost}) leaves the H=6")
-    print("   and H=7 argmins unchanged: no intermediate action scores lower G")
-    print("   (a subset check; step-0.25 dropped on cost).")
+    print(f"   recorded, not re-run here (cost {refine_cost} steps): a step-0.5")
+    print("   refinement of the same range left the H=6 and H=7 argmins unchanged,")
+    print("   no intermediate action scoring lower G (a subset check; step-0.25")
+    print("   dropped on cost).")
     print("   analytic bound: relief <= 0.77/step vs 2.77 detour -> H* >= 6.")
     print(f"   feasibility: declared to H_MAX = {H_MAX} (cost {hmax_cost} scored")
     print("   steps); the argmin is cue-ward at H = 7, 8, 9.")
+    _print_falsifiers()
 
 
 # --- the gate ----------------------------------------------------------------------
@@ -378,7 +425,8 @@ def check() -> None:
     print("optimal reach): the exhaustive argmin flips reach -> two-phase walk. The")
     print("gradient decays below a flat ~1.7-nat epistemic pull; zero it and the")
     print("flip moves to H~10, so the epistemic is load-bearing. Oracle- and")
-    print("conditioning-confirmed. -- PASS")
+    print("conditioning-confirmed.")
+    _print_falsifiers()
 
 
 def main():
