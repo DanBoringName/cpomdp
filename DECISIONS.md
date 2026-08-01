@@ -1901,3 +1901,74 @@ whole-state target, `over_backend` reproduces the flat search — same argmin po
 - Cost is `|A|^H` FFG rollouts, each an H-step `policy_efe_ffg`; under R(x) the per-branch
   covariance is mandatory (ADR-032). Same `|A|^H · H` accounting, and the certificate keeps
   it honest.
+
+---
+
+## ADR-029 — three-valued check outcomes: a falsifier that cannot fire is not a pass
+
+**Date:** 2026-08-01
+**Status:** Accepted
+**Phase:** v0.4.4 preliminary (multi-step EFE, horizon > 1) — the reporting rule M7 consumed
+**Extends:** ADR-031 (its two warrant vocabularies, applied one level down at the check)
+
+**On the number and the date.** 029 was reserved for this decision by the preliminary build
+plan, which also said it had to exist before M7 ran. It did not. M7 ran, R10 was measured,
+and the write-up reached for this vocabulary anyway with no ADR behind it. I have kept the
+reserved number and appended the entry here, out of sequence, because this file is
+append-only. Arriving late is part of what it records.
+
+### The question
+
+A registered falsifier has three outcomes, not two.
+
+A suite that reports `PASS` and `FAIL` can only say that a check ran and did not fail. R10
+registered four D3 falsifiers. One of them, "not reproducible across seeds", is void by
+construction: the open-loop crossover object carries no observation draw, so the enumeration
+recomputes identically and that falsifier can never fire. Report it as `PASS` next to the
+other three and the line reads as four falsifiers surviving a test. Three survived a test.
+The fourth was not a test.
+
+That is the same erosion ADR-031 stops for warrants, one level down. There the risk is a
+sampled continuum printing as `PASS` beside a decided finite set. Here it is a check that
+cannot fail printing as `PASS` beside checks that could have.
+
+### Decision
+
+A registered-falsifier report carries one of three outcomes, in this vocabulary:
+
+- `NOT TRIGGERED` — the check ran, the condition did not obtain, the claim survives it.
+- `FIRED` — the condition obtained. The claim is refuted, and the refutation is the result.
+- `NOT APPLICABLE` — void by construction. It cannot fire here, so it is evidence for
+  nothing, and it is not counted among the surviving falsifiers.
+
+Two rules travel with the vocabulary.
+
+First, a falsifier that a given gate does not run is reported as **not run here**, naming
+where it was measured instead. It never disappears into the gate's summary line. A cheap CI
+gate skipping a heavy enumeration is fine. Quoting that enumeration's outcome as though the
+gate had checked it is not.
+
+Second, outcomes print per falsifier. One trailing `PASS` covering a set of them is exactly
+the reading this decision removes.
+
+This binds falsifier reporting, not ordinary assertions. "Does the shipped number match the
+NumPy oracle" stays two-valued, because it passes or it raises. Three values are for a check
+whose job is to try to refute a registered claim. That is where "did not apply" is a real and
+distinct answer.
+
+### Consequences
+
+- `examples/ffg/crossover.py --check` prints the four D3 falsifiers by name with an outcome
+  each. Two are `NOT TRIGGERED` on the assertions above them, one is `NOT APPLICABLE`, and
+  the refinement-stability falsifier says it was not run in the gate and points at the
+  write-up. The blanket `PASS` line is gone.
+- The count a reader needs is now legible on the gate's own output. R10 registered four
+  falsifiers, three of which were tests, and none fired.
+- The vocabulary lives in the harness and the write-up, never in `src/cpomdp`. Which claims
+  are registered falsifiers belongs to the research programme, not to the library, and the
+  library has no use for the enum. Shipping one would be the scope drift the checklist
+  exists to catch.
+- Other examples keep their `PASS` lines. They gate results rather than registered
+  falsifiers, and two values are the honest report there.
+- The cost of the rule is a print. If a later harness wants the outcomes machine-readable,
+  that is a small addition to the harness and still not a library type.

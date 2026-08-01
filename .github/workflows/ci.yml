@@ -85,11 +85,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
             Review this PR. Prioritise correctness bugs, broken invariants,
             and API-contract changes. Skip formatting and naming nits —
-            those are handled by lint.
+            those are handled by lint. Assert that the code changes
+            reflect the checklist in any present `BUILD_PLAN.md` file.
 
             The test job finished with result: ${{ needs.test.result }}.
             If that is not `success`, run

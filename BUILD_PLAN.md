@@ -7,7 +7,14 @@ Conventions: `[x]` done, `[ ]` open, `[~]` partial.
 
 ---
 
-## v0.4.4 — multi-step EFE preliminary window (item A)
+## v0.4.4 — multi-step EFE preliminary window (item A) — CLOSED 2026-08-01
+
+**Window closed.** M1 to M7b all landed, the five gate items hold, and H\* = 7 is measured
+and registered. What was deliberately not built has an issue each rather than a silence:
+issues #52 (closed-loop FFG selector above H = 1), #53 (pruning), #54
+(`GradientEfeSelector`), #55 (notation unification) and #56 (`Q(x)` above H = 1). The
+section below is kept as the record of what was planned against what shipped, including
+where the two differ.
 
 Source: `.claude/research/multistep_efe_preliminary_plan.md`. Items are
 prefixed **M** because the repo's Workstream B (the rollout seam) and the p\*
@@ -39,14 +46,18 @@ the certificate (M3's completeness proof).
 
 - [x] **The rollout** — scoring one policy. Done, verified, byte-locked at H = 1
       (Workstream B1–B5).
-- [ ] **The search** — choosing over a policy *family*. Today's selector searches
+- [x] **The search** — choosing over a policy *family*. Today's selector searches
       |A| constant-action policies, not |A|^H sequences. R10 (detour-to-beacon
       then approach-goal) is a *varying* sequence the constant-action family
       **cannot express** — an H-sweep on today's selector produces a null that is
       a search-family artefact and looks exactly like D3's registered falsifier.
-- [ ] **The certificate** — the warrant that a finite search was exhaustive.
+      **Done:** `EnumeratedEfeSearch` (M3). The predicted artefact was then measured
+      and published as such in M7a: the constant pair returns no crossover, which is
+      the search family speaking, not the objective.
+- [x] **The certificate** — the warrant that a finite search was exhaustive.
       Without it "no policy flips sign" is Prover 3a (corroborates), not 3b
-      (decides).
+      (decides). **Done:** `CompletenessCertificate` (ADR-030), carried through to the
+      FFG scorer, so H\* = 7 is a 3b result at every horizon.
 
 ### Items
 
@@ -146,7 +157,7 @@ the certificate (M3's completeness proof).
       *already* guarded in both the kernel (`_logdet_pd`, cholesky→NaN) and the oracle
       (`epistemic_value`, PD-checked), so that became a regression test, not a fix — no
       rollout-kernel change, byte-identity untouched.
-- [ ] **M7. The H-sweep harness and the measured budget.** *(Required. Most
+- [x] **M7. The H-sweep harness and the measured budget.** *(Required. Most
       justifies doing this early.)* Two steps: the constant-family null (M7a), then the
       exhaustive crossover where H\* actually lives (M7b). M5 must be *written* before M7
       is *run* (done: pre-registered at `38df72d`).
@@ -162,27 +173,47 @@ the certificate (M3's completeness proof).
         ΔG > 0, Δε range < 0.2); gated by
         `tests/test_example_checks.py::test_crossover_sweep_check`. The real H\* is M7b's
         argmin flip.
-  - [ ] **M7b. The exhaustive 3b sweep + measured budget.** Bring
+  - [x] **M7b. The exhaustive 3b sweep + measured budget.** Bring
         `EnumeratedEfeSearch` to the FFG backend (score via `policy_efe_ffg`, reusing
         the completeness certificate — the scorer seam, ADR-034), then run the full
         |A|^H enumeration per H: |A|^H, wall time, peak memory (**H_max measured, not
         chosen**), and the argmin flip. Upgrades "the reach/walk pair flips at H\*" to
         the **PROVED (3b)** "no policy in the declared set flips before H\*". If H\*
         lies beyond the feasible budget, that is a D3 falsifier.
-- [ ] **M8. Closed-loop FFG selector above H = 1 — register, do not build.**
+        **Done: H\* = 7.** `EnumeratedEfeSearch.over_backend` scores enumerated policies on
+        an FFG backend (ADR-034), gated by a reduce-to-flat oracle;
+        `examples/ffg/crossover.py` runs the exhaustive `A^H` sweep per horizon. The argmin
+        is prior-ward (a reach) through H = 6 and cue-ward (the two-phase walk
+        `[+1,−2,−2,0,0,0,0]`) at H = 7, 8, 9, each horizon a complete enumeration, so the
+        measurement is selection-free. Budget **measured, not chosen**: H_max = 9
+        (`5⁹·9 = 17.6M` scored steps). H\* = 6 on any set containing the optimal reach
+        `−3`, so 7 is an upper bound and the registered number. The flip is epistemic by
+        counterfactual: zero the epistemic term and the crossing moves to H ≈ 10.
+        Registered in `research/warrant_ledger.md` section 10, written up in
+        `research/r10_open_loop_crossover.md`, gated by
+        `tests/test_example_checks.py::test_crossover_check` (slow marker, main and
+        release only). No falsifier fired.
+- [x] **M8. Closed-loop FFG selector above H = 1 — register, do not build.**
       *(Deferred, explicit.)* **Correction:** the FFG H-step *rollout* is built
       (`policy_efe_ffg`, ADR-032) — R10's crossover model is the coupled tree, not a
       flat corridor, so it was needed. What stays deferred is a receding-horizon
       `FfgEfeSelector` above H = 1: M7b drives the enumerated rollout directly
       (open-loop), so no closed-loop FFG selector is needed for R10. Release notes say
       **unsupported**, not untested (standing rule 5).
-- [ ] **M9. What must not be built in this window.** Pruning (defer, don't
+      **Registered as #52.** The v0.4.4 changelog says so in those words. ADR-034 notes the
+      FFG-backed drivers would now make the selector nearly free; it stays deferred
+      regardless, because nothing scoped needs it.
+- [x] **M9. What must not be built in this window.** Pruning (defer, don't
       half-build). Any continuous varying-sequence search **folded into R10's
       enumerated evidence** — `GradientEfeSelector` is a 3a licence and must never
       contaminate M3's PROVED cells. It is not banned outright: it ships as a
       separate, clearly-labelled corroboration track (see "Continuous-action
       corroboration track" below), walled off from the crossover decision. Any
       documentation of `Q(x)` at H > 1, however cleanly it falls out.
+      **Held, and each ban is now an issue rather than a silence.** Nothing on the list was
+      built. No pruning (#53). No continuous varying-sequence search reached R10's evidence,
+      `GradientEfeSelector` being still unwritten (#54, and its track is the open one at the
+      foot of this file). No `Q(x)` above H = 1 documented, exampled, or claimed (#56).
 
 ### Correction (Paper 1 handoff): the crossover model is the coupled tree
 
@@ -203,23 +234,42 @@ rollout]"). The Paper 1 handoff supersedes that premise:
   (ADR-032), tests green. What stays genuinely deferred is only wiring it into a
   closed-loop `FfgEfeSelector` above H = 1 — the sweep drives the rollout directly.
 
-Cascade still to re-scope (flagged, not yet applied — needs a decision): M5 (ii)'s wording;
-whether `EnumeratedEfeSearch` (M3, today scoring via flat `policy_efe`) scores the
-crossover via `policy_efe_ffg` on the coupled tree; M7's sweep running on that model; and
-M8's partial un-deferral.
+**Cascade applied (2026-08-01), all four resolved:**
+
+- M5 (ii) now reads "computable from the FFG rollout's trace". `cpomdp.crossover` takes a
+  `policy_efe_ffg_trace`, and the H = 1 anchors it reproduces are the node-restricted
+  1.7232 / 4.4910, not the whole-state 2.42.
+- `EnumeratedEfeSearch` scores the crossover on the coupled tree through
+  `over_backend`, a scorer strategy rather than a fork of the class (ADR-034). The flat
+  constructor is untouched, so every M3 and M4 test still runs against `policy_efe`.
+- M7's sweep runs on that model. `examples/ffg/crossover.py` builds the backend from the
+  Paper 1 dissociation fixture and enumerates against it.
+- M8 un-defers only the rollout, which ADR-032 built. The closed-loop `FfgEfeSelector`
+  above H = 1 stays deferred and ships marked unsupported.
 
 ### Gate for the window (soft — all five hold together)
 
-- [ ] Every H = 1 path byte-identical to v0.4.3 (`assert_array_equal`); whole
-      existing suite passes **unmodified**.
-- [ ] Completeness certificate holds at H = 2 and H = 3 on the declared action set.
-- [ ] Σ(π) witness separates fixed-R from `R(x)` at the declared margin, and shows
-      byte-identity in fixed-R.
-- [ ] Sweep harness prints H_max_feasible with its cost table and condition-number
-      ceilings.
-- [ ] Crossover statistic defined, reduces exactly to 1.72 / 4.49 at H = 1, and
+All five hold as of 2026-08-01: 543 tests pass with the slow marker deselected, the
+crossover gate passes on its own, `ruff` and `ty` are clean.
+
+- [x] Every H = 1 path byte-identical to v0.4.3 (`assert_array_equal`); whole
+      existing suite passes **unmodified**. `tests/test_policy_efe_ffg.py` pins
+      H = 1 → `_ffg_efe_step`, `tests/test_enumeration_ffg.py` pins `over_backend` to the
+      flat search, and no pre-existing test was edited to make the window pass.
+- [x] Completeness certificate holds at H = 2 and H = 3 on the declared action set.
+      `tests/test_enumeration.py::test_certificate_is_proved_and_complete` plus the H = 2
+      cases around it.
+- [x] Σ(π) witness separates fixed-R from `R(x)` at the declared margin, and shows
+      byte-identity in fixed-R. `tests/test_sigma_policy_dependence.py`, margin 1e-2.
+- [x] Sweep harness prints H_max_feasible with its cost table and condition-number
+      ceilings. `examples/ffg/crossover.py` table 1 gives `|A|^H` and `|A|^H·H` per
+      horizon, table 3 the per-step `cond(Σ⁺)` / `cond(S)` / `cond(Σ_post)` against the
+      registered bars, table 5 the declared H_max = 9 with its cost.
+- [x] Crossover statistic defined, reduces exactly to 1.72 / 4.49 at H = 1, and
       **H\* measured and written into the pre-registration** — after which Phase 2's
-      job is to reproduce it at H\* / H\* − 1 with bars, not to find it.
+      job is to reproduce it at H\* / H\* − 1 with bars, not to find it. Pre-registered at
+      `38df72d`, measured after it, H\* = 7 recorded in `research/warrant_ledger.md`
+      section 10.
 
 ### Critical path
 
@@ -239,10 +289,14 @@ path touches a grid, so nothing waits on the v0.4.4 certified-discretisation gat
       coupling-resolved μ⁺, gated by H=1→`_ffg_efe_step` (byte-identical) and
       no-coupling→`policy_efe` (allclose) oracles. Built as M5's prerequisite; see the
       correction note below.
-- [ ] **ADR-029** (three-valued check outcomes) — consumed by M7; exists before it
-      runs.
+- [x] **ADR-029** (three-valued check outcomes) — `NOT TRIGGERED` / `FIRED` /
+      `NOT APPLICABLE` for registered falsifiers, plus a "not run here" report for a
+      falsifier a given gate skips. **Landed late and out of sequence**, which the ADR
+      itself records: it was meant to exist before M7 ran, it did not, and R10's write-up
+      used the vocabulary with no decision behind it. `crossover.py --check` now prints
+      the four D3 falsifiers one line each instead of a blanket `PASS`.
 
-### Notation unification (follow-up, non-blocking)
+### Notation unification (follow-up, non-blocking) — tracked as #55
 
 Surfaced while writing the rollout trace: the `μ`/`Σ` predict/update superscript
 convention is inconsistent across the codebase. Three variants coexist today:
@@ -270,7 +324,7 @@ meaning. The trace matches variant 1 (its own file) so it adds no new divergence
       pure doc/comment change (arithmetic byte-identical, whole suite unmodified,
       `ruff`/`ty` clean).
 
-### Continuous-action corroboration track (v0.5 preliminary, parallel, non-blocking)
+### Continuous-action corroboration track (v0.5 preliminary, parallel, non-blocking) — tracked as #54
 
 A continuous-state agent should also exercise genuinely continuous action spaces, not
 only declared finite repertoires. `GradientEfeSelector` — gradient ascent on the
