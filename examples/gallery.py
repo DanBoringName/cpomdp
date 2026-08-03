@@ -33,6 +33,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from cpomdp.efe import expected_free_energy
+from cpomdp.observation import CallableSensor
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from PIL.Image import Image
@@ -214,6 +215,21 @@ class BacillusStyle:
     zorder: int = 6  # the body, with the flagellum one below and the eyespots one above
 
 
+SMALL_BACILLUS = BacillusStyle(
+    body=GREEN,
+    ink=FIELD.ink,
+    length=0.52,
+    width=0.26,
+    edge_width=1.4,
+    flagellum_points=22,
+    flagellum_amplitude=0.14,
+    flagellum_width=1.2,
+    eye_offset=0.06,
+    eye_size=2.0,
+    zorder=7,  # one layer above the default, to ride over a shaded precision field
+)
+
+
 def draw_bacillus(ax, pos, heading, phase: float, style: BacillusStyle) -> None:
     """A capsule body with a wiggling flagellum, oriented along `heading`.
 
@@ -385,6 +401,60 @@ def draw_efe_panel(
     )
     ax.grid(True, alpha=0.25)
     ax.legend(loc="upper right", fontsize=8.5, framealpha=0.9)
+
+
+# --- the precision well the plane demos sense through --------------------------------
+def beacon_noise(x, params):
+    """`R(x)` for a precision well: an isotropic 2x2 noise that floors at the beacon.
+
+    Module-level so it can ride in a `CallableSensor`'s static aux, with every tunable
+    in `params` (`bx`, `by`, `width`, `r_lo`, `r_hi`).
+    `R = (r_lo + (r_hi − r_lo)·(1 − exp(−d²/2w²)))·I`, a smooth flat-bottomed well:
+    `r_lo` on the beacon, saturating to `r_hi` far away.
+
+    The flat bottom is the design. Its spatial gradient vanishes *at* the beacon, so a
+    localised agent feels no trapping pull there and can leave for the goal once it has
+    nothing left to learn. A cone, whose gradient blows up at the floor, traps every
+    agent that reaches it, which is the myopic local-minimum problem.
+    """
+    d2 = (x[0] - params["bx"]) ** 2 + (x[1] - params["by"]) ** 2
+    falloff = 1.0 - jnp.exp(-d2 / (2.0 * params["width"] ** 2))
+    r = params["r_lo"] + (params["r_hi"] - params["r_lo"]) * falloff
+    return r * jnp.eye(2)
+
+
+def precision_field(
+    xlim: tuple[float, float],
+    ylim: tuple[float, float],
+    model,
+    res: int = 130,
+):
+    """Sensor sharpness, `−ln R`, sampled over the arena, as `(xs, ys, field)`.
+
+    Drawn as a few discrete contour bands, a faint signal-strength map showing where
+    the world is legible: bright at the beacon, dark in the murk. Read off the same
+    `R(x)` the agents actually filter under rather than a redrawing of it.
+
+    Args:
+        xlim: the arena's x extent, as `(low, high)`.
+        ylim: its y extent.
+        model: the model whose `observation` is the `CallableSensor` to sample.
+        res: how many samples per axis.
+
+    Returns:
+        The x samples, the y samples, and the `res × res` field, indexed `[y, x]`.
+    """
+    xs = np.linspace(*xlim, res)
+    ys = np.linspace(*ylim, res)
+    sensor = model.observation
+    assert isinstance(sensor, CallableSensor)  # the field is that sensor's R(x)
+    params = sensor.noise_params
+    field = np.empty((res, res))
+    for j, yy in enumerate(ys):
+        for i, xx in enumerate(xs):
+            r = float(beacon_noise(jnp.array([xx, yy]), params)[0, 0])
+            field[j, i] = -np.log(r)  # higher = sharper sensing
+    return xs, ys, field
 
 
 # --- expected free energy over a candidate set ---------------------------------------

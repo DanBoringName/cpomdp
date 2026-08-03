@@ -19,7 +19,76 @@ Everything worth noting lands here. The format follows [Keep a Changelog](https:
   state-dependent sensor and the horizon together rather than to the beacon-and-goal geometry.
   Under a fixed sensor the epistemic term is a constant at every horizon (ADR-003). Renders
   the animation plus a three-panel companion. `--check` prints the sweep and asserts what the
-  figures claim, gated in `tests/test_example_checks.py`.
+  figures claim, gated in `tests/test_example_checks.py`. Its crossing lands at `H = 7`,
+  which is the same integer as 0.4.4's registered `H*` and is unrelated to it: different
+  model, different backend, whole-state epistemic rather than node-restricted, and no
+  search at all. The demo says so in its own output, and neither number should be quoted
+  as the other.
+- `examples/ffg/cue_maze.py`. The cue-maze task, built for any `n_dims >= 1`. A hidden
+  context decides which of two goals pays, the prior points at the wrong one, and a cue
+  elsewhere in the arena reads the context sharply while the agent stands on it.
+  `axis_action_set` grows as `2·n·|magnitudes| + 1` rather than as a product grid, so two
+  dimensions cost exactly what the corridor did. `enumeration_cost` prices a sweep before
+  you commit to it, and `best_reachable_noise` catches the failure that motivated it. A cue
+  the action lattice cannot land on is one no policy can read, and the null that produces
+  is indistinguishable from "information is never worth the detour". It is pure geometry.
+- `examples/gallery.py`. The shared machinery the demos were each copying: three palettes,
+  the GIF writer, the figure and still writers, the bacillus glyph as a style object, the
+  covariance-ellipse geometry, the EFE sweep and decomposition panel, the action grid, and
+  the two-route agreement report. Roughly 390 lines of duplication removed. Eight scripts
+  touched. Every committed asset re-renders byte-identical to its pre-refactor baseline.
+  `tests/test_horizon_dimensions.py` builds its arena from `cue_maze` rather than inlining
+  a copy of it.
+- `mkdocs_hooks.py`. Expands `--8<--` snippet includes and rewrites the relative links
+  inside them to site-local targets, so `examples/README.md` can carry links that work both
+  on GitHub and on the published site without hard-coding either. `tests/test_docs_hooks.py`
+  gates it, dead links included.
+
+### Changed
+
+- The README's crossover section says what the horizon result is for. It now cites
+  arXiv:2607.20306, which establishes that `R(x)` makes the epistemic term non-constant,
+  and separates that from the question this repo answers: the horizon at which the term
+  starts changing which plan gets picked. The answer given is the one-dimensional `H* = 7`,
+  with its warrant stated (exhaustive over the declared `{0, ±1, ±2}`, completeness
+  certificate, upper bound because the grid clips the reach), and the plane figure is
+  labelled as the readable illustration rather than the proof. `examples/README.md` carries
+  the same distinction at length.
+- `examples/bacillus_uncertain_food.py` is gated. `check_backend_agreement` — `KalmanBackend`
+  against the FFG `ChainBackend` on one scripted input sequence, `atol=1e-7` — now runs in
+  `tests/test_example_checks.py`. The README's flagship had no test of any kind before this.
+- The `slow` pytest marker is a wall-clock rule now, not a description of one test.
+  Anything past `conftest.SLOW_TEST_SECONDS` (20s) carries it and runs on merge-to-main
+  and release rather than on pull requests. `conftest.py` measures each run and prints
+  any unmarked test that has drifted over, so the rule does not depend on anyone
+  remembering it. Two tests cross the line and are newly marked:
+  `test_double_integrator_horizon.py::test_h2_choice_matches_brute_force_oracle` (~33s)
+  and `test_example_checks.py::test_crossover_horizon_check` (~20s). Pull-request
+  coverage is unaffected at 93.8% against the 80% gate.
+
+### Removed
+
+- The `## The journey` section of `examples/README.md`, and with it the gallery entries for
+  `bacillus_seeking_food.py`, `bacillus_lqr.py`, `efe_collapse_figure.py` and
+  `internal_noise_figure.py`. `efe_collapse_figure.py` and `internal_noise_figure.py` stay,
+  keep their `check()` gates, and keep their figures, which `DECISIONS.md` still cites.
+  `docs/assets/bacillus.gif` and `docs/assets/bacillus_lqr.gif` had no other referrer and go
+  with the section, 4.2 MB of them.
+- `examples/bacillus_lqr.py`. Every claim it demonstrated is asserted elsewhere and more
+  strongly: the LQR reduction at exact array equality in
+  `tests/test_agent.py::test_state_goal_path_is_byte_identical_to_lqr`, and the epistemic
+  collapse three times over in `tests/test_efe.py`, `tests/test_theorem.py` and
+  `efe_collapse_figure.py`'s gated `check()`. Nothing imported it.
+- `examples/bacillus_seeking_food.py`. It had stopped being a demo and become an undeclared
+  dependency: `bacillus_uncertain_food.py` imported its beacon falloff, its palette, its
+  glyph and its precision field at module scope, so the README's flagship could not run
+  without it and no test would have said so. The shared parts are now `gallery.beacon_noise`,
+  `gallery.precision_field` and `gallery.SMALL_BACILLUS`; the beacon geometry moved into the
+  flagship, which is the only thing that used it. The flagship's GIF re-renders byte-identical
+  to the committed one across the move. Its own claims were already asserted in
+  `tests/test_agent.py`, `tests/test_efe_selector.py` and `tests/test_efe.py`, whose
+  `TestPrecisionControlsBalance` was written for it. ADR-008 and ADR-013 still name the path;
+  `DECISIONS.md` is append-only, so those references stand as the historical record.
 
 ## [0.4.4] — 2026-08-01
 
@@ -80,19 +149,6 @@ arithmetic stays byte-identical to 0.4.3.
   a check rather than as a footnote.
 - A `slow` pytest marker for the exhaustive gate. Pull requests run without it; merges to
   main and releases run with it.
-- `examples/ffg/cue_maze.py`. The cue-maze task, built for any `n_dims >= 1`. A hidden
-  context decides which of two goals pays, the prior points at the wrong one, and a cue
-  elsewhere in the arena reads the context sharply while the agent stands on it.
-  `axis_action_set` grows as `2·n·|magnitudes| + 1` rather than as a product grid, so two
-  dimensions cost exactly what the corridor did. `enumeration_cost` prices a sweep before
-  you commit to it, and `best_reachable_noise` catches the failure that motivated it. A cue
-  the action lattice cannot land on is one no policy can read, and the null that produces
-  is indistinguishable from "information is never worth the detour". It is pure geometry.
-- `examples/gallery.py`. The shared machinery the demos were each copying: three palettes,
-  the GIF writer, the figure and still writers, the bacillus glyph as a style object, the
-  covariance-ellipse geometry, the EFE sweep and decomposition panel, the action grid, and
-  the two-route agreement report. Roughly 390 lines of duplication removed. Eight scripts
-  touched. Every committed asset re-renders byte-identical to its pre-refactor baseline.
 
 ### Changed
 

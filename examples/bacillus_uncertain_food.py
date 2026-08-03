@@ -8,8 +8,8 @@ et al. 2015, "Active inference and epistemic value") is the canonical case, wher
 visiting a cue resolves which arm holds the reward, changing the *subsequent*
 action.
 
-`bacillus_seeking_food.py` (the v0.3 flagship, now kept in "the journey") has the
-beacon collapse uncertainty about the agent's *own* position instead — salience
+The v0.3 demo this one succeeded (ADR-008, since removed) had the beacon collapse
+uncertainty about the agent's *own* position instead — salience
 without an instrumental payoff: knowing your own position more precisely doesn't
 change which action is later correct. This demo promotes the food's position to
 an explicit latent the agent does not know a priori, and wires the beacon's
@@ -85,7 +85,6 @@ import gallery
 import jax
 import jax.numpy as jnp
 import numpy as np
-from bacillus_seeking_food import BEACON_PT, beacon_noise
 
 from cpomdp.backends.kalman import KalmanBackend
 from cpomdp.control import LQRController
@@ -94,15 +93,25 @@ from cpomdp.observation import CallableSensor
 from cpomdp.selection import Preference
 from cpomdp.types import Belief, LinearGaussianModel
 
+# --- palette --------------------------------------------------------------------
+# The gallery's Okabe-Ito accents, named for what they mean in this demo. Same
+# assignments the v0.3 demo used, so the two read as one family.
+BG, INK, GRID = gallery.FIELD.bg, gallery.FIELD.ink, gallery.FIELD.grid
+BODY = gallery.GREEN  # the bacillus body
+BELIEF = gallery.ORANGE  # the belief mean
+BEACON_COLOR = gallery.BLUE  # the beacon and its good-sensing region
+FOOD = gallery.VERMILLION  # the food
+
 # --- world geometry -------------------------------------------------------------
 DT = 0.16
 START = np.array([-3.4, -2.6])
 FOOD_TRUE = np.array([3.4, -2.6])  # the food's TRUE position — unknown to the agent
 FOOD_PRIOR_MEAN = np.array([1.0, 0.0])  # the agent's a-priori guess: vague, wrong
 FOOD_PRIOR_COV = 6.0  # wide: "loosely known," not "unknown" — has to detour to learn
+BEACON_PT = np.array([0.0, 2.7])  # up and central, clearly off the start→food line
 
-# the beacon mechanic itself is UNCHANGED from the flagship demo (`beacon_noise`,
-# imported above) — only the channel it's attached to differs. Reuse its tuning.
+# the beacon mechanic is `gallery.beacon_noise`, the same precision well the v0.3
+# demo sensed through. Only the channel it is attached to differs here.
 R_LO, R_HI, R_WIDTH = 0.02, 1.30, 2.3
 R_SELF = 0.05  # fixed proprioceptive noise: the agent always senses ITSELF clearly
 Q_AGENT = 2e-5  # near-zero process noise on the agent block (existing idiom)
@@ -191,7 +200,7 @@ def build_model() -> LinearGaussianModel:
     beacon_params = _beacon_params()
 
     def noise_fn(x, params):
-        r_disp = beacon_noise(x[:2], params)  # unchanged flagship falloff
+        r_disp = gallery.beacon_noise(x[:2], params)  # the shared precision well
         r_self = R_SELF * jnp.eye(2)
         return jax.scipy.linalg.block_diag(r_self, r_disp)
 
@@ -304,7 +313,9 @@ def simulate(regime, backend_cls=KalmanBackend, *, seed=7):
 
     for _ in range(N_STEPS):
         r_self = R_SELF * np.eye(2)
-        r_disp = np.asarray(beacon_noise(jnp.asarray(true_agent), beacon_params))
+        r_disp = np.asarray(
+            gallery.beacon_noise(jnp.asarray(true_agent), beacon_params)
+        )
         r_full = np.block([[r_self, np.zeros((2, 2))], [np.zeros((2, 2)), r_disp]])
         obs_mean = np.concatenate([true_agent, FOOD_TRUE - true_agent])
         obs = obs_mean + np.linalg.cholesky(r_full) @ rng.standard_normal(4)
@@ -430,9 +441,9 @@ def _ellipse(ax, mean, cov, color, *, alpha_fill=0.16, max_diameter=None):
 def render(regimes, runs, out_path, *, fps=20):
     """Draw the 2x2 grid, one panel per regime, and write the looping GIF.
 
-    Reuses the flagship demo's palette, ``_draw_bacillus``, and
-    ``_precision_field`` rather than re-deriving them — the beacon mechanic is
-    visually identical, only what it reveals has changed. Each panel shows BOTH
+    The palette, the glyph and the precision field come from ``gallery``, so the
+    beacon reads identically to the demo this one succeeded. Only what it reveals
+    has changed. Each panel shows BOTH
     belief markers/ellipses (agent + food), where the flagship only ever needed
     one, and its border turns green and bold once that regime first settles near
     the food (see ``ARRIVAL_THRESHOLD``) — a visible "did it get there" signal,
@@ -444,9 +455,6 @@ def render(regimes, runs, out_path, *, fps=20):
     """
     gallery.use_headless_backend()
     import matplotlib.pyplot as plt
-    from bacillus_seeking_food import BEACON as BEACON_COLOR
-    from bacillus_seeking_food import BELIEF, BG, BODY, FOOD, GRID, INK, _draw_bacillus
-    from bacillus_seeking_food import _precision_field as flagship_precision_field
 
     allpts = np.concatenate(
         [runs[r["key"]][0] for r in regimes]
@@ -457,7 +465,7 @@ def render(regimes, runs, out_path, *, fps=20):
     xlim = (allpts[:, 0].min() - pad, allpts[:, 0].max() + pad)
     ylim = (allpts[:, 1].min() - pad, allpts[:, 1].max() + pad)
 
-    field_xs, field_ys, field = flagship_precision_field(xlim, ylim, build_model())
+    field_xs, field_ys, field = gallery.precision_field(xlim, ylim, build_model())
     field_levels = np.linspace(field.min(), field.max(), 9)
     n_frames = len(runs[regimes[0]["key"]][0])
 
@@ -544,7 +552,9 @@ def render(regimes, runs, out_path, *, fps=20):
             pos = true_states[i].astype(float)
             j = max(1, i)
             heading = true_states[j] - true_states[j - 1]
-            _draw_bacillus(ax, pos, np.asarray(heading), phase=i * 0.9)
+            gallery.draw_bacillus(
+                ax, pos, np.asarray(heading), i * 0.9, gallery.SMALL_BACILLUS
+            )
 
             ax.set_title(
                 reg["title"], color=INK, fontsize=10.5, fontweight="bold", pad=5

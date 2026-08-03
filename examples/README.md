@@ -155,9 +155,9 @@ as to an `H = 14` one. What `H` changes is how much of a plan's consequence is i
 window when the agent commits to its next single step.
 
 Two steps cannot *reach* the beacon. The information it would buy falls outside the
-window entirely and never reaches the balance sheet: `Δε` there is 0.01 nats, essentially
-nothing. By `H = 7` the sensing step is inside the window, and so are the steps that cash
-in on it.
+window entirely and never reaches the balance sheet: `Δε` there is under 0.01 nats,
+essentially nothing. By `H = 7` the sensing step is inside the window, and so are the
+steps that cash in on it.
 
 ### Why the horizon decides it
 
@@ -180,3 +180,25 @@ consulting the action, so both plans carry the identical covariance sequence. It
 Everything asserted is open-loop, so none of it takes a seed. The animated runs take one,
 named in the caption. Where the crossing lands belongs to these particular numbers. The
 shape carries over. The integer does not.
+
+### This is not the registered `H*`
+
+The library's `H*` is also 7, and the two have nothing to do with each other. That one is
+an exhaustive `|A|^H` search over a declared, versioned action set on the two-node coupled
+cue tree, with the epistemic term restricted to the context node, and it carries a
+completeness certificate. Its `Δε` at `H = 1` is 1.72 nats.
+
+This demo scores two named plans on a flat four-dimensional chain, takes the epistemic term
+over the whole state, and searches nothing at all. Its `Δε` is 6.67 nats. The two integers
+coincide. Nothing follows from that, and neither number should be quoted as the other.
+
+The difference is what each one is entitled to claim. An exhaustive enumeration over a
+declared finite set *decides* that no policy in the set flips, which is why the corridor
+result carries `PROVED` and a completeness certificate. A two-policy contrast decides
+nothing about the argmin: the best plan at any horizon could be a third one neither of
+these. So the crossing drawn here is an exact fact about a detour and a direct route, and
+the plane is where the mechanism is legible rather than where it is established. The
+corridor is the proof, in [`ffg/crossover.py`](ffg/crossover.py) and
+[`warrant_numbers.md`](../warrant_numbers.md), and it answers a question left open by
+[arXiv:2607.20306](https://arxiv.org/abs/2607.20306): that paper gets the epistemic term
+to stop being constant, and stopping being constant is not yet changing a decision.

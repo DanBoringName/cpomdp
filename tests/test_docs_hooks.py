@@ -133,6 +133,17 @@ class TestRewriteLinks:
         )
         assert missing == ["../docs/assets/missing.gif"]
 
+    def test_a_fragment_survives_the_whole_file_rewrite(self, layout):
+        # The site build goes through here, not through ``resolve_link`` directly, so
+        # the fragment has to be pinned on this path too. No gallery link carries one
+        # today, which is what makes it worth asserting rather than assuming.
+        text = "[priors](../docs/guides/step-by-step.md#priors)\n"
+        rewritten, missing = rewrite_links(
+            text, source=GALLERY, page="examples.md", layout=layout
+        )
+        assert rewritten == "[priors](guides/step-by-step.md#priors)\n"
+        assert missing == []
+
 
 class TestExpandIncludes:
     """The directive itself, and the include map behind it."""

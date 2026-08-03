@@ -22,12 +22,14 @@ corridor model in ``tests/test_crossover.py``. The statistic and the finder agre
 each other, and both thread a p-dimensional policy end to end.
 """
 
+import cue_maze
 import jax
 import jax.numpy as jnp
 import numpy as np
 
+import cpomdp.crossover
 from cpomdp.backends.coupling import CouplingGraphBackend
-from cpomdp.crossover import crossover_horizon, crossover_statistic
+from cpomdp.crossover import CrossoverStatistic, crossover_horizon, crossover_statistic
 from cpomdp.diagnostics import rollout_conditioning
 from cpomdp.efe import (
     _ffg_efe_step,
@@ -35,100 +37,53 @@ from cpomdp.efe import (
     policy_efe_ffg,
     policy_efe_ffg_trace,
 )
-from cpomdp.enumeration import EnumeratedEfeSearch, FiniteActionSet
+from cpomdp.enumeration import EnumeratedEfeSearch
 from cpomdp.ffg.factors.linear_gaussian import (
     CallableGaussianObservation,
-    GaussianCoupling,
     GaussianTransition,
 )
-from cpomdp.ffg.graph import Coupling, CouplingGraph
+from cpomdp.ffg.graph import CouplingGraph
 from cpomdp.observation import CallableSensor
-from cpomdp.selection import Preference
 from cpomdp.types import Belief, LinearGaussianModel
 
-CONTEXT, ARENA = 0, 1
-CUE_AXIS1 = 1.0  # the cue sits off the goal axis, so reaching it needs action dim 1
-# The commit channels are deliberately dull. A sharp one leaks context information to
-# the reach as well, and the epistemic contrast then erodes with the horizon instead of
-# holding. That would make the mechanism check below measure the wrong thing.
-R_DULL, R_LO, R_HI, R_WIDTH = 200.0, 0.02, 20.0, 0.6
+CONTEXT, ARENA = cue_maze.CONTEXT, cue_maze.ARENA
+N_DIMS = 2  # the arena's spatial axes, which fix m = 3 and p = 2
+CONTEXT_DIM = 2  # wider than the task needs, so n = 6 differs from every other axis
+# The cue sits one step along axis 1. ``cue_maze``'s own default puts it two steps out,
+# which the default action set reaches and this file's unit-step ``_walk`` does not: the
+# info channel would then never sharpen and the mechanism check below would measure
+# nothing. ``cue_maze.best_reachable_noise`` is the check for exactly that.
+CUE = np.array([0.0, 1.0])
 MAX_H = 4  # the finder's scan bracket. Each horizon is a fresh trace, so keep it short.
 
 
 # --- fixtures ----------------------------------------------------------------------
-def _cue_noise(x, params):
-    """R(x) — the third channel sharpens as the arena's second position axis nears 1."""
-    gap = x[1] - params["cue"]
-    falloff = 1.0 - jnp.exp(-(gap**2) / (2.0 * params["width"] ** 2))
-    sharp = params["lo"] + (params["hi"] - params["lo"]) * falloff
-    return jnp.diag(jnp.array([params["dull"], params["dull"], sharp]))
-
-
-_CUE_PARAMS = {
-    "cue": CUE_AXIS1,
-    "width": R_WIDTH,
-    "lo": R_LO,
-    "hi": R_HI,
-    "dull": R_DULL,
-}
-
-# C over the arena node [position (2), goal_belief (2)]: two commit channels reading
-# displacement, plus an info channel repeating axis 0 through its own R(x).
-_ARENA_C = np.array(
-    [
-        [-1.0, 0.0, 1.0, 0.0],
-        [0.0, -1.0, 0.0, 1.0],
-        [-1.0, 0.0, 1.0, 0.0],
-    ]
-)
+# The scene is ``examples/ffg/cue_maze.py`` at ``n_dims = 2``, not a copy of it. Only
+# the shapes are this file's own concern, so the model it pins is the one the examples
+# actually build.
+_cue_noise = cue_maze.cue_noise
+_CUE_PARAMS = cue_maze.sensor_params(N_DIMS, CUE)
+_ARENA_C = cue_maze.sensor_model(N_DIMS)
 
 
 def _coupled_backend():
     """A two-node FFG at n=6, m=3, p=2: context (2-D) drives a 4-D arena.
 
     The action drives the arena's position block, which the joint state puts behind the
-    context. A control matrix built on the wrong offset moves the wrong states.
+    context. A control matrix built on the wrong offset moves the wrong states. The
+    context is widened past what the task needs so ``n`` differs from every other axis.
     """
-    coupling = np.zeros((4, 2))
-    coupling[2, 0] = 1.0  # the context's first axis drives the goal belief
-    coupling[3, 1] = 1.0
-    graph = CouplingGraph(
-        root=CONTEXT,
-        dims=(2, 4),
-        couplings=(
-            Coupling(
-                CONTEXT,
-                ARENA,
-                GaussianCoupling(coupling, np.diag([1e3, 1e3, 1e-2, 1e-2])),
-                1.0,
-                efe_relevant=True,
-            ),
-        ),
-        observations={
-            ARENA: CallableGaussianObservation(_ARENA_C, _cue_noise, _CUE_PARAMS)
-        },
-    )
-    transitions = (
-        GaussianTransition(np.eye(2), np.diag([1e-2, 1e-2])),
-        GaussianTransition(np.eye(4), np.diag([1e-4, 1e-4, 1e-2, 1e-2])),
-    )
-    control = np.zeros((6, 2))
-    control[2, 0] = 1.0  # arena position axis 0
-    control[3, 1] = 1.0  # arena position axis 1
-    return CouplingGraphBackend(graph, transitions, control=control)
+    return cue_maze.build_maze(N_DIMS, cue=CUE, context_dim=CONTEXT_DIM)
 
 
 def _coupled_belief():
     """Known position at the origin, and a goal belief mirroring a wrong context."""
-    return Belief(
-        mean=[-3.0, 0.0, 0.0, 0.0, -3.0, 0.0],
-        cov=np.diag([5.0, 5.0, 0.05, 0.05, 5.0, 5.0]),
-    )
+    return cue_maze.start_belief(N_DIMS, context_dim=CONTEXT_DIM)
 
 
 def _pref():
     """Observe zero displacement. The info channel is weighted at about zero."""
-    return Preference(goal=[0.0, 0.0, 0.0], precision=np.diag([0.6, 0.6, 1e-4]))
+    return cue_maze.preference(N_DIMS)
 
 
 def _policy(steps, horizon):
@@ -191,10 +146,7 @@ def _flat_pair():
 
 def _action_set():
     """Stay, or step by one along either axis in either direction, at p = 2."""
-    return FiniteActionSet(
-        [[0.0, 0.0], [1.0, 0.0], [-1.0, 0.0], [0.0, 1.0], [0.0, -1.0]],
-        version="axis-2d-test",
-    )
+    return cue_maze.axis_action_set(N_DIMS, magnitudes=(1.0,))
 
 
 # --- the FFG rollout carries n, m and p on independent axes ------------------------
@@ -315,9 +267,10 @@ class TestCrossoverAtMultiDimAction:
             )
 
     def test_contrast_is_antisymmetric_in_its_two_policies(self):
-        # Swapping walk and reach negates every component. Both policy arguments are
-        # therefore threaded independently. One silently reused for both would give
-        # zero, and a shared buffer would give the same sign twice.
+        # Swapping walk and reach negates every component, so a shared buffer giving the
+        # same sign twice is caught here. A policy argument silently reused for both
+        # would give zero, which this test does *not* catch on its own (0 == -0); the
+        # non-zero assertion below and the difference-of-rollouts test above do.
         backend, belief, pref = _coupled_backend(), _coupled_belief(), _pref()
         target = tuple(backend.block(CONTEXT))
         forward = crossover_statistic(
@@ -332,6 +285,7 @@ class TestCrossoverAtMultiDimAction:
         np.testing.assert_allclose(
             float(forward.delta_epsilon), -float(reversed_.delta_epsilon), atol=1e-12
         )
+        assert float(forward.delta_g) != 0.0  # else the negation above is vacuous
 
     def test_horizon_finder_returns_the_first_negative_the_statistic_reports(self):
         # The finder's contract at p = 2. It is checked against the statistic it is
@@ -357,8 +311,38 @@ class TestCrossoverAtMultiDimAction:
                 max_horizon=MAX_H,
             )
             assert got == want
-        # Antisymmetry guarantees the two directions cannot both be flip-free. The loop
-        # above exercised a real H* and a real None.
+        # Antisymmetry guarantees the two directions cannot both be flip-free, so the
+        # loop covers a real H* and a real None. This fixture's ΔG holds one sign right
+        # across the bracket, so the H* it finds is 1 and no horizon is ever skipped
+        # past. The *first* in `min{H : ΔG(H) < 0}` is pinned by the test below.
+
+    def test_the_finder_skips_the_horizons_before_the_first_flip(self, monkeypatch):
+        # A finder that only ever evaluated H = 1 passes every other test in this file,
+        # because no fixture here changes sign mid-bracket. Script the sign pattern
+        # instead of tuning a geometry to produce one: the statistic is stubbed, so what
+        # is under test is the scan and nothing else.
+        pattern = {1: +1.0, 2: +0.5, 3: -0.2, 4: -1.0}
+        seen = []
+
+        def fake_statistic(_backend, _belief, walk, _reach, _pref, *, target):
+            del target
+            horizon = int(np.asarray(walk).shape[0])
+            seen.append(horizon)
+            delta_g = jnp.asarray(pattern[horizon])
+            return CrossoverStatistic(horizon, jnp.asarray(0.0), delta_g, delta_g)
+
+        monkeypatch.setattr(cpomdp.crossover, "crossover_statistic", fake_statistic)
+        got = crossover_horizon(
+            _coupled_backend(),
+            _coupled_belief(),
+            _walk,
+            _reach,
+            _pref(),
+            target=(0,),
+            max_horizon=MAX_H,
+        )
+        assert got == 3  # the *first* negative, not merely some negative
+        assert seen == [1, 2, 3]  # scanned upward and stopped, rather than sweeping
 
     def test_the_two_halves_of_the_mechanism_are_both_live(self):
         # The detour buys information, and the reach's pragmatic advantage decays as

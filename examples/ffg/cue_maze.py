@@ -21,7 +21,8 @@ paying goal is. A coupling drives the goal belief from the context, and a sensor
 node 1 reads displacement, so the context is only ever seen through the coupling.
 
 Nothing here is cpomdp API. It is a model built *with* cpomdp, in the same spirit as
-`chemotaxis_model.py`, and the demos and their gates import it.
+`chemotaxis_model.py`. `tests/test_horizon_dimensions.py` builds its arena from it; no
+demo does yet.
 """
 
 from __future__ import annotations
@@ -50,8 +51,15 @@ CONTEXT, ARENA = 0, 1  # node indices
 # spendable on a detour without moving toward or away from either goal.
 #
 # These are the corridor's published distances, and every dimension uses them. In one
-# dimension `cue_maze(1)` reproduces the model the crossover was measured on exactly,
-# bit for bit, which the demo's gate asserts.
+# dimension `build_maze(1)` reproduces the model the crossover was measured on
+# element for element: `epistemic_dissociation_figure.build_backend(cue_x=CUE_DETOUR_X)`
+# agrees on A, Q, C, B, dims, the coupling and its noise, and on the whole R(x) surface.
+#
+#   **The frozen twins do not agree, and must not be swapped.** `epistemic_alive=False`
+#   here freezes R at `_far_away()`, giving `diag([200, 200])` at n=1. The dissociation
+#   demo freezes at the *prior position*, giving `diag([200, 58.68])`. Using this one as
+#   the crossover's frozen-R control hands the control a 3.4x sharper info channel than
+#   the registered one.
 #
 #   **Goals at ±4 were tried and reverted.** With the default step of 2 the reachable
 #   lattice is even, so a goal at ±3 is one the agent parks a step short of rather than
@@ -68,7 +76,12 @@ CUE_OFF_AXIS = 2.0  # the cue's perpendicular displacement, where there is an ax
 
 
 def goal_distance(n_dims: int) -> float:
-    """How far along axis 0 the goals sit. The same in every dimension. See the note."""
+    """How far along axis 0 the goals sit. The same in every dimension. See the note.
+
+    Takes `n_dims` and ignores it, matching `cue_position` and `true_goal` so callers
+    can pass the arena width to all three without checking which ones care.
+    """
+    del n_dims  # constant by design, not by omission
     return GOAL_DISTANCE
 
 
@@ -156,7 +169,7 @@ def axis_action_set(
 
 
 def enumeration_cost(
-    action_set: FiniteActionSet, horizon: int, n_dims: int = 2
+    action_set: FiniteActionSet, horizon: int, n_dims: int | None = None
 ) -> tuple[int, int, float]:
     """`(policies, step_evals, peak_gib)` for one exhaustive sweep at this horizon.
 
@@ -176,11 +189,16 @@ def enumeration_cost(
     Args:
         action_set: the repertoire being enumerated.
         horizon: how many steps deep.
-        n_dims: spatial dimensions, which set the joint width `1 + 2·n_dims`.
+        n_dims: spatial dimensions, which set the joint width `1 + 2·n_dims`. Defaults
+            to the action set's own `action_dim`, which is what `axis_action_set` builds
+            it from. A defaulted mismatch under-reads the one number that kills the
+            session, so there is no constant here to get wrong.
 
     Returns:
         The policy count, the step-evaluation count, and a peak-memory estimate in GiB.
     """
+    if n_dims is None:
+        n_dims = action_set.action_dim
     policies = action_set.size**horizon
     joint = 1 + 2 * n_dims
     per_policy = 8 * (horizon * action_set.action_dim + 4 * joint * joint)
@@ -251,6 +269,20 @@ def sensor_model(n_dims: int) -> np.ndarray:
     Each commit row reads `goal_belief[i] - position[i]`. Only axis 0 can carry context
     information, because the two goals differ along axis 0 and nowhere else, so pointing
     an info channel down any other axis would cost a row and read nothing.
+
+    **The repeated row is the mechanism, not an oversight.** `C` is rank `n_dims` over
+    `n_dims + 1` rows at every dimension, and it has to be: the two rows read the same
+    functional through different noise, row 0 through a fixed `R_GOAL` and row `n_dims`
+    through `r_info(x)`. That is what holds the pragmatic term action-invariant while
+    the epistemic term rides the action. Merge them into one full-rank row carrying the
+    parallel precision and the posterior is preserved to 1e-18, the epistemic term to
+    1e-15, and the pragmatic term moves by 30 to 60 nats per step — enough to flip the
+    argmin cue-ward at every horizon and drag `H*` from 7 to 1.
+
+    The cost of the deficiency is that `R` is not recoverable from a posterior here,
+    only its parallel precision. Nothing in this model infers `R`; it is specified. The
+    sibling guard in `crossover_horizon_figure._require_full_row_rank` is about a
+    construction that does depend on that recovery, and it would refuse this `C`.
     """
     rows = np.zeros((n_dims + 1, 2 * n_dims))
     for axis in range(n_dims):
@@ -262,30 +294,43 @@ def sensor_model(n_dims: int) -> np.ndarray:
 
 
 def build_maze(
-    n_dims: int = 2, *, epistemic_alive: bool = True, cue: np.ndarray | None = None
+    n_dims: int = 2,
+    *,
+    epistemic_alive: bool = True,
+    cue: np.ndarray | None = None,
+    context_dim: int = 1,
 ) -> CouplingGraphBackend:
     """The cue maze as one rooted tree, in `n_dims` spatial dimensions.
 
     Args:
-        n_dims: how many spatial axes the arena has. The joint state is `1 + 2·n_dims`
-            wide: the context, the position, and the belief about where the goal is.
+        n_dims: how many spatial axes the arena has. The joint state is
+            `context_dim + 2·n_dims` wide: the context, the position, and the belief
+            about where the goal is.
         epistemic_alive: with `R(x)` the info channel sharpens near the cue and the
             epistemic term moves with the action. Frozen at its value far from the cue,
             the term goes flat and the agent reduces to a pure goal-chaser, which is the
             control this demo's sibling uses.
         cue: where the cue sits. Defaults to `cue_position(n_dims)`.
+        context_dim: how wide the context node is. One scalar says all the task needs,
+            and that is the default. A wider context is numerically inert here — every
+            EFE component is bit-identical across widths — so it exists only to exercise
+            the node-shape bookkeeping against a graph whose two nodes differ in width.
 
     Returns:
         A `CouplingGraphBackend` with an `n_dims`-wide control on the position block.
     """
     if n_dims < 1:
         raise ValueError(f"n_dims must be at least 1, got {n_dims}")
+    if context_dim < 1:
+        raise ValueError(f"context_dim must be at least 1, got {context_dim}")
 
     arena_dim = 2 * n_dims
     params = sensor_params(n_dims, cue)
     observed = sensor_model(n_dims)
     fixed_noise = np.asarray(
-        cue_noise(jnp.asarray(np.zeros(arena_dim)), sensor_params(n_dims, _far_away()))
+        cue_noise(
+            jnp.asarray(np.zeros(arena_dim)), sensor_params(n_dims, _far_away(n_dims))
+        )
     )
     arena_sensor = (
         CallableGaussianObservation(observed, cue_noise, params)
@@ -293,9 +338,11 @@ def build_maze(
         else GaussianObservation(observed, fixed_noise)
     )
 
-    # W: the context drives the goal belief on axis 0 and nothing else.
-    coupling_weights = np.zeros((arena_dim, 1))
-    coupling_weights[n_dims, 0] = 1.0
+    # W: the context drives the goal belief on axis 0 and nothing else. A wider context
+    # drives one goal-belief axis each, so the extra axes ride along without speaking.
+    coupling_weights = np.zeros((arena_dim, context_dim))
+    for axis in range(min(context_dim, n_dims)):
+        coupling_weights[n_dims + axis, axis] = 1.0
     coupling_noise = np.diag([COUPLE_Q_POSITION] * n_dims + [COUPLE_Q_GOAL] * n_dims)
     context_to_arena = Coupling(
         parent=CONTEXT,
@@ -308,12 +355,15 @@ def build_maze(
     )
     graph = CouplingGraph(
         root=CONTEXT,
-        dims=(1, arena_dim),
+        dims=(context_dim, arena_dim),
         couplings=(context_to_arena,),
         observations={ARENA: arena_sensor},
     )
     transitions = (
-        GaussianTransition([[1.0]], [[Q_CONTEXT]]),  # a near-static context
+        GaussianTransition(  # a near-static context
+            np.eye(context_dim).tolist(),
+            (Q_CONTEXT * np.eye(context_dim)).tolist(),
+        ),
         GaussianTransition(
             np.eye(arena_dim).tolist(),
             np.diag([Q_POSITION] * n_dims + [Q_GOAL_BELIEF] * n_dims).tolist(),
@@ -321,30 +371,37 @@ def build_maze(
     )
     # B: the action drives position, which is the arena node's first block, and the
     # joint state puts the context in front of it.
-    control = np.zeros((1 + arena_dim, n_dims))
+    control = np.zeros((context_dim + arena_dim, n_dims))
     for axis in range(n_dims):
-        control[1 + axis, axis] = 1.0
+        control[context_dim + axis, axis] = 1.0
     return CouplingGraphBackend(graph, transitions, control=control.tolist())
 
 
-def _far_away() -> np.ndarray:
+def _far_away(n_dims: int) -> np.ndarray:
     """A cue no start state is near, for freezing the sensor at its dull far value."""
-    return np.full(1, 1e3)
+    return np.full(n_dims, 1e3)
 
 
-def start_belief(n_dims: int = 2) -> Belief:
+def start_belief(n_dims: int = 2, *, context_dim: int = 1) -> Belief:
     """The joint prior: known position at the origin, and a goal belief that is wrong.
 
     The goal belief points at the arm that does *not* pay, mirrored from a context the
     agent has guessed wrong. Chasing it takes an agent to the wrong place. Only
     resolving the context changes its mind.
+
+    Args:
+        n_dims: how many spatial axes the arena has.
+        context_dim: how wide the context node is, matching `build_maze`. Every axis
+            past the first starts at zero and stays uninformative.
     """
     wrong_arm = -goal_distance(n_dims)
-    mean = np.zeros(1 + 2 * n_dims)
+    mean = np.zeros(context_dim + 2 * n_dims)
     mean[0] = wrong_arm  # the context, guessed wrong
-    mean[1 + n_dims] = wrong_arm  # the goal belief mirrors that guess
+    mean[context_dim + n_dims] = wrong_arm  # the goal belief mirrors that guess
     cov = np.diag(
-        [PRIOR_COV_CONTEXT] + [PRIOR_COV_POSITION] * n_dims + [PRIOR_COV_GOAL] * n_dims
+        [PRIOR_COV_CONTEXT] * context_dim
+        + [PRIOR_COV_POSITION] * n_dims
+        + [PRIOR_COV_GOAL] * n_dims
     )
     return Belief(mean=mean.tolist(), cov=cov.tolist())
 

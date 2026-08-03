@@ -21,7 +21,7 @@ Full documentation — API reference and guides — lives at [cpomdp.inferogenes
 
 **Epistemics that survive the linear-Gaussian collapse.** Under a *fixed* linear-Gaussian sensor the epistemic term of expected free energy is identical for every policy (Koudahl, Kouw & de Vries 2021). cpomdp deviates from that model by the smallest amount that avoids the collapse. It lets the *noise* depend on the state. The mean stays linear. That noise is a state-dependent sensor `R(x)` (Corva 2026), or state-dependent process noise `Q(x)`. The action then reaches the posterior covariance, so the epistemic term moves with it. Information-seeking behaviour is available in a regime where it is proved away.
 
-**Multi-step expected free energy, searched and certified.** EFE over an H-step horizon (`policy_efe`), plus an exhaustive search across the entire space of action sequences `A^H` (`EnumeratedEfeSearch`) that hands back a `CompletenessCertificate`. So "this is the best plan" is *decided* over the declared action set rather than sampled from it, and the object that says so is checkable. Receding-horizon and open-loop selectors wrap the search, and both report the honest per-cycle cost `|A|^H · H` rather than a grid's much smaller number.
+**Multi-step expected free energy, searched and certified.** EFE over an H-step horizon (`cpomdp.efe.policy_efe`), plus an exhaustive search across the entire space of action sequences `A^H` (`cpomdp.enumeration.EnumeratedEfeSearch`) that hands back a `CompletenessCertificate`. So "this is the best plan" is *decided* over the declared action set rather than sampled from it, and the object that says so is checkable. Receding-horizon and open-loop selectors wrap the search, and both report the honest per-cycle cost `|A|^H · H` rather than a grid's much smaller number.
 
 With `R(x)` alive a short-horizon agent walks straight past the information. Stretch the horizon and it detours to collect it. Curiosity needs both.
 
@@ -29,7 +29,7 @@ With `R(x)` alive a short-horizon agent walks straight past the information. Str
 
 Four bacilli seeking food in the same world — the continuous-state answer to pymdp's mouse-seeking-cheese, now with the **epistemic** term v0.3 adds. The twist: the food's position is **hidden**, and a **beacon** marks where the agent can *see* it. Visiting the beacon doesn't sharpen where the agent thinks *it* is — it sharpens where it thinks the *food* is, which it can't act on directly. That makes the information genuinely **instrumental**: resolving it changes where the agent then heads. Each body sits at its **true** hidden state; the blue `+` is where it believes it is, the diamond is where it believes the food is (both with their uncertainty ellipses), and the star is the food's true, hidden location. The four differ in **one number only** — the **goal precision Λ** each is built with. They all minimise the same Expected Free Energy `G = pragmatic − epistemic`; because the pragmatic (goal) term scales with Λ while the epistemic (information) term doesn't, Λ alone tips the balance: **classic LQR** and a **sharp Λ** beeline to the agent's current food guess and never detour; a **balanced Λ** detours to the beacon, learns where the food really is, *then* heads there with confidence; a **weak Λ** is so over-curious it parks at the beacon and never eats. One real knob — the precision you'd actually pass — four behaviours.
 
-![Four bacilli learning where the food is, under different goal precisions Λ, via continuous active inference](https://raw.githubusercontent.com/inferogenesis/cpomdp/main/docs/assets/bacillus_uncertain_food.gif)
+![Four bacilli learning where the food is, under different goal precisions Λ, via continuous active inference](docs/assets/bacillus_uncertain_food.gif)
 
 Reproduce it with [`examples/bacillus_uncertain_food.py`](https://github.com/inferogenesis/cpomdp/blob/main/examples/bacillus_uncertain_food.py) (`pip install "cpomdp[examples]"`).
 
@@ -39,11 +39,17 @@ An agent on an open plane wants a goal it cannot locate. Its prior points the wr
 
 Run the same world once per planning horizon. At `H = 2` the agent walks straight to the spot it already believed in and settles there. It never checks. At `H = 14` it walks *away* from that spot, reads the beacon, finds out it was wrong, and then goes to the real goal. Only `H` changed.
 
-![One agent run once per planning horizon: at short horizons it settles where its prior said, and past a crossing it detours to the beacon, learns where the goal really is, and goes there](https://raw.githubusercontent.com/inferogenesis/cpomdp/main/docs/assets/crossover_horizon.gif)
+![One agent run once per planning horizon: at short horizons it settles where its prior said, and past a crossing it detours to the beacon, learns where the goal really is, and goes there](docs/assets/crossover_horizon.gif)
 
 The margin between the two plans, `ΔG(H) = G(detour) − G(direct)` in nats, crosses zero exactly once. The epistemic pull is flat, because sensing once is worth what sensing once is worth. The pragmatic gradient decays under it. Freeze `R` at a constant and the sweep never crosses at any horizon, so the behaviour belongs to the state-dependent sensor and the horizon together.
 
 Reproduce it with [`examples/crossover_horizon_figure.py`](https://github.com/inferogenesis/cpomdp/blob/main/examples/crossover_horizon_figure.py).
+
+**Why the horizon is the question.** [State-dependent observation noise reintroduces epistemic value in linear-Gaussian active inference](https://arxiv.org/abs/2607.20306) (Corva 2026) establishes that `R(x)` makes the epistemic term non-constant, so a linear-Gaussian agent can be curious at all. Non-constant is not the same as decision-changing. The horizon at which curiosity starts changing which plan an agent picks is a separate question, and it has a measured answer.
+
+**The answer is one-dimensional, and it is proven.** On the corridor cue task, `H* = 7`: the first horizon whose argmin is a two-phase sense-then-commit walk rather than a direct reach. That comes from enumerating every sequence in the declared action set `{0, ±1, ±2}` to depth `H`, so it decides the flip rather than sampling for it, and the search returns a `CompletenessCertificate` saying how many policies it was obliged to visit and how many it did. Zero the epistemic term and the crossing moves out to `H ≈ 10`, which is what makes the pull load-bearing rather than incidental. The numbers are registered in [`warrant_numbers.md`](https://github.com/inferogenesis/cpomdp/blob/main/warrant_numbers.md), the model is [`examples/ffg/crossover.py`](https://github.com/inferogenesis/cpomdp/blob/main/examples/ffg/crossover.py), and `tests/test_example_checks.py::test_crossover_check` asserts it on every merge and release. The `7` is an upper bound: on the wider `{−3…2}`, which contains the unconstrained optimal reach, it is 6.
+
+**The plane above is the readable version, not the proof.** It contrasts two named plans instead of searching, so its crossing is an exact statement about those two plans and says nothing about the argmin over all plans. Its `H = 7` and the corridor's `H* = 7` are different quantities on different models that happen to coincide.
 
 More in the [examples gallery](https://github.com/inferogenesis/cpomdp/blob/main/examples/README.md), including the [FFG examples](https://github.com/inferogenesis/cpomdp/blob/main/examples/ffg/README.md), where a branch-coupled state-dependent sensor resolves a hidden context and can't be flattened to a Kalman filter.
 
@@ -151,9 +157,9 @@ agent.sample_action()                 # ValueError: this Agent has no objective 
 | ask whether a state-dependent sensor earns its keep | `probe_model` → `SensorReport` |
 | check a rollout stayed well conditioned | `cpomdp.diagnostics.rollout_conditioning` |
 | perceive but never act | a model with no `control`, `Agent(model)` alone |
-| re-plan every step, closed loop | `RecedingHorizonSelector` (`replan_interval = 1`) |
-| commit to one plan and execute it | `OpenLoopSelector` (`replan_interval = H`) |
-| swap the inference engine | the `InferenceBackend` protocol, or `RxInferBackend` |
+| re-plan every step, closed loop | `cpomdp.enumeration.RecedingHorizonSelector` (`replan_interval = 1`) |
+| commit to one plan and execute it | `cpomdp.enumeration.OpenLoopSelector` (`replan_interval = H`) |
+| swap the inference engine | the `InferenceBackend` protocol, or `cpomdp.backends.rxinfer.RxInferBackend` |
 
 The state-dependence is in the *noise*. The mean stays linear. Genuinely **nonlinear sensors**, a curved `g(x)` needing a second-order moment match, are the next step and are not here yet.
 

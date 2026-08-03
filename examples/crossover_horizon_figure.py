@@ -39,10 +39,10 @@ it scores that plan. It is not how far it can see. The whole world is visible at
 `H`. What changes is how much of a plan's consequence is inside the window when the
 agent commits to its next single step. At `H = 2` the detour cannot even reach the
 beacon inside the window, so the information it would buy never appears on the balance
-sheet at all. `Δε` there is 0.01 nats.
+sheet at all. `Δε` there is under 0.01 nats.
 
 **Why the horizon changes the answer.** The epistemic pull is *flat*. Once the horizon
-is long enough to reach the beacon at all it sits near 6.7 nats and barely moves,
+is long enough to reach the beacon at all it sits at 6.67 nats and barely moves,
 because sensing once is worth what sensing once is worth. What moves is the pragmatic
 gradient. After the detour the sharpened goal belief lowers the expected cost of the
 goal channel on *every remaining step*, and that saving accumulates until it covers the
@@ -58,6 +58,13 @@ carry the identical covariance sequence. Both the state-dependent sensor and the
 horizon are load-bearing. Neither produces the crossing alone.
 
 Where the crossing lands belongs to these particular numbers. The shape carries over.
+
+**This is not the registered `H*`.** That number comes from a complete `|A|^H`
+enumeration over a declared action set on the two-node coupled cue tree, with the
+epistemic term restricted to the context node (`Δε = 1.72` nats at `H = 1`), and it
+carries a completeness certificate. Here two named plans are scored on a flat
+four-dimensional chain with a whole-state epistemic term (`Δε = 6.67` nats), and nothing
+is searched. The two land on the same integer. Nothing follows from that.
 
 `--check` asserts what the figures claim and prints it, with no plotting deps.
 Everything asserted is open-loop, so none of it takes a seed. The animated runs take
@@ -126,7 +133,14 @@ H_MAX = 16  # how far the horizon sweep runs
 MYOPIC_H = 2  # the near-sighted agent, comfortably below the crossing
 FARSIGHTED_H = 14  # the far-sighted one, comfortably above it
 MONOTONE_TOL = 1e-9  # how far the frozen twin may dip and still count as monotone
-FLAT_PULL = 0.05  # how little the epistemic pull may move once the beacon is in reach
+# Flatness is a per-step bound, not a bound on the range. The pull drifts down at a
+# constant ~0.0026 nats per horizon, so any range test passes or fails on H_MAX rather
+# than on the model: at FLAT_PULL = 0.05 across the whole window the same claim would
+# start failing from H_MAX = 23 with nothing about the agent having changed.
+FLAT_PULL_PER_STEP = 0.01  # how far Δε may move between consecutive horizons
+PULL_LEVEL = 6.67  # the level the plateau holds at, which the prose quotes
+PULL_LEVEL_TOL = 0.05  # and how far off it the mean may sit
+MYOPIC_PULL_MAX = 0.01  # Δε below the beacon's reach, where the prose says ~nothing
 
 CONTEXT_DIMS = 2  # the plane
 STATE_DIMS = 2 * CONTEXT_DIMS  # (position, goal)
@@ -208,12 +222,17 @@ def build_model(*, frozen_noise: float | None = None) -> LinearGaussianModel:
 
 
 def _require_full_row_rank(observed: np.ndarray) -> None:
-    """Refuse to build a model whose sensor carries a redundant channel.
+    """Refuse to build *this* model with a sensor that carries a redundant channel.
 
-    Without full row rank only `R`'s action on the row space of `C` is identified, and
-    the covariance off that subspace is free, so matching a posterior no longer pins
-    the noise, and the frozen-R control stops being a control. Cheap enough to pay at
-    every construction, and construction is not the loop.
+    The frozen twin here is pinned by matching a posterior along the direct path, and
+    without full row rank only `R`'s action on the row space of `C` is identified. The
+    covariance off that subspace is then free, so the constant the twin is pinned at
+    stops being determined by the thing it is meant to reproduce.
+
+    Local to this construction, not a rule about sensors. A redundant row is the right
+    design wherever two channels are wanted on one functional with different noise —
+    `ffg/cue_maze.py` does exactly that on purpose, and would fail this check. Cheap
+    enough to pay at every construction, and construction is not the loop.
     """
     rank = int(np.linalg.matrix_rank(observed))
     if rank < observed.shape[0]:
@@ -319,8 +338,13 @@ def margin_curve(
     return [margin(h, frozen_noise=frozen_noise) for h in range(1, max_horizon + 1)]
 
 
-def crossover_horizon(curve: list[CrossoverStatistic]) -> int | None:
-    """The first horizon at which the detour wins, or `None` if it never does."""
+def first_crossing(curve: list[CrossoverStatistic]) -> int | None:
+    """The first horizon at which the detour wins, or `None` if it never does.
+
+    Deliberately not named `crossover_horizon`. That name belongs to
+    `cpomdp.crossover`, where it means `H*` over an enumerated search, and this is a
+    scan of two named plans over a precomputed curve.
+    """
     return next((stat.horizon for stat in curve if stat.walk_wins), None)
 
 
@@ -439,7 +463,7 @@ def check() -> None:
     live = margin_curve()
     frozen_at = frozen_reference_noise()
     frozen = margin_curve(frozen_noise=frozen_at)
-    crossing = crossover_horizon(live)
+    crossing = first_crossing(live)
     delta = np.array([float(stat.delta_g) for stat in live])
     frozen_delta = np.array([float(stat.delta_g) for stat in frozen])
     frozen_pull = np.array([abs(float(stat.delta_epsilon)) for stat in frozen])
@@ -449,12 +473,26 @@ def check() -> None:
     detour_pins = pinned_noise(detour_policy(H_MAX))
 
     _print_sweep(live, frozen, crossing, frozen_at, direct_pins, detour_pins)
+    # The three ways the sweep can leave a verdict with nothing to read off. Every
+    # verdict below slices the curve either side of the crossing, or from the beacon's
+    # first reachable step, and an empty slice reaches numpy as a bare reduction error.
+    # Report the geometry that caused it instead. Retune the scene constants and one of
+    # these is how you find out.
     if crossing is None:
-        # No crossing in range is the registered falsifier, not a crash. Every verdict
-        # below indexes off the crossing, so report it here rather than fail on a None.
         raise AssertionError(
             f"no crossing in H = 1..{H_MAX}: ΔG never turns negative "
             f"(smallest {delta.min():+.2f} nats)"
+        )
+    if crossing == 1:
+        raise AssertionError(
+            f"the crossing sits at H = 1, so no horizon below it is in the sweep and "
+            f"the claims about what happens below it read off nothing "
+            f"(ΔG(1) = {delta[0]:+.2f} nats)"
+        )
+    if reached > H_MAX:
+        raise AssertionError(
+            f"the detour first stands on the beacon at step {reached}, past the end of "
+            f"the H = 1..{H_MAX} sweep, so the epistemic pull is never measured"
         )
     results = [
         (
@@ -489,9 +527,17 @@ def check() -> None:
         ),
         (
             "the epistemic pull is flat, so what moves is the pragmatic term",
-            float(np.ptp(pull)) < FLAT_PULL,
-            f"Δε holds at {pull.max():.2f} nats from H = {reached} to H = {H_MAX}, "
-            f"moving {float(np.ptp(pull)):.3f}",
+            float(np.max(np.abs(np.diff(pull)))) < FLAT_PULL_PER_STEP
+            and abs(float(pull.mean()) - PULL_LEVEL) < PULL_LEVEL_TOL,
+            f"Δε holds at {pull.mean():.2f} nats from H = {reached} to H = {H_MAX}, "
+            f"moving {float(np.max(np.abs(np.diff(pull)))):.4f} per step",
+        ),
+        (
+            "below the beacon's reach the detour buys essentially nothing, so the "
+            "information it would find never enters the balance sheet",
+            abs(float(live[MYOPIC_H - 1].delta_epsilon)) < MYOPIC_PULL_MAX,
+            f"Δε(H = {MYOPIC_H}) = {float(live[MYOPIC_H - 1].delta_epsilon):.4f} nats, "
+            f"and the detour first stands on the beacon at step {reached}",
         ),
         (
             "the two plans read genuinely different noise, which is why any of this "
@@ -506,7 +552,9 @@ def check() -> None:
             and bool(frozen_delta.min() > 0)
             and _is_monotone(frozen_delta),
             f"frozen ΔG stays in [{frozen_delta.min():+.2f}, "
-            f"{frozen_delta.max():+.2f}], rising and never crossing",
+            f"{frozen_delta.max():+.2f}], never falling and never crossing. It climbs "
+            f"to {frozen_delta.max():+.2f} and then saturates, both plans having run "
+            f"out of ground to differ over",
         ),
         (
             "freezing R zeroes the epistemic term outright, rather than shrinking it",
@@ -523,7 +571,11 @@ def check() -> None:
     print(
         f"\nThe crossing sits at H = {crossing}: below it curiosity does not pay for "
         f"itself, above it it does.\nThat number belongs to these parameters and "
-        f"nothing else. What travels is the shape."
+        f"nothing else. What travels is the shape.\n"
+        f"\nNot the registered H*. That one is an exhaustive search over a declared "
+        f"action set on the\ncoupled cue tree, with the epistemic term restricted to "
+        f"the context node. This is two named\nplans on a flat chain, whole-state, "
+        f"searching nothing. The integers coincide and mean\nnothing by it."
     )
     for label, passed, _ in results:
         assert passed, label
@@ -1270,7 +1322,7 @@ def render_still(myopic: dict, farsighted: dict, out_path: Path) -> Path:
     live = margin_curve()
     frozen_at = frozen_reference_noise()
     frozen = margin_curve(frozen_noise=frozen_at)
-    crossing = crossover_horizon(live)
+    crossing = first_crossing(live)
 
     fig, (scene, flip, control) = plt.subplots(
         1, 3, figsize=(15.4, 5.2), width_ratios=(1.05, 1.35, 1.0)

@@ -12,7 +12,7 @@ repoints them on the way into a page:
 | ------------------------------- | ------------------------------------------- |
 | `../docs/assets/x.gif`          | `assets/x.gif`, served by the site itself   |
 | `ffg/README.md`                 | `examples-ffg.md`, the page that includes it |
-| `bacillus_lqr.py`               | a `blob/main` URL. Source is not published  |
+| `bacillus_uncertain_food.py`    | a `blob/main` URL. Source is not published  |
 | `../docs/assets/`               | a `tree/main` URL. A directory is not a page |
 | `#a-heading`                    | untouched. Anchors already work in both     |
 
@@ -132,9 +132,8 @@ def rewrite_links(
             return match.group(0)
         if not (layout.repo_root / repo_path).exists():
             missing.append(target)
-        _, separator, fragment = target.partition("#")
-        rewritten = _site_target(repo_path, page=page, layout=layout)
-        return f"]({rewritten}{separator}{fragment}{match.group('title') or ''})"
+        rewritten = resolve_link(target, source=source, page=page, layout=layout)
+        return f"]({rewritten}{match.group('title') or ''})"
 
     return _FENCE_OR_LINK.sub(repoint, text), missing
 
