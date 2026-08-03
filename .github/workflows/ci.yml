@@ -20,7 +20,9 @@ jobs:
         with:
           enable-cache: true
           python-version: "3.12"
-      - run: uv sync --locked
+      # `examples` extra: `ty` covers `examples/`, so matplotlib and pillow have to be
+      # resolvable or every demo import reads as missing.
+      - run: uv sync --locked --extra examples
       # Cache the pre-commit hook environments, keyed on the config.
       - uses: actions/cache@v5
         with:
@@ -30,9 +32,11 @@ jobs:
       # hygiene), so CI and pre-commit can never disagree. Fails if any hook would
       # change a file. The commit-msg hook isn't run here (no commit to check).
       - name: pre-commit
-        run: uv run pre-commit run --all-files --show-diff-on-failure
+        run: uv run --extra examples pre-commit run --all-files --show-diff-on-failure
+      # `--extra examples` here too, or a bare `uv run` re-syncs the environment back
+      # to the default set and takes matplotlib out again.
       - name: ty (strict types)
-        run: uv run ty check
+        run: uv run --extra examples ty check
 
   test:
     name: test (py${{ matrix.python-version }})
