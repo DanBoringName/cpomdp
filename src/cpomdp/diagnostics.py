@@ -208,15 +208,15 @@ def probe_model(
     widen it.
 
     Args:
-        model: a :class:`~cpomdp.types.LinearGaussianModel`, or a backend exposing
+        model: a ``LinearGaussianModel``, or a backend exposing
             ``predicted_belief`` / ``observation_noise_at`` / ``observation_model``
-            (:class:`~cpomdp.backends.coupling.CouplingGraphBackend` does).
+            (``CouplingGraphBackend`` does).
         belief: the belief to predict from — the shared prior every action starts at.
         actions: the candidate actions to sample.
         tol: below this, two noise covariances or two epistemic values count as equal.
 
     Returns:
-        A :class:`SensorReport`.
+        A ``SensorReport``.
 
     Raises:
         ValueError: If ``actions`` is empty.
@@ -337,11 +337,11 @@ def rollout_conditioning(trace: "PolicyEfeTrace") -> RolloutConditioning:
     raise. Pure NumPy.
 
     Args:
-        trace: a :class:`~cpomdp.efe.PolicyEfeTrace` — read for its ``sigma_pred``
+        trace: a ``PolicyEfeTrace`` — read for its ``sigma_pred``
             (``Σ⁺``), ``s`` (``S``) and ``sigma_post`` (``Σ_post``) columns.
 
     Returns:
-        A :class:`RolloutConditioning`.
+        A ``RolloutConditioning``.
     """
     sigma_pred = np.asarray(trace.sigma_pred, dtype=float)
     s = np.asarray(trace.s, dtype=float)

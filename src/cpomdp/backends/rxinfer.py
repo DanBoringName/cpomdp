@@ -200,7 +200,7 @@ def rxinfer_chemotaxis_tree_root(
     to the 1x1 / 1-vector form the `MvNormal` model expects. This re-derives, through
     RxInfer's message passing, what `CouplingGraph.infer` collects up the same tree.
 
-    The first call in a process loads the Julia runtime (see :func:`_julia`).
+    The first call in a process loads the Julia runtime (see ``_julia``).
     """
     jl = _julia()
 
