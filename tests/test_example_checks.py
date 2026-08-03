@@ -9,6 +9,7 @@ path.
 """
 
 import crossover
+import crossover_horizon_figure
 import crossover_sweep
 import efe_collapse_figure
 import epistemic_dissociation_figure
@@ -30,6 +31,14 @@ def test_crossover_sweep_check():
     """The constant reach/walk pair never crosses over — the search-family artefact that
     makes the exhaustive varying-sequence search necessary."""
     crossover_sweep.check()
+
+
+def test_crossover_horizon_check():
+    """The open-plane margin between a direct plan and a detour. The two animated
+    agents choose differently. The margin crosses zero exactly once as the horizon
+    grows. The epistemic pull stays flat while the pragmatic gradient decays under it,
+    and a frozen-R twin never crosses at any horizon in range."""
+    crossover_horizon_figure.check()
 
 
 @pytest.mark.slow

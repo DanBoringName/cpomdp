@@ -6,6 +6,7 @@
     // debugger and the test runner (ms-python.python pulls in Pylance + debugpy).
     "charliermarsh.ruff",
     "ms-python.python",
+    "astral-sh.ty",
 
     // The repo's config files: pyproject.toml, and the YAML behind pre-commit,
     // mkdocs and CI (schema validation + completion).
