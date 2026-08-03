@@ -131,7 +131,7 @@ python-version = "3.10"
 extra-paths = ["examples", "examples/ffg"]
 
 [tool.ty.src]
-include = ["src", "tests", "examples"]
+include = ["src", "tests", "examples", "mkdocs_hooks.py"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

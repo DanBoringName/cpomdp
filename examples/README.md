@@ -18,14 +18,14 @@ pip install "cpomdp[examples]"        # then: python examples/<script>.py
 uv run --extra examples python examples/<script>.py
 ```
 
-Each script writes its asset into [`../docs/assets/`](https://github.com/inferogenesis/cpomdp/tree/main/docs/assets) and takes an
+Each script writes its asset into [`../docs/assets/`](../docs/assets/) and takes an
 optional output path as `argv[1]`.
 
 ---
 
 ## Flagship — instrumental epistemics: the beacon resolves food location
 
-[`bacillus_uncertain_food.py`](https://github.com/inferogenesis/cpomdp/blob/main/examples/bacillus_uncertain_food.py) · v0.4 · ADR-013
+[`bacillus_uncertain_food.py`](bacillus_uncertain_food.py) · v0.4 · ADR-013
 
 Expected Free Energy decomposes into an **epistemic** (information-seeking) value and
 a **pragmatic**/**instrumental** (goal-seeking) value. Epistemic value is genuinely
@@ -80,7 +80,7 @@ The simulation is checked, not just rendered: every agent's filter is run throug
 **both inference backends**, and `--scan` checks the native `KalmanBackend` and the
 v0.4 FFG `ChainBackend` agree to `atol=1e-7`.
 
-![Four bacilli learning where the food is, under different goal precisions Λ](https://raw.githubusercontent.com/inferogenesis/cpomdp/main/docs/assets/bacillus_uncertain_food.gif)
+![Four bacilli learning where the food is, under different goal precisions Λ](../docs/assets/bacillus_uncertain_food.gif)
 
 `bacillus_uncertain_food.py --scan` prints the regime metrics and the
 Kalman-vs-ChainBackend agreement check without rendering.
@@ -92,19 +92,19 @@ Kalman-vs-ChainBackend agreement check without rendering.
 The v0.4 examples that need a branching model rather than a chain live in their own
 sub-gallery — the dissociation demo (a branch-coupled `R(x)` sensor that can't be flattened
 to a Kalman filter), the coupling-graph figure, and a chemotaxis-network figure. See
-**[`ffg/README.md`](https://github.com/inferogenesis/cpomdp/blob/main/examples/ffg/README.md)**.
+**[`ffg/README.md`](ffg/README.md)**.
 
 ---
 
 ## R(x) and a long enough H bring curiosity back to a linear-Gaussian agent
 
-[`crossover_horizon_figure.py`](https://github.com/inferogenesis/cpomdp/blob/main/examples/crossover_horizon_figure.py)
+[`crossover_horizon_figure.py`](crossover_horizon_figure.py)
 
 Under a **fixed** linear-Gaussian sensor the epistemic term of expected free energy is a
 constant across policies. It cannot change any decision. The agent reduces to LQR, the
-collapse the [EFE collapse figure](#efe-epistemic-collapse-and-how-a-state-dependent-sensor-breaks-it)
-further down draws. A state-dependent `R(x)` breaks that: the action reaches the noise, so
-curiosity becomes *possible* again. Possible is not the same as decisive.
+collapse [`efe_collapse_figure.py`](efe_collapse_figure.py) draws. A state-dependent
+`R(x)` breaks that: the action reaches the noise, so curiosity becomes *possible* again.
+Possible is not the same as decisive.
 
 An open plane. The agent wants to be at a goal it cannot locate. Its prior says the goal
 is over to the right. It is not. A beacon well off that line is the only thing that can
@@ -117,7 +117,7 @@ that: it walks *away* from where it thinks the goal is, reads the beacon, finds 
 wrong, and then goes to the real one. Nothing changed but `H`. Same model, same prior,
 same sensor, same two candidate plans, same objective.
 
-![One agent run once per planning horizon: at short horizons it settles where its prior said, and past a crossing it detours to the beacon, learns where the goal really is, and goes there](https://raw.githubusercontent.com/inferogenesis/cpomdp/main/docs/assets/crossover_horizon.gif)
+![One agent run once per planning horizon: at short horizons it settles where its prior said, and past a crossing it detours to the beacon, learns where the goal really is, and goes there](../docs/assets/crossover_horizon.gif)
 
 ### Reading the numbers beside the animation
 
@@ -174,60 +174,9 @@ Freezing `R` zeroes the epistemic term. With a fixed noise the covariance recurs
 consulting the action, so both plans carry the identical covariance sequence. It takes
 `R(x)` *and* the horizon.
 
-![The margin between the two plans against the planning horizon, crossing zero once, beside a frozen-R control that never crosses](https://raw.githubusercontent.com/inferogenesis/cpomdp/main/docs/assets/crossover_horizon.png)
+![The margin between the two plans against the planning horizon, crossing zero once, beside a frozen-R control that never crosses](../docs/assets/crossover_horizon.png)
 
 `--check` prints the sweep and asserts what the figures claim, with no plotting deps.
 Everything asserted is open-loop, so none of it takes a seed. The animated runs take one,
 named in the caption. Where the crossing lands belongs to these particular numbers. The
 shape carries over. The integer does not.
-
----
-
-## The journey
-
-### Four bacilli, one knob — the v0.3 original (beacon reveals YOUR position)
-
-[`bacillus_seeking_food.py`](https://github.com/inferogenesis/cpomdp/blob/main/examples/bacillus_seeking_food.py) · v0.3
-
-The flagship's predecessor: same four-regime shape, but the beacon collapses
-uncertainty about the agent's *own* position rather than the food's — illustrative,
-but the simpler, non-instrumental form of epistemic value the flagship's ADR-013
-critique is about. The simulation is real — every agent shares one Kalman filter over
-a `CallableSensor` whose `R(x)` dips at the beacon, and the EFE agents call the
-library's own `expected_free_energy` kernel.
-
-![Four bacilli navigating to food under different goal precisions Λ](https://raw.githubusercontent.com/inferogenesis/cpomdp/main/docs/assets/bacillus.gif)
-
-`bacillus_seeking_food.py --scan` prints the precision-Λ sweep metrics without rendering.
-
-### Bacillus seeking food — the original (pure LQR)
-
-[`bacillus_lqr.py`](https://github.com/inferogenesis/cpomdp/blob/main/examples/bacillus_lqr.py) · v0.2
-
-Where it started: a *single* bacillus with a fixed sensor. Here the epistemic term
-collapses to nothing (ADR-003) and active inference reduces to LQR — it simply
-perceives, acts, and arrives. The v0.3 demo above is its successor, switching the
-epistemic term back on with a state-dependent sensor.
-
-![A bacillus navigating to food via continuous active inference](https://raw.githubusercontent.com/inferogenesis/cpomdp/main/docs/assets/bacillus_lqr.gif)
-
-### EFE epistemic collapse, and how a state-dependent sensor breaks it
-
-[`efe_collapse_figure.py`](https://github.com/inferogenesis/cpomdp/blob/main/examples/efe_collapse_figure.py)
-
-Sweeps a one-step action and plots `G = pragmatic − epistemic` for a fixed sensor
-(epistemic dead-flat → EFE collapses to LQR) versus a state-dependent sensor (a
-precision well makes the epistemic term curve, pulling the argmin off the goal
-toward the information). The "why v0.3 exists" figure.
-
-![EFE epistemic collapse and the state-dependent-sensor detour](https://raw.githubusercontent.com/inferogenesis/cpomdp/main/docs/assets/efe_collapse.png)
-
-### Internal process noise breaks the collapse from the inside
-
-[`internal_noise_figure.py`](https://github.com/inferogenesis/cpomdp/blob/main/examples/internal_noise_figure.py)
-
-The companion: here the sensor noise `R` is held fixed and the action-dependence of
-the epistemic term comes entirely from state-dependent **process** noise `Q(x)` —
-the internal-precision route of RFC-001 section 8.
-
-![Internal process noise breaking the epistemic collapse](https://raw.githubusercontent.com/inferogenesis/cpomdp/main/docs/assets/internal_noise.png)

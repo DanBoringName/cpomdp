@@ -35,8 +35,12 @@ markdown_extensions:
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.superfences
-  - pymdownx.snippets:
-      base_path: [.]
+
+# Pastes the `--8<--` includes (README, CHANGELOG, the two example galleries) into
+# their stub pages and repoints the relative links in them, so one file reads
+# correctly both on GitHub and here. See the module docstring.
+hooks:
+  - mkdocs_hooks.py
 
 plugins:
   - search

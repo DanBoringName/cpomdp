@@ -2,7 +2,7 @@
 
 The v0.4 examples that need a branching model, not a chain. A chain is the one shape a
 Kalman filter already is; these are the shapes it isn't. Part of the
-[examples gallery](https://github.com/inferogenesis/cpomdp/blob/main/examples/README.md).
+[examples gallery](../README.md).
 
 Get the plotting deps with the `examples` extra:
 
@@ -16,14 +16,14 @@ pip install "cpomdp[examples]"        # then: python examples/ffg/<script>.py
 uv run --extra examples python examples/ffg/<script>.py
 ```
 
-Each script writes its asset into [`../../docs/assets/`](https://github.com/inferogenesis/cpomdp/tree/main/docs/assets) and takes an
+Each script writes its asset into [`../../docs/assets/`](../../docs/assets/) and takes an
 optional output path as `argv[1]`.
 
 ---
 
 ## A branch-coupled R(x) can't be flattened
 
-[`epistemic_dissociation_figure.py`](https://github.com/inferogenesis/cpomdp/blob/main/examples/ffg/epistemic_dissociation_figure.py) · v0.4 · ADR-019, ADR-020, ADR-021
+[`epistemic_dissociation_figure.py`](epistemic_dissociation_figure.py) · v0.4 · ADR-019, ADR-020, ADR-021
 
 Why build an FFG instead of a flat Kalman/EFE loop? Because some models a flat loop can't
 run. Give a node a state-dependent sensor `R(x)`, couple it to a hidden context, then ask
@@ -50,7 +50,7 @@ epistemic term (Koudahl–Kouw–de Vries 2021, ADR-003), so it falls back to th
 stays at the wrong arm. Same maze, same goal; B's final belief about which arm pays is ≈11x
 tighter. A control statement, not biology (ADR-020).
 
-![Two agents on the same maze: B reads a state-dependent cue and crosses to the reward, A with a fixed sensor cannot](https://raw.githubusercontent.com/inferogenesis/cpomdp/main/docs/assets/epistemic_dissociation.gif)
+![Two agents on the same maze: B reads a state-dependent cue and crosses to the reward, A with a fixed sensor cannot](../../docs/assets/epistemic_dissociation.gif)
 
 `epistemic_dissociation_figure.py --check` asserts the four results — the raised error, B's
 resolved latent, the dual effect (B's epistemic moves, A's is flat), and the confound-free
@@ -60,7 +60,7 @@ horizon-1 ordering (epistemic pull < pragmatic gradient) — without rendering.
 
 ## Declare the structure, skip the joint
 
-[`coupling_graph_figure.py`](https://github.com/inferogenesis/cpomdp/blob/main/examples/ffg/coupling_graph_figure.py) · v0.4 · ADR-012, ADR-014
+[`coupling_graph_figure.py`](coupling_graph_figure.py) · v0.4 · ADR-012, ADR-014
 
 The factor graph earns its keep the moment the model branches: a hidden root `r` seen only
 through a hub `h` that fans out to two observed leaves, a degree no chain can hold. The
@@ -69,7 +69,7 @@ a normal backend makes you assemble, invert, and marginalise back down to `r` �
 whenever the wiring changes. Both land on the same belief over `r` (μ ≈ 1.234, σ² ≈ 0.137),
 to floating-point noise. Same answer; the branching just stays declared instead of flattened.
 
-![A branching tree resolved two ways: CouplingGraph.infer against the hand-flattened joint precision](https://raw.githubusercontent.com/inferogenesis/cpomdp/main/docs/assets/coupling_graph.png)
+![A branching tree resolved two ways: CouplingGraph.infer against the hand-flattened joint precision](../../docs/assets/coupling_graph.png)
 
 `coupling_graph_figure.py --check` prints both routes' root posteriors and their agreement,
 no rendering.
@@ -78,7 +78,7 @@ no rendering.
 
 ## A chemotaxis network, as its shape
 
-[`chemotaxis_figure.py`](https://github.com/inferogenesis/cpomdp/blob/main/examples/ffg/chemotaxis_figure.py) · v0.4 · ADR-012, ADR-020
+[`chemotaxis_figure.py`](chemotaxis_figure.py) · v0.4 · ADR-012, ADR-020
 
 The same declare-and-infer, on a real branching network instead of an abstract one. E. coli
 chemotaxis is a receptor-driven CheA kinase hub feeding a fast CheY → motor branch and a slow
@@ -91,7 +91,7 @@ It's the shape, not the biophysics: no CheB → receptor feedback (that's a loop
 build-on-top, not a v0.4 feature (RFC-002, ADR-020). Reuses `chemotaxis_model.py`, the builder
 the Phase-3 tests pin.
 
-![The E. coli chemotaxis network as a branching factor graph; the hidden CheA kinase hub inferred through its downstream readouts](https://raw.githubusercontent.com/inferogenesis/cpomdp/main/docs/assets/chemotaxis.png)
+![The E. coli chemotaxis network as a branching factor graph; the hidden CheA kinase hub inferred through its downstream readouts](../../docs/assets/chemotaxis.png)
 
 `chemotaxis_figure.py --check` prints the hidden-hub posterior from both routes and their
 agreement.
