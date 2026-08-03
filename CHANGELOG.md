@@ -4,6 +4,23 @@ Everything worth noting lands here. The format follows [Keep a Changelog](https:
 
 ## [Unreleased]
 
+### Added
+
+- `examples/crossover_horizon_figure.py` — a showcase of the epistemic/pragmatic crossover on
+  an open plane, and the first demo of it on the *flat* Kalman/EFE route rather than the factor
+  graph. An augmented state `x = (p, g)` carries a position the control moves and a static
+  latent goal it does not. `R(p)` makes the channel that reads `g` sharp only near a beacon off
+  the direct path. The animation runs the same world once per planning horizon: at short `H`
+  the agent settles where its prior said without ever checking, and past a crossing it detours
+  to the beacon, finds out it was wrong, and goes to the real goal. Nothing changes but `H`.
+  The margin `ΔG(H) = G(detour, H) − G(direct, H)`, in nats, crosses zero exactly once, because
+  the epistemic pull is flat while the pragmatic gradient decays under it. A frozen-R twin re-runs
+  the whole sweep with `R` pinned and never crosses, so the behaviour is attributable to the
+  state-dependent sensor and the horizon together rather than to the beacon-and-goal geometry.
+  Under a fixed sensor the epistemic term is a constant at every horizon (ADR-003). Renders
+  the animation plus a three-panel companion. `--check` prints the sweep and asserts what the
+  figures claim, gated in `tests/test_example_checks.py`.
+
 ## [0.4.4] — 2026-08-01
 
 The multi-step slice of expected free energy. Scoring one policy over a horizon was already
@@ -63,6 +80,19 @@ arithmetic stays byte-identical to 0.4.3.
   a check rather than as a footnote.
 - A `slow` pytest marker for the exhaustive gate. Pull requests run without it; merges to
   main and releases run with it.
+- `examples/ffg/cue_maze.py`. The cue-maze task, built for any `n_dims >= 1`. A hidden
+  context decides which of two goals pays, the prior points at the wrong one, and a cue
+  elsewhere in the arena reads the context sharply while the agent stands on it.
+  `axis_action_set` grows as `2·n·|magnitudes| + 1` rather than as a product grid, so two
+  dimensions cost exactly what the corridor did. `enumeration_cost` prices a sweep before
+  you commit to it, and `best_reachable_noise` catches the failure that motivated it. A cue
+  the action lattice cannot land on is one no policy can read, and the null that produces
+  is indistinguishable from "information is never worth the detour". It is pure geometry.
+- `examples/gallery.py`. The shared machinery the demos were each copying: three palettes,
+  the GIF writer, the figure and still writers, the bacillus glyph as a style object, the
+  covariance-ellipse geometry, the EFE sweep and decomposition panel, the action grid, and
+  the two-route agreement report. Roughly 390 lines of duplication removed. Eight scripts
+  touched. Every committed asset re-renders byte-identical to its pre-refactor baseline.
 
 ### Changed
 
@@ -166,11 +196,12 @@ paper's reproducibility claims quote, and are now gated in CI.
 ### Added
 
 - A single-chain theorem-instance check on the EFE-collapse demo
-  (`examples/efe_collapse_figure.py --check`): the model class of the paper's §3.1 — one
-  node, no couplings, additive control, a state-dependent `R(x)` sensor — run through the
-  flat `KalmanBackend(CallableSensor)` route, asserting Theorem 1 clauses (i) and (iii):
-  the one-step epistemic value varies across the action grid, its frozen-`R` twin is flat
-  (the ADR-003 collapse), and `R(μ⁻)` traces a curve. Runs with no plotting deps.
+  (`examples/efe_collapse_figure.py --check`): the model class of the paper's section
+  3.1 — one node, no couplings, additive control, a state-dependent `R(x)` sensor — run
+  through the flat `KalmanBackend(CallableSensor)` route, asserting Theorem 1 clauses (i)
+  and (iii): the one-step epistemic value varies across the action grid, its frozen-`R`
+  twin is flat (the ADR-003 collapse), and `R(μ⁻)` traces a curve. Runs with no plotting
+  deps.
 - `tests/test_example_checks.py` runs both demos' `check()` gates in CI, so their
   paper-facing assertions fire on every test run rather than only when the script is run
   by hand.
