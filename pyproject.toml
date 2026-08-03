@@ -121,13 +121,17 @@ convention = "google"
 [tool.ruff.lint.per-file-ignores]
 # Tests document themselves by name; don't require docstrings on them.
 "tests/**" = ["D"]
+# The ffg demos sit a directory below `examples/gallery.py`, so each extends sys.path
+# before importing it. That statement has to come before the import, which is E402 by
+# construction. `conftest.py` does the same job for the test process.
+"examples/ffg/*" = ["E402"]
 
 [tool.ty.environment]
 python-version = "3.10"
 extra-paths = ["examples", "examples/ffg"]
 
 [tool.ty.src]
-include = ["src", "tests"]
+include = ["src", "tests", "examples"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

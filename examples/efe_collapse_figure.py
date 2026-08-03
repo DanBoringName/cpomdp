@@ -1,11 +1,12 @@
 """The single-chain EFE epistemic collapse, and how a state-dependent sensor breaks it.
 
-This is the model class of the paper's §3.1 made executable: one node, no couplings,
-additive control, and a sensor whose noise `R(x)` depends on the state — run through
-the flat `KalmanBackend(CallableSensor)` route (the coupling-free `R(x)` case the
-`CouplingGraphBackend.to_flat_model` docstring points at: build the Kalman model with a
-`CallableSensor` directly rather than flattening a graph). The T-maze demo illustrates
-the same mechanism on a richer branching graph; here it is the theorem's own chain.
+This is the model class of the paper's section 3.1 made executable: one node, no
+couplings, additive control, and a sensor whose noise `R(x)` depends on the state — run
+through the flat `KalmanBackend(CallableSensor)` route (the coupling-free `R(x)` case
+the `CouplingGraphBackend.to_flat_model` docstring points at: build the Kalman model
+with a `CallableSensor` directly rather than flattening a graph). The T-maze demo
+illustrates the same mechanism on a richer branching graph; here it is the theorem's
+own chain.
 
 `--check` asserts Theorem 1's clauses (i) and (iii) on this class, plus the pinning
 Lemma 1 rests on, with no plotting deps:
@@ -40,6 +41,7 @@ Output (bare command): docs/assets/efe_collapse.png
 import sys
 from pathlib import Path
 
+import gallery
 import jax.numpy as jnp
 import numpy as np
 
@@ -99,45 +101,26 @@ def _well() -> CallableSensor:
 
 
 def _sweep(model):
-    """Pragmatic, epistemic, and G over the action sweep (eager, no jit)."""
-    prag, epi, g = [], [], []
-    for a in ACTIONS:
-        g_a, parts = expected_free_energy(model, BELIEF, jnp.array([a]), GOAL)
-        g.append(float(g_a))
-        prag.append(float(parts["pragmatic"]))
-        epi.append(float(parts["epistemic"]))
-    return np.array(prag), np.array(epi), np.array(g)
+    """Pragmatic, epistemic, and G over this demo's action sweep."""
+    return gallery.efe_sweep(model, BELIEF, GOAL, ACTIONS)
 
 
 def _panel(ax, prag, epi, g, title, note):
-    actions = np.asarray(ACTIONS)
-    ax.plot(actions, prag, color="#e8833a", lw=2.2, label="pragmatic (goal cost)")
-    ax.plot(actions, epi, color="#2ca6a4", lw=2.2, label="epistemic (info gain)")
-    ax.plot(actions, g, color="#5b3a8a", lw=3.0, label="G = pragmatic − epistemic")
-
-    a_g = actions[int(np.argmin(g))]
-    a_prag = actions[int(np.argmin(prag))]
-    ax.axvline(a_prag, color="#e8833a", ls=":", lw=1.6)
-    ax.axvline(a_g, color="#5b3a8a", ls="--", lw=1.6)
-    ax.scatter([a_g], [g.min()], color="#5b3a8a", zorder=5, s=45)
-
-    ax.set_title(title, fontsize=12, fontweight="bold")
-    ax.set_xlabel("action  (one-step move of observed position)")
-    ax.annotate(
-        note,
-        xy=(0.5, -0.30),
-        xycoords="axes fraction",
-        ha="center",
-        va="top",
-        fontsize=9.5,
-        color="#333333",
+    """This demo's EFE panel: the shared one, labelled for a directly observed state."""
+    gallery.draw_efe_panel(
+        ax,
+        ACTIONS,
+        prag,
+        epi,
+        g,
+        title=title,
+        note=note,
+        xlabel="action  (one-step move of observed position)",
     )
-    ax.grid(True, alpha=0.25)
-    ax.legend(loc="upper right", fontsize=8.5, framealpha=0.9)
 
 
 def check() -> None:
-    """Assert Theorem 1 on §3.1's own model class — the single R(x) chain.
+    """Assert Theorem 1 on section 3.1's own model class — the single R(x) chain.
 
     One node, no couplings, additive control, and a state-dependent ``R(x)`` sensor,
     run through the flat ``KalmanBackend(CallableSensor)`` route. The sweep is the same
@@ -148,7 +131,7 @@ def check() -> None:
     # The single chain actually filters. KalmanBackend(CallableSensor) is the
     # coupling-free R(x) route the CouplingGraphBackend.to_flat_model docstring points
     # at (build the Kalman model with a CallableSensor directly). One update at the
-    # beacon — where R dips — sharpens the belief: the §3.1 model class, run.
+    # beacon — where R dips — sharpens the belief: the section 3.1 model class, run.
     prior = Belief(mean=[BEACON], cov=[[2.0]])
     post = KalmanBackend(live).infer_states(
         jnp.array([BEACON]), prior, action=jnp.array([0.0])
@@ -209,7 +192,7 @@ def check() -> None:
     # the pinning: R(μ⁻(a)) traces a curve, and no constant follows a curve.
     assert r_swing > 1e-3
 
-    print("Theorem 1 on the single-chain R(x) model class (§3.1):")
+    print("Theorem 1 on the single-chain R(x) model class (section 3.1):")
     print(
         f"  (i)   posterior variance over the grid: {post_vars.min():.4f} → "
         f"{post_vars.max():.4f} (swing {post_swing:.4f}); gain swing {gain_swing:.4f} "
@@ -272,9 +255,7 @@ def main():
     )
 
     fig.tight_layout(rect=(0, 0.04, 1, 0.95))
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(OUT, dpi=150, bbox_inches="tight")
-    print(f"wrote {OUT}")
+    print(f"wrote {gallery.save_figure(fig, OUT, dpi=150, tight=True)}")
 
 
 if __name__ == "__main__":

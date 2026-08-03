@@ -81,6 +81,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import gallery
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -88,7 +89,6 @@ from bacillus_seeking_food import BEACON_PT, beacon_noise
 
 from cpomdp.backends.kalman import KalmanBackend
 from cpomdp.control import LQRController
-from cpomdp.efe import expected_free_energy
 from cpomdp.ffg.chain import ChainBackend
 from cpomdp.observation import CallableSensor
 from cpomdp.selection import Preference
@@ -235,18 +235,11 @@ def build_preference(precision: float) -> Preference:
 
 
 def _candidate_grid() -> jnp.ndarray:
-    """The front-loaded GRID_N² grid of one-step action candidates, shape (k², 2)."""
-    axis = jnp.linspace(ACTION_LO, ACTION_HI, GRID_N)
-    ax, ay = jnp.meshgrid(axis, axis)
-    return jnp.stack([ax.ravel(), ay.ravel()], axis=1)
+    """This demo's GRID_N² grid of one-step action candidates, shape (k², 2)."""
+    return gallery.action_grid(ACTION_LO, ACTION_HI, GRID_N)
 
 
-@jax.jit
-def _efe_grid(model, belief, preference, candidates):
-    """The EFE ``G`` of every candidate action — one ``vmap`` of the library kernel."""
-    return jax.vmap(lambda a: expected_free_energy(model, belief, a, preference)[0])(
-        candidates
-    )
+_efe_grid = gallery.efe_over_grid
 
 
 def simulate(regime, backend_cls=KalmanBackend, *, seed=7):
@@ -295,6 +288,7 @@ def simulate(regime, backend_cls=KalmanBackend, *, seed=7):
         assert preference is not None  # built above on the "efe" path
         assert candidates is not None  # built above on the "efe" path
         g = _efe_grid(model, belief, preference, candidates)
+        assert candidates_np is not None  # built above on the "efe" path
         return candidates_np[int(np.argmin(np.asarray(g)))]
 
     a_mat = np.eye(2)
@@ -422,30 +416,14 @@ def scan():
 
 
 def _ellipse(ax, mean, cov, color, *, alpha_fill=0.16, max_diameter=None):
-    """A 2-sigma covariance ellipse, with its on-screen size capped.
+    """This demo's 2-sigma covariance ellipse, with its on-screen size capped.
 
-    The food prior covariance starts wide (``FOOD_PRIOR_COV``, by design — the
-    agent is meant to have to detour to learn it), so its raw 2-sigma diameter at
-    step 0 can exceed the whole plot. Drawing that literally floods the panel
-    with solid fill and makes early frames look broken; capping the DISPLAYED
-    diameter (never the underlying belief, only this patch's size) keeps every
-    frame readable while still reading as "wide and uncertain."
+    ``FOOD_PRIOR_COV`` starts wide by design. The agent is meant to have to detour to
+    learn it, so the raw 2-sigma diameter at step 0 can exceed the whole plot.
+    ``max_diameter`` caps the DISPLAYED size only, never the underlying belief.
     """
-    from matplotlib.patches import Ellipse
-
-    vals, vecs = np.linalg.eigh(cov)
-    vals = np.clip(vals, 1e-9, None)
-    angle = np.degrees(np.arctan2(vecs[1, 0], vecs[0, 0]))
-    w, h = 2 * 2.0 * np.sqrt(vals)
-    if max_diameter is not None:
-        w, h = min(w, max_diameter), min(h, max_diameter)
-    ax.add_patch(
-        Ellipse(mean, w, h, angle=angle, facecolor=color, alpha=alpha_fill, zorder=3)
-    )
-    ax.add_patch(
-        Ellipse(
-            mean, w, h, angle=angle, facecolor="none", edgecolor=color, lw=1.2, zorder=3
-        )
+    gallery.draw_covariance_ellipse(
+        ax, mean, cov, color, alpha_fill=alpha_fill, max_diameter=max_diameter
     )
 
 
@@ -464,14 +442,11 @@ def render(regimes, runs, out_path, *, fps=20):
     fastest-arriving regime's final on-screen count is directly comparable to
     the others' as a per-regime "how long did this take" readout.
     """
-    import matplotlib as mpl
-
-    mpl.use("Agg")
+    gallery.use_headless_backend()
     import matplotlib.pyplot as plt
     from bacillus_seeking_food import BEACON as BEACON_COLOR
     from bacillus_seeking_food import BELIEF, BG, BODY, FOOD, GRID, INK, _draw_bacillus
     from bacillus_seeking_food import _precision_field as flagship_precision_field
-    from PIL import Image
 
     allpts = np.concatenate(
         [runs[r["key"]][0] for r in regimes]
@@ -718,28 +693,12 @@ def render(regimes, runs, out_path, *, fps=20):
         fig.subplots_adjust(
             left=0.035, right=0.965, top=0.905, bottom=0.10, wspace=0.10, hspace=0.30
         )
-        fig.canvas.draw()
-        frames.append(
-            Image.fromarray(np.asarray(fig.canvas.buffer_rgba())).convert("RGB")
-        )
+        frames.append(gallery.figure_frame(fig))
         plt.close(fig)
 
-    hold = max(1, int(fps * 1.1))
-    frames.extend(frames[-1:] * hold)
-    palette = frames[-1].quantize(colors=128, method=Image.MEDIANCUT)
-    qframes = [f.quantize(palette=palette, dither=Image.NONE) for f in frames]
-
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    qframes[0].save(
-        out_path,
-        save_all=True,
-        append_images=qframes[1:],
-        duration=int(1000 / fps),
-        loop=0,
-        optimize=True,
-        disposal=2,
+    return gallery.write_gif(
+        frames, out_path, fps=fps, hold_seconds=1.1, quantize_colors=128
     )
-    return out_path
 
 
 def main():

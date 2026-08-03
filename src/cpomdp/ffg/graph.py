@@ -130,7 +130,7 @@ class CouplingGraph:
                 seen.add(node)
                 node = parent_of[node]
 
-    def infer(self, prior: Belief, readings: dict[int, ArrayLike]) -> Belief:
+    def infer(self, prior: Belief, readings: Mapping[int, ArrayLike]) -> Belief:
         """Compute the marginal belief at the root from a prior and per-node readings.
 
         Each reading becomes a message about its node; those messages are passed up the

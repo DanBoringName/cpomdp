@@ -65,24 +65,37 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import jax
+import gallery
 import jax.numpy as jnp
 import numpy as np
 
 from cpomdp.control import LQRController
-from cpomdp.efe import expected_free_energy
 from cpomdp.observation import CallableSensor
 from cpomdp.selection import Preference
 from cpomdp.types import Belief, LinearGaussianModel
 
 # --- Okabe-Ito colourblind-safe palette --------------------------------------
-BG = "#FAFAFA"
-INK = "#2B2B2B"
-GRID = "#E4E4E4"
-BODY = "#009E73"  # bluish-green -- the bacillus body (the organism itself)
-BELIEF = "#E69F00"  # orange       -- the belief mean (mu)
-BEACON = "#0072B2"  # blue         -- the beacon / good-sensing region
-FOOD = "#D55E00"  # vermillion   -- the food / goal
+BG, INK, GRID = gallery.FIELD.bg, gallery.FIELD.ink, gallery.FIELD.grid
+BODY = gallery.GREEN  # bluish-green -- the bacillus body (the organism itself)
+BELIEF = gallery.ORANGE  # orange       -- the belief mean (mu)
+BEACON = gallery.BLUE  # blue         -- the beacon / good-sensing region
+FOOD = gallery.VERMILLION  # vermillion   -- the food / goal
+
+# A shade smaller than the default glyph. It sits one layer higher, so it rides above
+# the precision field the panels shade underneath it.
+BACILLUS = gallery.BacillusStyle(
+    body=BODY,
+    ink=INK,
+    length=0.52,
+    width=0.26,
+    edge_width=1.4,
+    flagellum_points=22,
+    flagellum_amplitude=0.14,
+    flagellum_width=1.2,
+    eye_offset=0.06,
+    eye_size=2.0,
+    zorder=7,
+)
 
 VERSION_TAG = "cpomdp v0.3"
 
@@ -204,24 +217,11 @@ def build_model():
 
 
 def _candidate_grid():
-    """The front-loaded GRID_N² grid of one-step action candidates, shape (k², 2)."""
-    axis = jnp.linspace(ACTION_LO, ACTION_HI, GRID_N)
-    ax, ay = jnp.meshgrid(axis, axis)
-    return jnp.stack([ax.ravel(), ay.ravel()], axis=1)
+    """This demo's GRID_N² grid of one-step action candidates, shape (k², 2)."""
+    return gallery.action_grid(ACTION_LO, ACTION_HI, GRID_N)
 
 
-@jax.jit
-def _efe_grid(model, belief, preference, candidates):
-    """The EFE ``G`` of every candidate action, via the library kernel.
-
-    One ``vmap`` of ``expected_free_energy`` across the grid; the ``argmin`` (the
-    chosen action) happens outside. The explore/exploit balance is set entirely by
-    ``preference.precision`` Λ — this is the real public path, not a hand-weighted
-    recombination of the pragmatic/epistemic split.
-    """
-    return jax.vmap(lambda a: expected_free_energy(model, belief, a, preference)[0])(
-        candidates
-    )
+_efe_grid = gallery.efe_over_grid
 
 
 def simulate(regime, *, seed=7):
@@ -258,6 +258,7 @@ def simulate(regime, *, seed=7):
 
     def choose(belief):
         if regime["kind"] == "lqr":
+            assert controller is not None  # built above on the "lqr" path
             act = np.asarray(controller.action(belief.mean, FOOD_PT))
             return np.clip(act, ACTION_LO, ACTION_HI)
         g = _efe_grid(model, belief, preference, candidates)
@@ -271,11 +272,14 @@ def simulate(regime, *, seed=7):
     means = [np.asarray(belief.mean)]
     covs = [np.asarray(belief.cov)]
 
+    # `noise_params` belongs to the concrete sensor, not to the ObservationModel
+    # protocol, so reach for it once here rather than through the model each step.
+    sensor = model.observation
+    params = sensor.noise_params
+
     for _ in range(N_STEPS):
         # sense the current true position with the local noise R(true)
-        r_here = np.asarray(
-            beacon_noise(jnp.asarray(true), model.observation.noise_params)
-        )
+        r_here = np.asarray(beacon_noise(jnp.asarray(true), params))
         obs = true + np.linalg.cholesky(r_here) @ rng.standard_normal(2)
         belief = backend.infer_states(obs, belief, last_action)
         action = np.asarray(choose(belief), dtype=float)
@@ -336,47 +340,17 @@ def scan():
         )
 
 
-def _draw_bacillus(ax, pos, heading, phase, *, length=0.52, width=0.26):
-    """A capsule body with a wiggling flagellum, oriented along ``heading``."""
-    from matplotlib.patches import FancyBboxPatch
-    from matplotlib.transforms import Affine2D
-
-    n = float(np.hypot(*heading))
-    heading = heading / n if n > 1e-6 else np.array([1.0, 0.0])
-    angle = float(np.degrees(np.arctan2(heading[1], heading[0])))
-
-    body = FancyBboxPatch(
-        (-length / 2, -width / 2),
-        length,
-        width,
-        boxstyle="round,pad=0,rounding_size=" + str(width / 2),
-        linewidth=1.4,
-        edgecolor=INK,
-        facecolor=BODY,
-        joinstyle="round",
-        zorder=7,
-    )
-    body.set_transform(
-        Affine2D().rotate_deg(angle).translate(pos[0], pos[1]) + ax.transData
-    )
-    ax.add_patch(body)
-
-    # Flagellum: a damped sine trailing from the rear, swimming as `phase` runs.
-    t = np.linspace(0, 1, 22)
-    fx = -length / 2 - t * length * 1.5
-    fy = 0.14 * np.sin(2.5 * np.pi * t + phase) * t
-    rad = np.radians(angle)
-    rot = np.array([[np.cos(rad), -np.sin(rad)], [np.sin(rad), np.cos(rad)]])
-    world = rot @ np.vstack([fx, fy]) + pos[:, None]
-    ax.plot(world[0], world[1], color=BODY, lw=1.2, alpha=0.85, zorder=6)
-
-    # Eyespots so the front end reads as the front end.
-    for off in (-0.06, 0.06):
-        ex, ey = rot @ np.array([length * 0.22, off]) + pos[:2]
-        ax.plot(ex, ey, "o", color=INK, ms=2.0, zorder=8)
+def _draw_bacillus(ax, pos, heading, phase):
+    """This demo's bacillus glyph: the shared one, in this demo's proportions."""
+    gallery.draw_bacillus(ax, pos, heading, phase, BACILLUS)
 
 
-def _precision_field(xlim, ylim, model, res=130):
+def _precision_field(
+    xlim: tuple[float, float],
+    ylim: tuple[float, float],
+    model: LinearGaussianModel,
+    res: int = 130,
+):
     """Sensor *sharpness* (−ln R) sampled over the arena, as ``(xs, ys, field)``.
 
     Drawn as a few discrete contour bands — a faint 'signal strength' map showing,
@@ -385,7 +359,9 @@ def _precision_field(xlim, ylim, model, res=130):
     """
     xs = np.linspace(*xlim, res)
     ys = np.linspace(*ylim, res)
-    params = model.observation.noise_params
+    sensor = model.observation
+    assert isinstance(sensor, CallableSensor)  # the field is that sensor's R(x)
+    params = sensor.noise_params
     field = np.empty((res, res))
     for j, yy in enumerate(ys):
         for i, xx in enumerate(xs):
@@ -396,12 +372,9 @@ def _precision_field(xlim, ylim, model, res=130):
 
 def render(regimes, runs, beacon, food, out_path, *, fps=20):
     """Draw the 2×2 grid, one panel per regime, and write the looping GIF."""
-    import matplotlib as mpl
-
-    mpl.use("Agg")
+    gallery.use_headless_backend()
     import matplotlib.pyplot as plt
     from matplotlib.patches import Ellipse
-    from PIL import Image
 
     # shared arena limits across all panels
     allpts = np.concatenate(
@@ -632,33 +605,15 @@ def render(regimes, runs, beacon, food, out_path, *, fps=20):
         fig.subplots_adjust(
             left=0.035, right=0.965, top=0.905, bottom=0.10, wspace=0.10, hspace=0.30
         )
-        fig.canvas.draw()
-        frames.append(
-            Image.fromarray(np.asarray(fig.canvas.buffer_rgba())).convert("RGB")
-        )
+        frames.append(gallery.figure_frame(fig))
         plt.close(fig)
 
-    hold = max(1, int(fps * 1.1))
-    frames.extend(frames[-1:] * hold)
-
-    # Quantise every frame to ONE shared ≤128-colour palette built from the final
-    # frame (it carries the murk heatmap, all four trajectories, and every marker
-    # colour). A smooth per-frame palette would balloon the GIF; a shared indexed
-    # palette keeps it small and avoids inter-frame colour flicker.
-    palette = frames[-1].quantize(colors=128, method=Image.MEDIANCUT)
-    qframes = [f.quantize(palette=palette, dither=Image.NONE) for f in frames]
-
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    qframes[0].save(
-        out_path,
-        save_all=True,
-        append_images=qframes[1:],
-        duration=int(1000 / fps),
-        loop=0,
-        optimize=True,
-        disposal=2,
+    # One shared 128-colour palette. It comes from the final frame, where every colour
+    # the GIF uses is on screen, from the murk heatmap to all four trajectories and
+    # every marker colour.
+    return gallery.write_gif(
+        frames, out_path, fps=fps, hold_seconds=1.1, quantize_colors=128
     )
-    return out_path
 
 
 def main():

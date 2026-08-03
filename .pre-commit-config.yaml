@@ -14,11 +14,13 @@ repos:
   # Strict type-checking, mirroring the CI `ty (strict types)` step exactly.
   # A local hook running the same `uv run ty check` keeps local and CI in lockstep
   # (the pinned ty version lives in pyproject's dev group, like ruff above).
+  # `--extra examples` puts matplotlib and pillow in reach, since `examples/` is inside
+  # the checked tree and its demos import them.
   - repo: local
     hooks:
       - id: ty
         name: ty (strict types)
-        entry: uv run ty check
+        entry: uv run --extra examples ty check
         language: system
         types: [python]
         pass_filenames: false
@@ -40,8 +42,9 @@ repos:
     hooks:
       - id: markdownlint-cli2
         # The mkdocs single-source stubs aren't standalone documents (they're
-        # `--8<--` includes of README.md / CHANGELOG.md), so skip them.
-        exclude: ^docs/(index|changelog)\.md$
+        # `--8<--` includes of README.md / CHANGELOG.md / the example galleries),
+        # so skip them.
+        exclude: ^docs/(index|changelog|examples|examples-ffg)\.md$
 
   # Spell-check prose and docstrings. The dictionary and ignores live in
   # `cspell.json`, so the editor extension and these hooks agree. pre-commit
@@ -55,7 +58,7 @@ repos:
         name: cspell (markdown)
         types: [markdown]
         # The mkdocs single-source stubs are `--8<--` includes, not documents.
-        exclude: ^docs/(index|changelog)\.md$
+        exclude: ^docs/(index|changelog|examples|examples-ffg)\.md$
       - id: cspell
         name: cspell (src docstrings)
         types: [python]

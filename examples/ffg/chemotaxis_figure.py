@@ -24,6 +24,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+sys.path.append(str(Path(__file__).resolve().parent.parent))  # examples/, for `gallery`
+
+import gallery
 import numpy as np
 from chemotaxis_model import CHEA, CHEB, CHEY, MOTOR_A, MOTOR_B, chemotaxis_ffg
 
@@ -119,10 +122,11 @@ def _posteriors() -> tuple[Belief, Belief, float]:
 
 
 # --- rendering ------------------------------------------------------------------
-BG, INK, GRID, GRAY = "#FAFAFA", "#2B2B2B", "#D8D8D8", "#9A9A9A"
-HUB_C = "#CC79A7"  # the hidden CheA hub we infer
+BG, INK = gallery.DIAGRAM.bg, gallery.DIAGRAM.ink
+GRID, GRAY = gallery.DIAGRAM.grid, gallery.DIAGRAM.faint
+HUB_C = gallery.PINK  # the hidden CheA hub we infer
 HIDDEN_C = "#56707F"  # other hidden node (CheY)
-OBS_C = "#0072B2"  # observed leaf
+OBS_C = gallery.BLUE  # observed leaf
 
 # label, (x, y) in axes fraction, colour, observed?
 _NODES = {
@@ -236,9 +240,7 @@ def _draw_network(ax) -> None:
 
 def render(out_path: Path) -> Path:
     """Draw the chemotaxis-network figure and write it to ``out_path``."""
-    import matplotlib as mpl
-
-    mpl.use("Agg")
+    gallery.use_headless_backend()
     import matplotlib.pyplot as plt
 
     native, _flat, gap = _posteriors()
@@ -289,35 +291,21 @@ def render(out_path: Path) -> Path:
         fontsize=7.6,
     )
     fig.subplots_adjust(left=0.03, right=0.97, top=0.9, bottom=0.2)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_path, dpi=150, facecolor=BG)
+    gallery.save_figure(fig, out_path, dpi=150, facecolor=BG)
     plt.close(fig)
     return out_path
 
 
 def _print_check() -> None:
     native, flat, gap = _posteriors()
-    verdict = "PASS" if gap < EQUIV_TOL else "FAIL"
-    print("hidden CheA hub — same network, two routes:")
-    print(
-        f"  CouplingGraph.infer    : μ={float(native.mean[0]):.6f}  "
-        f"var={float(native.cov[0, 0]):.6f}"
+    gallery.print_two_route_agreement(
+        "hidden CheA hub — same network, two routes:", native, flat, gap, EQUIV_TOL
     )
-    print(
-        f"  flattened KalmanBackend: μ={float(flat.mean[0]):.6f}  "
-        f"var={float(flat.cov[0, 0]):.6f}"
-    )
-    print(f"  max |difference|       : {gap:.2e}  ->  {verdict}")
 
 
 def main() -> None:
     """``--check`` prints both routes' CheA posteriors; otherwise render the figure."""
-    if "--check" in sys.argv:
-        _print_check()
-        return
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
-    out_path = Path(args[0]) if args else Path("docs/assets/chemotaxis.png")
-    print(f"rendering -> {render(out_path)}")
+    gallery.figure_main(render, "docs/assets/chemotaxis.png", check=_print_check)
 
 
 if __name__ == "__main__":

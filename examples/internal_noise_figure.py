@@ -20,12 +20,12 @@ Output: docs/assets/internal_noise.png
 
 from pathlib import Path
 
+import gallery
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
 from cpomdp.dynamics import CallableProcessNoise
-from cpomdp.efe import expected_free_energy
 from cpomdp.selection import Preference
 from cpomdp.types import Belief, LinearGaussianModel
 
@@ -71,38 +71,22 @@ def _model(process_noise=None):
 
 
 def _sweep(model):
-    prag, epi, g = [], [], []
-    for a in ACTIONS:
-        g_a, parts = expected_free_energy(model, BELIEF, jnp.array([a]), GOAL)
-        g.append(float(g_a))
-        prag.append(float(parts["pragmatic"]))
-        epi.append(float(parts["epistemic"]))
-    return np.array(prag), np.array(epi), np.array(g)
+    """Pragmatic, epistemic, and G over this demo's action sweep."""
+    return gallery.efe_sweep(model, BELIEF, GOAL, ACTIONS)
 
 
 def _panel(ax, prag, epi, g, title, note):
-    actions = np.asarray(ACTIONS)
-    ax.plot(actions, prag, color="#e8833a", lw=2.2, label="pragmatic (goal cost)")
-    ax.plot(actions, epi, color="#2ca6a4", lw=2.2, label="epistemic (info gain)")
-    ax.plot(actions, g, color="#5b3a8a", lw=3.0, label="G = pragmatic − epistemic")
-    a_g = actions[int(np.argmin(g))]
-    a_prag = actions[int(np.argmin(prag))]
-    ax.axvline(a_prag, color="#e8833a", ls=":", lw=1.6)
-    ax.axvline(a_g, color="#5b3a8a", ls="--", lw=1.6)
-    ax.scatter([a_g], [g.min()], color="#5b3a8a", zorder=5, s=45)
-    ax.set_title(title, fontsize=12, fontweight="bold")
-    ax.set_xlabel("action  (one-step move of state)")
-    ax.annotate(
-        note,
-        xy=(0.5, -0.30),
-        xycoords="axes fraction",
-        ha="center",
-        va="top",
-        fontsize=9.5,
-        color="#333333",
+    """This demo's EFE panel: the shared one, labelled for a latent state."""
+    gallery.draw_efe_panel(
+        ax,
+        ACTIONS,
+        prag,
+        epi,
+        g,
+        title=title,
+        note=note,
+        xlabel="action  (one-step move of state)",
     )
-    ax.grid(True, alpha=0.25)
-    ax.legend(loc="upper right", fontsize=8.5, framealpha=0.9)
 
 
 def main():
@@ -151,9 +135,7 @@ def main():
     )
 
     fig.tight_layout(rect=(0, 0.04, 1, 0.95))
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(OUT, dpi=150, bbox_inches="tight")
-    print(f"wrote {OUT}")
+    print(f"wrote {gallery.save_figure(fig, OUT, dpi=150, tight=True)}")
 
 
 if __name__ == "__main__":

@@ -37,26 +37,25 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import matplotlib as mpl
-
-mpl.use("Agg")  # headless: render to a buffer, never open a window
-
+import gallery
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.patches import Ellipse, FancyBboxPatch
-from matplotlib.transforms import Affine2D
+from matplotlib.patches import Ellipse
 from PIL import Image
 
 from cpomdp import Agent, Belief, LinearGaussianModel, StateGoal
 
+gallery.use_headless_backend()  # render to a buffer, never open a window
+
 # --- Okabe-Ito colourblind-safe palette --------------------------------------
-BG = "#FAFAFA"
-INK = "#2B2B2B"
-GRID = "#E4E4E4"
-AGENT = "#009E73"  # bluish-green -- the true bacillus
-BELIEF = "#E69F00"  # orange       -- the belief mean (mu)
-SIGMA = "#56B4E9"  # sky blue     -- the uncertainty ellipse (Sigma)
-FOOD = "#D55E00"  # vermillion   -- the food / goal
+BG, INK, GRID = gallery.FIELD.bg, gallery.FIELD.ink, gallery.FIELD.grid
+AGENT = gallery.GREEN  # bluish-green -- the true bacillus
+BELIEF = gallery.ORANGE  # orange       -- the belief mean (mu)
+SIGMA = gallery.SKY  # sky blue     -- the uncertainty ellipse (Sigma)
+FOOD = gallery.VERMILLION  # vermillion   -- the food / goal
+
+# This demo's bacillus: the shared glyph's default proportions.
+BACILLUS = gallery.BacillusStyle(body=AGENT, ink=INK)
 
 VERSION_TAG = "cpomdp v0.2.0"
 
@@ -134,6 +133,8 @@ def simulate(n_steps: int, dt: float, seed: int = 7):
     means = [agent.belief.mean.copy()]
     covs = [agent.belief.cov[:2, :2].copy()]
     sensor_chol = np.linalg.cholesky(model.sensor_noise)
+    control = model.control
+    assert control is not None  # the swimmer is built with one, just above
 
     for _ in range(n_steps):
         # The agent sees a noisy reading of its true position, then perceives.
@@ -146,52 +147,14 @@ def simulate(n_steps: int, dt: float, seed: int = 7):
         covs.append(agent.belief.cov[:2, :2].copy())  # positional block only
 
         # Advance the true plant with the action the agent actually applied.
-        true_state = model.dynamics @ true_state + model.control @ action
+        true_state = model.dynamics @ true_state + control @ action
 
     return true_states, means, covs, food
 
 
-def _draw_bacillus(ax, pos, heading, phase, *, length=0.62, width=0.30):
-    """A capsule body with a wiggling flagellum, oriented along ``heading``."""
-    angle = np.degrees(np.arctan2(heading[1], heading[0]))
-
-    # Rounded-rectangle capsule, drawn centred at the origin then rotated/moved.
-    body = FancyBboxPatch(
-        (-length / 2, -width / 2),
-        length,
-        width,
-        boxstyle="round,pad=0,rounding_size=" + str(width / 2),
-        linewidth=1.6,
-        edgecolor=INK,
-        facecolor=AGENT,
-        joinstyle="round",
-        zorder=6,
-    )
-    body.set_transform(
-        Affine2D().rotate_deg(angle).translate(pos[0], pos[1]) + ax.transData
-    )
-    ax.add_patch(body)
-
-    # Flagellum: a damped sine trailing from the rear, swimming as ``phase`` runs.
-    n = 24
-    t = np.linspace(0, 1, n)
-    fx = -length / 2 - t * length * 1.5
-    fy = 0.16 * np.sin(2.5 * np.pi * t + phase) * t
-    local = np.vstack([fx, fy])
-    rot = np.array(
-        [
-            [np.cos(np.radians(angle)), -np.sin(np.radians(angle))],
-            [np.sin(np.radians(angle)), np.cos(np.radians(angle))],
-        ]
-    )
-    world = rot @ local + pos[:, None]
-    ax.plot(world[0], world[1], color=AGENT, lw=1.4, alpha=0.85, zorder=5)
-
-    # A pair of eyespots so the front end reads as the front end.
-    for off in (-0.07, 0.07):
-        eye_local = np.array([length * 0.22, off])
-        ex, ey = rot @ eye_local + pos[:2]
-        ax.plot(ex, ey, "o", color=INK, ms=2.4, zorder=7)
+def _draw_bacillus(ax, pos, heading, phase):
+    """This demo's bacillus glyph: the shared one, in this demo's colours."""
+    gallery.draw_bacillus(ax, pos, heading, phase, BACILLUS)
 
 
 def render(true_states, means, covs, food, out_path: Path, dt: float, fps: int = 20):
@@ -240,13 +203,10 @@ def render(true_states, means, covs, food, out_path: Path, dt: float, fps: int =
             ax.plot(tr[:, 0], tr[:, 1], color=AGENT, lw=1.3, alpha=0.35, zorder=2)
 
         # --- uncertainty ellipse (2-sigma of the positional covariance) ------
-        vals, vecs = np.linalg.eigh(cov)
-        vals = np.clip(vals, 1e-9, None)
-        ell_angle = np.degrees(np.arctan2(vecs[1, 0], vecs[0, 0]))
-        w, h = 2 * 2.0 * np.sqrt(vals)  # 2-sigma diameters
+        w, h, ell_angle = gallery.covariance_ellipse(cov)  # 2-sigma diameters
         ax.add_patch(
             Ellipse(
-                mean_pos,
+                gallery.xy(mean_pos),
                 w,
                 h,
                 angle=ell_angle,
@@ -259,7 +219,7 @@ def render(true_states, means, covs, food, out_path: Path, dt: float, fps: int =
         )
         ax.add_patch(
             Ellipse(
-                mean_pos,
+                gallery.xy(mean_pos),
                 w,
                 h,
                 angle=ell_angle,
@@ -371,26 +331,11 @@ def render(true_states, means, covs, food, out_path: Path, dt: float, fps: int =
         )
 
         fig.tight_layout()
-        fig.canvas.draw()
-        buf = np.asarray(fig.canvas.buffer_rgba())
-        frames.append(Image.fromarray(buf).convert("RGB"))
+        frames.append(gallery.figure_frame(fig))
         plt.close(fig)
 
     # Hold the final frame a beat, then loop cleanly.
-    hold = max(1, int(fps * 1.2))
-    frames.extend(frames[-1:] * hold)
-
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    frames[0].save(
-        out_path,
-        save_all=True,
-        append_images=frames[1:],
-        duration=int(1000 / fps),
-        loop=0,
-        optimize=True,
-        disposal=2,
-    )
-    return out_path
+    return gallery.write_gif(frames, out_path, fps=fps, hold_seconds=1.2)
 
 
 def main() -> None:

@@ -32,6 +32,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+sys.path.append(str(Path(__file__).resolve().parent.parent))  # examples/, for `gallery`
+
+import gallery
 import numpy as np
 
 from cpomdp.backends.kalman import KalmanBackend
@@ -176,7 +179,8 @@ def _posteriors() -> tuple[Belief, Belief, float]:
 
 # --- rendering -------------------------------------------------------------------
 
-BG, INK, GRID, GRAY = "#FAFAFA", "#2B2B2B", "#D8D8D8", "#9A9A9A"
+BG, INK = gallery.DIAGRAM.bg, gallery.DIAGRAM.ink
+GRID, GRAY = gallery.DIAGRAM.grid, gallery.DIAGRAM.faint
 TARGET, HUB_C, LEAF_C = "#CC79A7", "#56707F", "#0072B2"  # root / hub / observed leaf
 GLOW = "#E69F00"
 PANEL = "#F0F0F0"  # the code box background
@@ -389,9 +393,7 @@ def _draw_matrix(ax, lam: np.ndarray) -> None:
 
 def render(out_path: Path) -> Path:
     """Build the two-panel difference figure and write it to ``out_path``."""
-    import matplotlib as mpl
-
-    mpl.use("Agg")
+    gallery.use_headless_backend()
     import matplotlib.pyplot as plt
 
     native, _flat, gap = _posteriors()
@@ -461,31 +463,26 @@ def render(out_path: Path) -> Path:
         fontsize=7.5,
     )
 
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_path, dpi=150, facecolor=BG)
+    gallery.save_figure(fig, out_path, dpi=150, facecolor=BG)
     plt.close(fig)
     return out_path
 
 
 def _print_check() -> None:
     native, flat, gap = _posteriors()
-    nm, nv = float(native.mean[0]), float(native.cov[0, 0])
-    fm, fv = float(flat.mean[0]), float(flat.cov[0, 0])
-    verdict = "PASS" if gap < EQUIV_TOL else "FAIL"
-    print("belief over r — same tree, two routes:")
-    print(f"  CouplingGraph.infer    : mu={nm:.6f}  var={nv:.6f}")
-    print(f"  flattened KalmanBackend: mu={fm:.6f}  var={fv:.6f}")
-    print(f"  max |difference|       : {gap:.2e}  ->  {verdict}")
+    gallery.print_two_route_agreement(
+        "belief over r — same tree, two routes:",
+        native,
+        flat,
+        gap,
+        EQUIV_TOL,
+        mean_symbol="mu",
+    )
 
 
 def main() -> None:
     """``--check`` prints the two routes' posteriors; otherwise render the figure."""
-    if "--check" in sys.argv:
-        _print_check()
-        return
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
-    out_path = Path(args[0]) if args else Path("docs/assets/coupling_graph.png")
-    print(f"rendering -> {render(out_path)}")
+    gallery.figure_main(render, "docs/assets/coupling_graph.png", check=_print_check)
 
 
 if __name__ == "__main__":
