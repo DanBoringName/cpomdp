@@ -61,7 +61,9 @@ plugins:
 nav:
   - Home: index.md
   - Step-by-step guide: guides/step-by-step.md
-  - Examples: examples.md
+  - Examples:
+      - Gallery: examples.md
+      - FFG examples: examples-ffg.md
   - API reference:
       - Agent: api/agent.md
       - Model & belief: api/model.md
