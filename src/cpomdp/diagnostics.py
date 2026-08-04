@@ -54,11 +54,12 @@ if TYPE_CHECKING:
 
 
 class ProbeBackend(Protocol):
-    """The three members ``probe_model`` reads off a graph backend.
+    """The three members [`probe_model`][cpomdp.probe_model] reads off a graph backend.
 
     Structural rather than a name, because three members is what the function requires.
     Any backend growing them works, and the diagnostic keeps its one-way dependency on
-    the backends package. ``CouplingGraphBackend`` satisfies it.
+    the backends package. [`CouplingGraphBackend`][cpomdp.CouplingGraphBackend]
+    satisfies it.
     """
 
     @property
@@ -237,15 +238,16 @@ def probe_model(
     widen it.
 
     Args:
-        model: a ``LinearGaussianModel``, or a backend exposing
-            ``predicted_belief`` / ``observation_noise_at`` / ``observation_model``
-            (``CouplingGraphBackend`` does).
+        model: a [`LinearGaussianModel`][cpomdp.LinearGaussianModel], or a backend
+            exposing ``predicted_belief`` / ``observation_noise_at`` /
+            ``observation_model`` ([`CouplingGraphBackend`][cpomdp.CouplingGraphBackend]
+            does).
         belief: the belief to predict from — the shared prior every action starts at.
         actions: the candidate actions to sample.
         tol: below this, two noise covariances or two epistemic values count as equal.
 
     Returns:
-        A ``SensorReport``.
+        A [`SensorReport`][cpomdp.SensorReport].
 
     Raises:
         ValueError: If ``actions`` is empty.

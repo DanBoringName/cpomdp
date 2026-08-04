@@ -141,8 +141,9 @@ class GaussianObservation:
 class CallableGaussianObservation:
     """Likelihood factor with state-dependent noise ``N(y; Cx, R(x))`` (issue #27).
 
-    The state-dependent sibling of ``GaussianObservation``: the observation map stays
-    linear (constant ``C``), but the noise covariance varies with the state through
+    The state-dependent sibling of [`GaussianObservation`][cpomdp.GaussianObservation]:
+    the observation map stays linear (constant ``C``), but the noise covariance varies
+    with the state through
     ``noise_fn(x, params) -> R(x)``. Evaluated at the predicted mean ``μ⁺`` — which the
     action moves — ``R`` is no longer action-invariant, so the FFG epistemic term stops
     collapsing to LQR (ADR-003) and the chosen action can seek states where the sensor
@@ -429,8 +430,9 @@ class GaussianTransition:
 class GaussianCoupling:
     """Tier-1 structural coupling factor ``N(child; W·parent, Q)`` — a graph edge.
 
-    Where ``GaussianTransition`` couples a state to its *successor in time*, this
-    couples two variables joined by an *edge of the factor graph* (e.g. the shared
+    Where [`GaussianTransition`][cpomdp.GaussianTransition] couples a state to its
+    *successor in time*, this couples two variables joined by an *edge of the factor
+    graph* (e.g. the shared
     ``CheA`` node to a branch latent). The maths is identical — a linear-Gaussian
     coupling — but a coupling carries no time semantics and ``W`` need not be square.
 

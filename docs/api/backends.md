@@ -8,7 +8,7 @@ The inference engine is swappable behind the `InferenceBackend` protocol. `Kalma
 
 ::: cpomdp.backends.rxinfer.RxInferBackend
 
-`CouplingGraphBackend` is the branching peer: message passing on a [`CouplingGraph`](ffg.md) rather than a chain. A state-dependent `R(x)` on a coupled node cannot be flattened to a fixed linear-Gaussian model, and asking it to raises `IncompatibleLinearizationError`.
+`CouplingGraphBackend` is the branching peer: message passing on a [`CouplingGraph`][cpomdp.CouplingGraph] rather than a chain. A state-dependent `R(x)` on a coupled node cannot be flattened to a fixed linear-Gaussian model, and asking it to raises `IncompatibleLinearizationError`.
 
 ::: cpomdp.CouplingGraphBackend
 

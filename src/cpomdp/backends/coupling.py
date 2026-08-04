@@ -36,7 +36,7 @@ class IncompatibleLinearizationError(ValueError):
     the coupling-resolved μ⁺ (issue #27, ADR-019). With a state-dependent ``R(x)`` and a
     mean-shifting coupling, μ⁻ ≠ μ⁺ and no fixed flat model reproduces the filter. The
     oracle is the standalone NumPy R(μ⁺) filter (backend tests) plus the single-node
-    ``CallableSensor`` cross-check.
+    [`CallableSensor`][cpomdp.CallableSensor] cross-check.
     """
 
 
@@ -110,19 +110,20 @@ class _JointObservation:
 class CouplingGraphBackend:
     """FFG message-passing inference on a *branching* linear-Gaussian tree.
 
-    Implements the ``InferenceBackend`` protocol for a ``CouplingGraph`` whose nodes
-    each carry their own temporal dynamics. Constructed once from the graph and the
-    per-node transitions, then advances a *joint* belief over every node one step at a
-    time (prior in, posterior out). Read a single node back with ``marginal`` /
-    ``readout``.
+    Implements the [`InferenceBackend`][cpomdp.InferenceBackend] protocol for a
+    [`CouplingGraph`][cpomdp.CouplingGraph] whose nodes each carry their own temporal
+    dynamics. Constructed once from the graph and the per-node transitions, then
+    advances a *joint* belief over every node one step at a time (prior in, posterior
+    out). Read a single node back with ``marginal`` / ``readout``.
 
     Args:
         graph: the rooted tree — the structural couplings (the within-slice drive
             ``child = W·parent + noise``) and the per-node observations.
-        transitions: one ``GaussianTransition`` (A_i, Q_i) per node, indexed by node,
-            so ``transitions[i]`` is node ``i``'s own dynamics. Each ``Q_i`` must be
-            positive-*definite* (the information form inverts it), the same divergence
-            from moment-form Kalman that ``ChainBackend`` carries.
+        transitions: one [`GaussianTransition`][cpomdp.GaussianTransition] (A_i, Q_i)
+            per node, indexed by node, so ``transitions[i]`` is node ``i``'s own
+            dynamics. Each ``Q_i`` must be positive-*definite* (the information form
+            inverts it), the same divergence from moment-form Kalman that
+            ``ChainBackend`` carries.
         control: B, shape ``(n_total, p)``, mapping an action into the joint state;
             ``None`` for a pure filtering model. ``n_total = sum(graph.dims)``.
         readout_node: the node ``readout`` returns; defaults to ``graph.root``. The
@@ -596,10 +597,11 @@ class CouplingGraphBackend:
                 a control matrix; ``None`` for pure filtering.
 
         Returns:
-            ``(beliefs, severed_masses)`` — the time-stacked posteriors (a ``Belief``
-            with a leading time axis: ``mean`` ``(T, n_total)``, ``cov``
-            ``(T, n_total, n_total)``) and the length-``T`` severed-mass profile. The
-            full-joint ``[[all]]`` partition profiles all-zero.
+            ``(beliefs, severed_masses)`` — the time-stacked posteriors (a
+            [`Belief`][cpomdp.Belief] with a leading time axis: ``mean``
+            ``(T, n_total)``, ``cov`` ``(T, n_total, n_total)``) and the length-``T``
+            severed-mass profile. The full-joint ``[[all]]`` partition profiles
+            all-zero.
         """
         observations = jnp.asarray(observations, dtype=float)
         if observations.ndim != 2 or observations.shape[1] != self.n_observations:
@@ -779,8 +781,9 @@ class CouplingGraphBackend:
         """The flat ``LinearGaussianModel`` of the *real* interface (the backend model).
 
         Block-diagonal dynamics (F, Q), the real sensors (C, R), and the control — the
-        joint state as one linear-Gaussian model, carrying the metadata an ``Agent``
-        reads (``n_observations``, ``control``, ``n_controls``). The ``Agent`` derives
+        joint state as one linear-Gaussian model, carrying the metadata an
+        [`Agent`][cpomdp.Agent] reads (``n_observations``, ``control``,
+        ``n_controls``). The ``Agent`` derives
         its own ``model`` from this, so passing the backend is enough (issue #26).
         Distinct from ``to_flat_model()``, which *augments* this with the structural
         couplings as pseudo-observations for the oracle cross-check.
@@ -821,10 +824,11 @@ class CouplingGraphBackend:
         The temporal edges become the block-diagonal transition (F, Q); the real
         observations and the structural couplings stack into one sensor, each coupling
         an always-zero pseudo-observation ``child − W·parent ~ N(0, Q_struct)``. Running
-        ``KalmanBackend`` or ``RxInferBackend`` on this reproduces this backend's filter
-        exactly — the independent cross-check, and what the Phase-3 demo contrasts the
-        native FFG against. Pad a step's readings with ``flat_observation`` first; the
-        returned prior is an unused placeholder (pass the real prior per step).
+        [`KalmanBackend`][cpomdp.KalmanBackend] or ``RxInferBackend`` on this
+        reproduces this backend's filter exactly — the independent cross-check, and what
+        the Phase-3 demo contrasts the native FFG against. Pad a step's readings with
+        ``flat_observation`` first; the returned prior is an unused placeholder (pass
+        the real prior per step).
 
         With couplings present a state-dependent ``R(x)`` is a *category error* for this
         route (``IncompatibleLinearizationError`` — the flat Kalman linearizes at μ⁻,
