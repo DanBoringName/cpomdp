@@ -35,8 +35,12 @@ markdown_extensions:
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.superfences
-  - pymdownx.snippets:
-      base_path: [.]
+
+# Pastes the `--8<--` includes (README, CHANGELOG, the two example galleries) into
+# their stub pages and repoints the relative links in them, so one file reads
+# correctly both on GitHub and here. See the module docstring.
+hooks:
+  - mkdocs_hooks.py
 
 plugins:
   - search
@@ -61,7 +65,9 @@ plugins:
 nav:
   - Home: index.md
   - Step-by-step guide: guides/step-by-step.md
-  - Examples: examples.md
+  - Examples:
+      - Gallery: examples.md
+      - FFG examples: examples-ffg.md
   - API reference:
       - Agent: api/agent.md
       - Model & belief: api/model.md
@@ -69,7 +75,9 @@ nav:
       - Process noise: api/dynamics.md
       - Model structure: api/structure.md
       - Backends: api/backends.md
+      - Factor graph models: api/ffg.md
       - Action selection & goals: api/selection.md
       - Expected free energy: api/efe.md
+      - Diagnostics: api/diagnostics.md
       - Control (internal): api/control.md
   - Changelog: changelog.md

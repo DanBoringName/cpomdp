@@ -2,13 +2,17 @@
 
 Each demo's ``check()`` asserts the numbers the paper quotes. Calling them here turns
 the manual ``--check`` into a regression gate: the assertions fire on every test run,
-not only when the script is run by hand. Both ``check()`` are plotting-free (matplotlib
-is imported lazily in the render path), so they run in the base test environment without
-the ``examples`` extra. ``conftest.py`` puts ``examples/`` and ``examples/ffg/`` on the
-path.
+not only when the script is run by hand. Every ``check()`` here is plotting-free
+(matplotlib is imported lazily in the render path), so they run in the base test
+environment without the ``examples`` extra. ``conftest.py`` puts ``examples/`` and
+``examples/ffg/`` on the path.
 """
 
+import bacillus_uncertain_food
+import chemotaxis_figure
+import coupling_graph_figure
 import crossover
+import crossover_horizon_figure
 import crossover_sweep
 import efe_collapse_figure
 import epistemic_dissociation_figure
@@ -26,10 +30,52 @@ def test_epistemic_dissociation_check():
     epistemic_dissociation_figure.check()
 
 
+def test_uncertain_food_backend_agreement():
+    """`KalmanBackend` and the FFG `ChainBackend` agree on the flagship's sensor.
+
+    The channel reads one state block while its noise is keyed on another, a topology
+    neither backend's own suite covers. Both get one scripted `(observation, action)`
+    sequence rather than two closed loops, so a near-tied argmin cannot send them down
+    different trajectories and be misread as a disagreement.
+
+    This is the flagship's only gate. It is also the README's hero demo, so importing
+    the module here fails the suite if the demo stops loading at all.
+    """
+    max_mean_diff, max_cov_diff = bacillus_uncertain_food.check_backend_agreement()
+    assert max_mean_diff < 1e-7, f"means diverge by {max_mean_diff:.2e}"
+    assert max_cov_diff < 1e-7, f"covariances diverge by {max_cov_diff:.2e}"
+
+
+def test_coupling_graph_two_routes_agree():
+    """`CouplingGraph.infer` on a branching tree matches the hand-flattened Kalman.
+
+    The demo prints the verdict, and until it was wired up here nothing consumed it: a
+    disagreement printed `FAIL` and exited zero.
+    """
+    coupling_graph_figure.check()
+
+
+def test_chemotaxis_two_routes_agree():
+    """The same equivalence on the five-node chemotaxis network, hub inferred through
+    its leaves. Its verdict was equally unconsumed."""
+    chemotaxis_figure.check()
+
+
 def test_crossover_sweep_check():
     """The constant reach/walk pair never crosses over — the search-family artefact that
     makes the exhaustive varying-sequence search necessary."""
     crossover_sweep.check()
+
+
+def test_crossover_horizon_check():
+    """The open-plane margin between a direct plan and a detour. The two animated
+    agents choose differently. The margin crosses zero exactly once as the horizon
+    grows. The epistemic pull stays flat while the pragmatic gradient decays under it,
+    and a frozen-R twin never crosses at any horizon in range.
+
+    Two 16-horizon sweeps, live and frozen. ~12s on the reference machine, under the
+    marker's threshold, and this is the demo's only gate. It stays on the PR path."""
+    crossover_horizon_figure.check()
 
 
 @pytest.mark.slow

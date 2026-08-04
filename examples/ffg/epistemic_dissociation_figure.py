@@ -43,8 +43,12 @@ still, the boundary panel, and a static triptych for the paper::
 from __future__ import annotations
 
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
+sys.path.append(str(Path(__file__).resolve().parent.parent))  # examples/, for `gallery`
+
+import gallery
 import jax.numpy as jnp
 import numpy as np
 
@@ -424,11 +428,8 @@ def check() -> None:
 # the dissociation as three held beats -- set off together, the cue read, the
 # crossing -- interpolated with easing so the belief visibly glides and sharpens
 # rather than jumping. Nothing here feeds back into the simulation.
-BG = "#F6F6F3"  # page
-PANEL = "#FFFFFF"  # panel fill
-INK = "#22262B"  # near-black text
-GRID = "#E2E2DE"  # hairlines / maze walls
-FAINT = "#8B9095"  # secondary text
+BG, PANEL, INK = gallery.PAPER.bg, gallery.PAPER.panel, gallery.PAPER.ink
+GRID, FAINT = gallery.PAPER.grid, gallery.PAPER.faint
 CUE_COLOR = "#0B6FB0"  # blue -- the cue and its sensing zone
 REWARD_COLOR = "#D5581C"  # vermillion -- the reward and the belief about it
 ALIVE = "#0E9E76"  # green -- Agent B, epistemic alive
@@ -437,44 +438,44 @@ ARM = 3.9  # half-length of the drawn arm axis
 Y0 = 0.60  # baseline of the belief-density strip above the corridor
 
 
-def _ease(t: float) -> float:
-    """Smoothstep easing -- eases both ends so motion starts and stops gently."""
-    t = min(max(t, 0.0), 1.0)
-    return t * t * (3.0 - 2.0 * t)
-
-
-def _lerp(a: float, b: float, t: float) -> float:
-    return a + (b - a) * t
-
-
 # The story as a handful of stops sampled from the run, each held for `hold` frames
 # and reached over `travel` eased frames. `reveal` fades the true reward in as B
 # commits. This is where the pacing lives -- the sim has 20 steps but the narrative
 # is these six beats; the static tail is dropped.
+@dataclass(frozen=True)
+class _Stop:
+    """One beat: the run step it samples, how long it holds, and what it says."""
+
+    i: int  # the simulation step this beat samples
+    hold: int  # frames held on the beat
+    travel: int  # eased frames spent reaching the next one
+    beat: str  # the caption under the panel
+    reveal: float = 0.0  # how far the true reward has faded in by here
+
+
 _STOPS = (
-    {
-        "i": 0,
-        "hold": 10,
-        "travel": 8,
-        "beat": "both believe the reward is on the left — they set off together",
-    },
-    {"i": 1, "hold": 2, "travel": 8, "beat": "closing on the cue"},
-    {
-        "i": 2,
-        "hold": 18,
-        "travel": 9,
-        "reveal": 0.0,
-        "beat": "B reads the cue: the reward is on the right — A reads nothing",
-    },
-    {"i": 3, "hold": 2, "travel": 7, "beat": "B reverses"},
-    {"i": 4, "hold": 2, "travel": 8, "reveal": 1.0, "beat": "… and crosses the maze"},
-    {
-        "i": 5,
-        "hold": 20,
-        "travel": 0,
-        "reveal": 1.0,
-        "beat": "B is on the reward; A is stranded at the wrong arm",
-    },
+    _Stop(
+        i=0,
+        hold=10,
+        travel=8,
+        beat="both believe the reward is on the left — they set off together",
+    ),
+    _Stop(i=1, hold=2, travel=8, beat="closing on the cue"),
+    _Stop(
+        i=2,
+        hold=18,
+        travel=9,
+        beat="B reads the cue: the reward is on the right — A reads nothing",
+    ),
+    _Stop(i=3, hold=2, travel=7, beat="B reverses"),
+    _Stop(i=4, hold=2, travel=8, beat="… and crosses the maze", reveal=1.0),
+    _Stop(
+        i=5,
+        hold=20,
+        travel=0,
+        beat="B is on the reward; A is stranded at the wrong arm",
+        reveal=1.0,
+    ),
 )
 
 
@@ -490,21 +491,21 @@ def _story_frames(run_a: dict, run_b: dict) -> list[dict]:
             "var": float(run["context_covs"][j]),
         }
 
-    pos_a = [run_a["positions"][s["i"]] for s in _STOPS]
-    pos_b = [run_b["positions"][s["i"]] for s in _STOPS]
-    reveal_of = [s.get("reveal", 0.0) for s in _STOPS]
+    pos_a = [run_a["positions"][s.i] for s in _STOPS]
+    pos_b = [run_b["positions"][s.i] for s in _STOPS]
+    reveal_of = [s.reveal for s in _STOPS]
 
     def frame(k, e, extra_a, extra_b):
         prev, nxt = _STOPS[k], _STOPS[min(k + 1, len(_STOPS) - 1)]
-        a0, a1 = sample(run_a, prev["i"]), sample(run_a, nxt["i"])
-        b0, b1 = sample(run_b, prev["i"]), sample(run_b, nxt["i"])
-        reveal = _lerp(reveal_of[k], reveal_of[min(k + 1, len(_STOPS) - 1)], e)
+        a0, a1 = sample(run_a, prev.i), sample(run_a, nxt.i)
+        b0, b1 = sample(run_b, prev.i), sample(run_b, nxt.i)
+        reveal = gallery.lerp(reveal_of[k], reveal_of[min(k + 1, len(_STOPS) - 1)], e)
         return {
-            "a": {key: _lerp(a0[key], a1[key], e) for key in a0},
-            "b": {key: _lerp(b0[key], b1[key], e) for key in b0},
+            "a": {key: gallery.lerp(a0[key], a1[key], e) for key in a0},
+            "b": {key: gallery.lerp(b0[key], b1[key], e) for key in b0},
             "reveal": reveal,
-            "beat": prev["beat"] if e < 0.5 else nxt["beat"],
-            "step": prev["i"] if e < 0.5 else nxt["i"],
+            "beat": prev.beat if e < 0.5 else nxt.beat,
+            "step": prev.i if e < 0.5 else nxt.i,
             "trail_a": extra_a,
             "trail_b": extra_b,
         }
@@ -513,13 +514,13 @@ def _story_frames(run_a: dict, run_b: dict) -> list[dict]:
     for k, stop in enumerate(_STOPS):
         trail_a = list(pos_a[: k + 1])
         trail_b = list(pos_b[: k + 1])
-        frames.extend(frame(k, 0.0, trail_a, trail_b) for _ in range(stop["hold"]))
+        frames.extend(frame(k, 0.0, trail_a, trail_b) for _ in range(stop.hold))
         if k + 1 < len(_STOPS):
-            span = stop["travel"]
+            span = stop.travel
             for t in range(1, span + 1):
-                e = _ease(t / span)
-                ta = [*trail_a, _lerp(pos_a[k], pos_a[k + 1], e)]
-                tb = [*trail_b, _lerp(pos_b[k], pos_b[k + 1], e)]
+                e = gallery.ease(t / span)
+                ta = [*trail_a, gallery.lerp(pos_a[k], pos_a[k + 1], e)]
+                tb = [*trail_b, gallery.lerp(pos_b[k], pos_b[k + 1], e)]
                 frames.append(frame(k, e, ta, tb))
     return frames
 
@@ -571,11 +572,11 @@ def _draw_maze(ax, *, reveal: float) -> None:
         REWARD_TRUE,
         0,
         marker="*",
-        ms=_lerp(0, 24, reveal) + 8,
+        ms=gallery.lerp(0, 24, reveal) + 8,
         color=REWARD_COLOR,
         mec=INK,
         mew=0.8 * reveal + 0.2,
-        alpha=_lerp(0.0, 1.0, reveal),
+        alpha=gallery.lerp(0.0, 1.0, reveal),
         zorder=7,
     )
     if hidden:
@@ -779,40 +780,20 @@ def _figure(fr):
 
 def render_gif(frames, out_path, *, fps=14):
     """Render the frame states to a looping GIF; slow fps keeps the beats readable."""
-    import matplotlib as mpl
-
-    mpl.use("Agg")
-    from PIL import Image
-
+    gallery.use_headless_backend()
     images = []
     for fr in frames:
         fig, plt = _figure(fr)
-        fig.canvas.draw()
-        images.append(
-            Image.fromarray(np.asarray(fig.canvas.buffer_rgba())).convert("RGB")
-        )
+        images.append(gallery.figure_frame(fig))
         plt.close(fig)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    images[0].save(
-        out_path,
-        save_all=True,
-        append_images=images[1:],
-        duration=int(1000 / fps),
-        loop=0,
-        optimize=True,
-        disposal=2,
-    )
-    return out_path
+    return gallery.write_gif(images, out_path, fps=fps)
 
 
 def render_still(frame, out_path):
     """Render one frame state to a high-DPI PNG (the hero still is the last frame)."""
-    import matplotlib as mpl
-
-    mpl.use("Agg")
+    gallery.use_headless_backend()
     fig, plt = _figure(frame)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_path, facecolor=BG, dpi=200)
+    gallery.save_figure(fig, out_path, dpi=200, facecolor=BG)
     plt.close(fig)
     return out_path
 
@@ -923,9 +904,7 @@ def _draw_boundary_panel(ax, scan_b: dict, a_fixed_r_info: float) -> None:
 
 def render_boundary(out_path: Path) -> Path:
     """Draw the boundary panel (R(mu+) vs A's fixed R) and write it to ``out_path``."""
-    import matplotlib as mpl
-
-    mpl.use("Agg")
+    gallery.use_headless_backend()
     import matplotlib.pyplot as plt
 
     scan_b = _boundary_scan(alive=True)
@@ -946,8 +925,7 @@ def render_boundary(out_path: Path) -> Path:
         fontsize=8,
     )
     fig.subplots_adjust(left=0.11, right=0.89, top=0.88, bottom=0.17)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_path, facecolor=BG)
+    gallery.save_figure(fig, out_path, facecolor=BG)
     plt.close(fig)
     return out_path
 
@@ -973,9 +951,7 @@ def _beat_state(run: dict, i: int) -> dict:
 
 def render_triptych(run_a: dict, run_b: dict, out_path: Path) -> Path:
     """Three held maze beats side by side (A over B) -- the static story for docs."""
-    import matplotlib as mpl
-
-    mpl.use("Agg")
+    gallery.use_headless_backend()
     import matplotlib.pyplot as plt
 
     fig, axes = plt.subplots(2, 3, figsize=(13.0, 4.9), dpi=150)
@@ -1008,8 +984,7 @@ def render_triptych(run_a: dict, run_b: dict, out_path: Path) -> Path:
     fig.subplots_adjust(
         left=0.01, right=0.99, top=0.88, bottom=0.075, wspace=0.04, hspace=0.16
     )
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_path, facecolor=BG)
+    gallery.save_figure(fig, out_path, facecolor=BG)
     plt.close(fig)
     return out_path
 

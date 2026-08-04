@@ -1,7 +1,7 @@
 """cpomdp — continuous active inference for Python.
 
 The continuous-state sibling of pymdp. The public API is the stateful
-:class:`Agent` façade over a :class:`LinearGaussianModel`, driven in the same
+``Agent`` façade over a ``LinearGaussianModel``, driven in the same
 perceive → act loop pymdp users know::
 
     from cpomdp import Agent, Belief, LinearGaussianModel, StateGoal
@@ -10,25 +10,25 @@ perceive → act loop pymdp users know::
     belief = agent.infer_states(observation)   # perceive
     action = agent.sample_action()             # act
 
-Swap the inference engine via the ``backend=`` argument; :class:`KalmanBackend`
-is the default and :class:`InferenceBackend` is the protocol custom backends
+Swap the inference engine via the ``backend=`` argument; ``KalmanBackend``
+is the default and ``InferenceBackend`` is the protocol custom backends
 implement. The optional RxInfer oracle lives behind the ``rxinfer`` extra —
 import it explicitly from ``cpomdp.backends.rxinfer`` so the core stays
 Julia-free.
 
-For a *branching* model, declare a :class:`CouplingGraph` whose nodes carry
-observation factors (:class:`GaussianObservation`,
-:class:`CallableGaussianObservation`) and whose :class:`Coupling` edges carry a
-:class:`GaussianCoupling`, then run it through a :class:`CouplingGraphBackend`
-with a per-node :class:`GaussianTransition`. A state-dependent ``R(x)`` on a
+For a *branching* model, declare a ``CouplingGraph`` whose nodes carry
+observation factors (``GaussianObservation``,
+``CallableGaussianObservation``) and whose ``Coupling`` edges carry a
+``GaussianCoupling``, then run it through a ``CouplingGraphBackend``
+with a per-node ``GaussianTransition``. A state-dependent ``R(x)`` on a
 coupled node cannot be flattened to a fixed linear-Gaussian model; asking it to
-raises :class:`IncompatibleLinearizationError` (ADR-019, ADR-020). The
-:class:`Agent` dispatches an :class:`FfgEfeSelector` — the FFG peer of
-:class:`EFESelector` — for such a backend; pass ``selector=`` to override it.
+raises ``IncompatibleLinearizationError`` (ADR-019, ADR-020). The
+``Agent`` dispatches an ``FfgEfeSelector`` — the FFG peer of
+``EFESelector`` — for such a backend; pass ``selector=`` to override it.
 
 Whether a state-dependent sensor earns its keep is a question about the states an
-action can actually reach: :func:`probe_model` samples that reachable set and
-reports back a :class:`SensorReport`.
+action can actually reach: ``probe_model`` samples that reachable set and
+reports back a ``SensorReport``.
 """
 
 import jax

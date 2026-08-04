@@ -16,7 +16,7 @@ pip install "cpomdp[examples]"        # then: python examples/ffg/<script>.py
 uv run --extra examples python examples/ffg/<script>.py
 ```
 
-Each script writes its asset into [`../../docs/assets/`](../../docs/assets) and takes an
+Each script writes its asset into [`../../docs/assets/`](../../docs/assets/) and takes an
 optional output path as `argv[1]`.
 
 ---

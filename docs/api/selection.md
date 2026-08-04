@@ -9,3 +9,11 @@ What the agent wants, and how it picks an action. `StateGoal` and `ObservationGo
 ::: cpomdp.Preference
 
 ::: cpomdp.EFESelector
+
+`ActionSelector` is the protocol every selector satisfies. `LQRSelector` is the fixed-sensor path, where expected free energy provably reduces to LQR (ADR-003). `FfgEfeSelector` is `EFESelector`'s peer for a branching backend.
+
+::: cpomdp.ActionSelector
+
+::: cpomdp.LQRSelector
+
+::: cpomdp.FfgEfeSelector

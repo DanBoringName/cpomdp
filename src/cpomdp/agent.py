@@ -43,16 +43,14 @@ class Agent:
 
     The vocabulary maps onto pymdp's like this:
 
-    ==================  ============================  ==============================
-    pymdp (discrete)    cpomdp (continuous)           role
-    ==================  ============================  ==============================
-    ``Agent``           ``Agent``                     the stateful façade
-    ``qs``              ``belief``                    posterior over the state
-    ``infer_states``    ``infer_states``              fold an observation in
-    ``sample_action``   ``sample_action``             choose an action
-    ``C``               ``objective``                 a StateGoal or ObservationGoal
-    ``D``               ``model.prior``               belief before any observation
-    ==================  ============================  ==============================
+    | pymdp (discrete) | cpomdp (continuous) | role |
+    | --- | --- | --- |
+    | ``Agent`` | ``Agent`` | the stateful façade |
+    | ``qs`` | ``belief`` | posterior over the state |
+    | ``infer_states`` | ``infer_states`` | fold an observation in |
+    | ``sample_action`` | ``sample_action`` | choose an action |
+    | ``C`` | ``objective`` | a StateGoal or ObservationGoal |
+    | ``D`` | ``model.prior`` | belief before any observation |
 
     One honest difference from pymdp: ``sample_action`` is **deterministic** here,
     not a draw from a policy posterior. For a fixed linear-Gaussian sensor the
@@ -92,7 +90,8 @@ class Agent:
                 objective would dispatch — the escape hatch for regimes the
                 automatic dispatch declines (e.g. EFE on a fixed sensor).
             backend: The inference engine. Defaults to a per-step
-                ``KalmanBackend``; pass any ``InferenceBackend`` (e.g. a
+                [`KalmanBackend`][cpomdp.KalmanBackend]; pass any
+                [`InferenceBackend`][cpomdp.InferenceBackend] (e.g. a
                 steady-state Kalman or the RxInfer oracle) to swap engines.
 
         Raises:
@@ -230,10 +229,10 @@ class Agent:
 
     @property
     def qs(self) -> Belief:
-        """Alias for :attr:`belief` (read-only) — pymdp muscle-memory ``agent.qs``.
+        """Alias for ``belief`` (read-only) — pymdp muscle-memory ``agent.qs``.
 
         The name is pymdp's, carried over for familiarity; the object is a Gaussian
-        :class:`Belief`, not a categorical posterior. Prefer ``belief``.
+        [`Belief`][cpomdp.Belief], not a categorical posterior. Prefer ``belief``.
         """
         return self.belief
 

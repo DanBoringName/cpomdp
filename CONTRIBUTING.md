@@ -2,6 +2,20 @@
 
 Thanks for taking a look. Here's how to get set up and what the tooling expects.
 
+## The quality bar
+
+The code here follows Martin Fowler's refactoring practices and the SOLID
+principles. Test Driven Development is encouraged. If you develop something in
+the linear-Gaussian space try to also use an exact oracle. Naming conventions
+ideally spell out their function with a comment of their single letter
+counter-part (if they have one) e.g. `sensor_model` followed by `C`.
+
+A PR has to clear the same bar. Code that is obviously machine-generated and
+dumped in without consideration of the previous points will be rejected.
+However, I appreciate not everyone is a software engineer and I am more than
+happy to help anyone who wishes to contribute but is unsure on how to meet
+any of the above.
+
 ## Setup
 
 The project uses [uv](https://docs.astral.sh/uv/). Once you've cloned it:
@@ -51,6 +65,21 @@ save, point it at ruff yourself; just don't rely on it, the hooks are what count
   bounce anything that doesn't.
 - a few **hygiene** checks: no trailing whitespace, files end in a newline, YAML and
   TOML parse, no leftover merge-conflict markers.
+
+## The docs site
+
+Four pages under `docs/` are one-line stubs: `index.md`, `changelog.md`,
+`examples.md` and `examples-ffg.md`. Each is a `--8<--` snippet include of a file
+that lives outside `docs/`, because GitHub and PyPI expect `README.md` and
+`CHANGELOG.md` at the repo root while MkDocs only serves what's under `docs_dir`.
+Edit the source file, not the stub. `mkdocs_hooks.py` pastes the content in at
+build time and repoints the relative links, so one file reads correctly in both
+places. The stubs are excluded from markdownlint and cspell.
+
+```bash
+uv run --group docs mkdocs build --strict # how to build mkdocs; what CI runs; fails on a bad link
+uv run --group docs mkdocs serve          # live preview at localhost:8000
+```
 
 ## Running things by hand
 

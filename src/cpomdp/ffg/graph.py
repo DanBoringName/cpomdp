@@ -32,8 +32,9 @@ class Coupling:
     """A directed edge from a parent node to a child node: ``child = W·parent + noise``.
 
     ``parent`` and ``child`` are node indices, oriented so the parent is the endpoint
-    nearer the tree's root. ``factor`` is the ``GaussianCoupling`` holding this edge's
-    ``W`` (shape ``(dim[child], dim[parent])``) and its noise covariance. ``tau`` is a
+    nearer the tree's root. ``factor`` is the
+    [`GaussianCoupling`][cpomdp.GaussianCoupling] holding this edge's ``W`` (shape
+    ``(dim[child], dim[parent])``) and its noise covariance. ``tau`` is a
     time-constant carried alongside the edge; it is metadata and does not affect the
     factor.
 
@@ -58,9 +59,10 @@ class CouplingGraph:
 
     The ``N`` nodes are indexed ``0..N-1`` with dimensions ``dims``. ``couplings`` are
     the tree edges, directed away from ``root``, and ``observations`` maps a node index
-    to the observation factor attached to it (fixed ``GaussianObservation`` or
-    state-dependent ``CallableGaussianObservation``). Construction validates the wiring
-    and raises if it is malformed.
+    to the observation factor attached to it (fixed
+    [`GaussianObservation`][cpomdp.GaussianObservation] or state-dependent
+    [`CallableGaussianObservation`][cpomdp.CallableGaussianObservation]). Construction
+    validates the wiring and raises if it is malformed.
 
     Args:
         root: index of the node the tree is rooted at.
@@ -130,7 +132,7 @@ class CouplingGraph:
                 seen.add(node)
                 node = parent_of[node]
 
-    def infer(self, prior: Belief, readings: dict[int, ArrayLike]) -> Belief:
+    def infer(self, prior: Belief, readings: Mapping[int, ArrayLike]) -> Belief:
         """Compute the marginal belief at the root from a prior and per-node readings.
 
         Each reading becomes a message about its node; those messages are passed up the
@@ -142,8 +144,9 @@ class CouplingGraph:
         Args:
             prior: the belief on the root node, taken as its prior.
             readings: maps a node index to that node's observation; each such node must
-                carry a fixed ``GaussianObservation`` (static inference has no predicted
-                mean to linearize a state-dependent ``R(x)`` at).
+                carry a fixed [`GaussianObservation`][cpomdp.GaussianObservation]
+                (static inference has no predicted mean to linearize a state-dependent
+                ``R(x)`` at).
 
         Returns:
             The marginal belief at the root.

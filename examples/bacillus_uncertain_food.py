@@ -8,8 +8,8 @@ et al. 2015, "Active inference and epistemic value") is the canonical case, wher
 visiting a cue resolves which arm holds the reward, changing the *subsequent*
 action.
 
-`bacillus_seeking_food.py` (the v0.3 flagship, now kept in "the journey") has the
-beacon collapse uncertainty about the agent's *own* position instead — salience
+The v0.3 demo this one succeeded (ADR-008, since removed) had the beacon collapse
+uncertainty about the agent's *own* position instead — salience
 without an instrumental payoff: knowing your own position more precisely doesn't
 change which action is later correct. This demo promotes the food's position to
 an explicit latent the agent does not know a priori, and wires the beacon's
@@ -81,18 +81,26 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import gallery
 import jax
 import jax.numpy as jnp
 import numpy as np
-from bacillus_seeking_food import BEACON_PT, beacon_noise
 
 from cpomdp.backends.kalman import KalmanBackend
 from cpomdp.control import LQRController
-from cpomdp.efe import expected_free_energy
 from cpomdp.ffg.chain import ChainBackend
 from cpomdp.observation import CallableSensor
 from cpomdp.selection import Preference
 from cpomdp.types import Belief, LinearGaussianModel
+
+# --- palette --------------------------------------------------------------------
+# The gallery's Okabe-Ito accents, named for what they mean in this demo. Same
+# assignments the v0.3 demo used, so the two read as one family.
+BG, INK, GRID = gallery.FIELD.bg, gallery.FIELD.ink, gallery.FIELD.grid
+BODY = gallery.GREEN  # the bacillus body
+BELIEF = gallery.ORANGE  # the belief mean
+BEACON_COLOR = gallery.BLUE  # the beacon and its good-sensing region
+FOOD = gallery.VERMILLION  # the food
 
 # --- world geometry -------------------------------------------------------------
 DT = 0.16
@@ -100,9 +108,10 @@ START = np.array([-3.4, -2.6])
 FOOD_TRUE = np.array([3.4, -2.6])  # the food's TRUE position — unknown to the agent
 FOOD_PRIOR_MEAN = np.array([1.0, 0.0])  # the agent's a-priori guess: vague, wrong
 FOOD_PRIOR_COV = 6.0  # wide: "loosely known," not "unknown" — has to detour to learn
+BEACON_PT = np.array([0.0, 2.7])  # up and central, clearly off the start→food line
 
-# the beacon mechanic itself is UNCHANGED from the flagship demo (`beacon_noise`,
-# imported above) — only the channel it's attached to differs. Reuse its tuning.
+# the beacon mechanic is `gallery.beacon_noise`, the same precision well the v0.3
+# demo sensed through. Only the channel it is attached to differs here.
 R_LO, R_HI, R_WIDTH = 0.02, 1.30, 2.3
 R_SELF = 0.05  # fixed proprioceptive noise: the agent always senses ITSELF clearly
 Q_AGENT = 2e-5  # near-zero process noise on the agent block (existing idiom)
@@ -191,7 +200,7 @@ def build_model() -> LinearGaussianModel:
     beacon_params = _beacon_params()
 
     def noise_fn(x, params):
-        r_disp = beacon_noise(x[:2], params)  # unchanged flagship falloff
+        r_disp = gallery.beacon_noise(x[:2], params)  # the shared precision well
         r_self = R_SELF * jnp.eye(2)
         return jax.scipy.linalg.block_diag(r_self, r_disp)
 
@@ -235,18 +244,11 @@ def build_preference(precision: float) -> Preference:
 
 
 def _candidate_grid() -> jnp.ndarray:
-    """The front-loaded GRID_N² grid of one-step action candidates, shape (k², 2)."""
-    axis = jnp.linspace(ACTION_LO, ACTION_HI, GRID_N)
-    ax, ay = jnp.meshgrid(axis, axis)
-    return jnp.stack([ax.ravel(), ay.ravel()], axis=1)
+    """This demo's GRID_N² grid of one-step action candidates, shape (k², 2)."""
+    return gallery.action_grid(ACTION_LO, ACTION_HI, GRID_N)
 
 
-@jax.jit
-def _efe_grid(model, belief, preference, candidates):
-    """The EFE ``G`` of every candidate action — one ``vmap`` of the library kernel."""
-    return jax.vmap(lambda a: expected_free_energy(model, belief, a, preference)[0])(
-        candidates
-    )
+_efe_grid = gallery.efe_over_grid
 
 
 def simulate(regime, backend_cls=KalmanBackend, *, seed=7):
@@ -295,6 +297,7 @@ def simulate(regime, backend_cls=KalmanBackend, *, seed=7):
         assert preference is not None  # built above on the "efe" path
         assert candidates is not None  # built above on the "efe" path
         g = _efe_grid(model, belief, preference, candidates)
+        assert candidates_np is not None  # built above on the "efe" path
         return candidates_np[int(np.argmin(np.asarray(g)))]
 
     a_mat = np.eye(2)
@@ -310,7 +313,9 @@ def simulate(regime, backend_cls=KalmanBackend, *, seed=7):
 
     for _ in range(N_STEPS):
         r_self = R_SELF * np.eye(2)
-        r_disp = np.asarray(beacon_noise(jnp.asarray(true_agent), beacon_params))
+        r_disp = np.asarray(
+            gallery.beacon_noise(jnp.asarray(true_agent), beacon_params)
+        )
         r_full = np.block([[r_self, np.zeros((2, 2))], [np.zeros((2, 2)), r_disp]])
         obs_mean = np.concatenate([true_agent, FOOD_TRUE - true_agent])
         obs = obs_mean + np.linalg.cholesky(r_full) @ rng.standard_normal(4)
@@ -422,39 +427,23 @@ def scan():
 
 
 def _ellipse(ax, mean, cov, color, *, alpha_fill=0.16, max_diameter=None):
-    """A 2-sigma covariance ellipse, with its on-screen size capped.
+    """This demo's 2-sigma covariance ellipse, with its on-screen size capped.
 
-    The food prior covariance starts wide (``FOOD_PRIOR_COV``, by design — the
-    agent is meant to have to detour to learn it), so its raw 2-sigma diameter at
-    step 0 can exceed the whole plot. Drawing that literally floods the panel
-    with solid fill and makes early frames look broken; capping the DISPLAYED
-    diameter (never the underlying belief, only this patch's size) keeps every
-    frame readable while still reading as "wide and uncertain."
+    ``FOOD_PRIOR_COV`` starts wide by design. The agent is meant to have to detour to
+    learn it, so the raw 2-sigma diameter at step 0 can exceed the whole plot.
+    ``max_diameter`` caps the DISPLAYED size only, never the underlying belief.
     """
-    from matplotlib.patches import Ellipse
-
-    vals, vecs = np.linalg.eigh(cov)
-    vals = np.clip(vals, 1e-9, None)
-    angle = np.degrees(np.arctan2(vecs[1, 0], vecs[0, 0]))
-    w, h = 2 * 2.0 * np.sqrt(vals)
-    if max_diameter is not None:
-        w, h = min(w, max_diameter), min(h, max_diameter)
-    ax.add_patch(
-        Ellipse(mean, w, h, angle=angle, facecolor=color, alpha=alpha_fill, zorder=3)
-    )
-    ax.add_patch(
-        Ellipse(
-            mean, w, h, angle=angle, facecolor="none", edgecolor=color, lw=1.2, zorder=3
-        )
+    gallery.draw_covariance_ellipse(
+        ax, mean, cov, color, alpha_fill=alpha_fill, max_diameter=max_diameter
     )
 
 
 def render(regimes, runs, out_path, *, fps=20):
     """Draw the 2x2 grid, one panel per regime, and write the looping GIF.
 
-    Reuses the flagship demo's palette, ``_draw_bacillus``, and
-    ``_precision_field`` rather than re-deriving them — the beacon mechanic is
-    visually identical, only what it reveals has changed. Each panel shows BOTH
+    The palette, the glyph and the precision field come from ``gallery``, so the
+    beacon reads identically to the demo this one succeeded. Only what it reveals
+    has changed. Each panel shows BOTH
     belief markers/ellipses (agent + food), where the flagship only ever needed
     one, and its border turns green and bold once that regime first settles near
     the food (see ``ARRIVAL_THRESHOLD``) — a visible "did it get there" signal,
@@ -464,14 +453,8 @@ def render(regimes, runs, out_path, *, fps=20):
     fastest-arriving regime's final on-screen count is directly comparable to
     the others' as a per-regime "how long did this take" readout.
     """
-    import matplotlib as mpl
-
-    mpl.use("Agg")
+    gallery.use_headless_backend()
     import matplotlib.pyplot as plt
-    from bacillus_seeking_food import BEACON as BEACON_COLOR
-    from bacillus_seeking_food import BELIEF, BG, BODY, FOOD, GRID, INK, _draw_bacillus
-    from bacillus_seeking_food import _precision_field as flagship_precision_field
-    from PIL import Image
 
     allpts = np.concatenate(
         [runs[r["key"]][0] for r in regimes]
@@ -482,7 +465,11 @@ def render(regimes, runs, out_path, *, fps=20):
     xlim = (allpts[:, 0].min() - pad, allpts[:, 0].max() + pad)
     ylim = (allpts[:, 1].min() - pad, allpts[:, 1].max() + pad)
 
-    field_xs, field_ys, field = flagship_precision_field(xlim, ylim, build_model())
+    # Channel 2: the first displacement row. Rows 0-1 are proprioception, pinned at the
+    # fixed `R_SELF`. Reading the field off those would draw a flat sheet.
+    field_xs, field_ys, field = gallery.precision_field(
+        xlim, ylim, build_model(), channel=2
+    )
     field_levels = np.linspace(field.min(), field.max(), 9)
     n_frames = len(runs[regimes[0]["key"]][0])
 
@@ -569,7 +556,9 @@ def render(regimes, runs, out_path, *, fps=20):
             pos = true_states[i].astype(float)
             j = max(1, i)
             heading = true_states[j] - true_states[j - 1]
-            _draw_bacillus(ax, pos, np.asarray(heading), phase=i * 0.9)
+            gallery.draw_bacillus(
+                ax, pos, np.asarray(heading), i * 0.9, gallery.SMALL_BACILLUS
+            )
 
             ax.set_title(
                 reg["title"], color=INK, fontsize=10.5, fontweight="bold", pad=5
@@ -718,28 +707,12 @@ def render(regimes, runs, out_path, *, fps=20):
         fig.subplots_adjust(
             left=0.035, right=0.965, top=0.905, bottom=0.10, wspace=0.10, hspace=0.30
         )
-        fig.canvas.draw()
-        frames.append(
-            Image.fromarray(np.asarray(fig.canvas.buffer_rgba())).convert("RGB")
-        )
+        frames.append(gallery.figure_frame(fig))
         plt.close(fig)
 
-    hold = max(1, int(fps * 1.1))
-    frames.extend(frames[-1:] * hold)
-    palette = frames[-1].quantize(colors=128, method=Image.MEDIANCUT)
-    qframes = [f.quantize(palette=palette, dither=Image.NONE) for f in frames]
-
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    qframes[0].save(
-        out_path,
-        save_all=True,
-        append_images=qframes[1:],
-        duration=int(1000 / fps),
-        loop=0,
-        optimize=True,
-        disposal=2,
+    return gallery.write_gif(
+        frames, out_path, fps=fps, hold_seconds=1.1, quantize_colors=128
     )
-    return out_path
 
 
 def main():

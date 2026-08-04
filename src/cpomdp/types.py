@@ -114,25 +114,23 @@ class LinearGaussianModel:
     right field. (Letters survive as ``.A``/``.B``/``.C``/``.Q``/``.R`` aliases
     for backend use.)
 
-    ================  ======  =========================  =====  ====================
-    role name         letter  meaning                    shape  also known as
-    ================  ======  =========================  =====  ====================
-    ``dynamics``      A       state -> next state        (n,n)  state-transition
-    ``control``       B       action -> state (optional) (n,p)  input/control matrix
-    ``sensor_model``  C       state -> expected reading  (m,n)  observation/emission
-    ``dynamics_noise``  Q     dynamics-noise covariance  (n,n)  process noise
-    ``sensor_noise``  R       sensor-noise covariance    (m,m)  observation noise
-    ``prior``         --      initial belief over state  n-D    Belief / D (pymdp)
-    ================  ======  =========================  =====  ====================
+    | role name | letter | meaning | shape | also known as |
+    | --- | --- | --- | --- | --- |
+    | ``dynamics`` | A | state -> next state | (n,n) | state-transition |
+    | ``control`` | B | action -> state (optional) | (n,p) | input/control matrix |
+    | ``sensor_model`` | C | state -> expected reading | (m,n) | observation/emission |
+    | ``dynamics_noise`` | Q | dynamics-noise covariance | (n,n) | process noise |
+    | ``sensor_noise`` | R | sensor-noise covariance | (m,m) | observation noise |
+    | ``prior`` | -- | initial belief over state | n-D | Belief / D (pymdp) |
 
     Dimensions: ``n`` = state, ``m`` = observation, ``p`` = action. A model with
     no ``control`` is a pure filtering (tracking) model.
 
     Three optional fields (all default ``None`` → the plain fixed-matrix model)
-    extend it: ``observation`` (an :class:`~cpomdp.observation.ObservationModel` for
+    extend it: ``observation`` (an [`ObservationModel`][cpomdp.ObservationModel] for
     state-dependent sensing ``R(x)``), ``process_noise`` (a
-    :class:`~cpomdp.dynamics.DynamicsNoise` for state-dependent process noise
-    ``Q(x)``), and ``structure`` (a :class:`~cpomdp.structure.ModelStructure`
+    [`DynamicsNoise`][cpomdp.DynamicsNoise] for state-dependent process noise
+    ``Q(x)``), and ``structure`` (a [`ModelStructure`][cpomdp.ModelStructure]
     declaring the factor / Markov-blanket partition).
     """
 

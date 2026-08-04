@@ -35,4 +35,6 @@ config:
 ignores:
   - "docs/index.md"
   - "docs/changelog.md"
+  - "docs/examples.md"
+  - "docs/examples-ffg.md"
   - "research/**"

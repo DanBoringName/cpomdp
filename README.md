@@ -15,13 +15,43 @@ That's the whole idea: keep the pymdp muscle memory, swap the discrete machinery
 
 Full documentation — API reference and guides — lives at [cpomdp.inferogenesis.com](https://cpomdp.inferogenesis.com/).
 
+## What cpomdp does
+
+**Exact continuous perception.** The mean dynamics are linear and the noise is Gaussian, so the filter is an exact Kalman filter. No sampling and no variational gap. No approximation to tune. The same closed form runs whether you are tracking or acting.
+
+**Epistemics that survive the linear-Gaussian collapse.** Under a *fixed* linear-Gaussian sensor the epistemic term of expected free energy is identical for every policy (Koudahl, Kouw & de Vries 2021). cpomdp deviates from that model by the smallest amount that avoids the collapse. It lets the *noise* depend on the state. The mean stays linear. That noise is a state-dependent sensor `R(x)` (Corva 2026), or state-dependent process noise `Q(x)`. The action then reaches the posterior covariance, so the epistemic term moves with it. Information-seeking behaviour is available in a regime where it is proved away.
+
+**Multi-step expected free energy, searched and certified.** EFE over an H-step horizon (`cpomdp.efe.policy_efe`), plus an exhaustive search across the entire space of action sequences `A^H` (`cpomdp.enumeration.EnumeratedEfeSearch`) that hands back a `CompletenessCertificate`. So "this is the best plan" is *decided* over the declared action set rather than sampled from it, and the object that says so is checkable. Receding-horizon and open-loop selectors wrap the search, and both report the honest per-cycle cost `|A|^H · H` rather than a grid's much smaller number.
+
+With `R(x)` alive a short-horizon agent walks straight past the information. Stretch the horizon and it detours to collect it. Curiosity needs both.
+
 ## Example
 
 Four bacilli seeking food in the same world — the continuous-state answer to pymdp's mouse-seeking-cheese, now with the **epistemic** term v0.3 adds. The twist: the food's position is **hidden**, and a **beacon** marks where the agent can *see* it. Visiting the beacon doesn't sharpen where the agent thinks *it* is — it sharpens where it thinks the *food* is, which it can't act on directly. That makes the information genuinely **instrumental**: resolving it changes where the agent then heads. Each body sits at its **true** hidden state; the blue `+` is where it believes it is, the diamond is where it believes the food is (both with their uncertainty ellipses), and the star is the food's true, hidden location. The four differ in **one number only** — the **goal precision Λ** each is built with. They all minimise the same Expected Free Energy `G = pragmatic − epistemic`; because the pragmatic (goal) term scales with Λ while the epistemic (information) term doesn't, Λ alone tips the balance: **classic LQR** and a **sharp Λ** beeline to the agent's current food guess and never detour; a **balanced Λ** detours to the beacon, learns where the food really is, *then* heads there with confidence; a **weak Λ** is so over-curious it parks at the beacon and never eats. One real knob — the precision you'd actually pass — four behaviours.
 
-![Four bacilli learning where the food is, under different goal precisions Λ, via continuous active inference](https://raw.githubusercontent.com/inferogenesis/cpomdp/main/docs/assets/bacillus_uncertain_food.gif)
+![Four bacilli learning where the food is, under different goal precisions Λ, via continuous active inference](docs/assets/bacillus_uncertain_food.gif)
 
-Reproduce it with [`examples/bacillus_uncertain_food.py`](https://github.com/inferogenesis/cpomdp/blob/main/examples/bacillus_uncertain_food.py) (`pip install "cpomdp[examples]"`). More — including the v0.4 [FFG examples](https://github.com/inferogenesis/cpomdp/blob/main/examples/ffg/README.md), where a branch-coupled state-dependent sensor resolves a hidden context and can't be flattened to a Kalman filter — in the [examples gallery](https://github.com/inferogenesis/cpomdp/blob/main/examples/README.md).
+Reproduce it with [`examples/bacillus_uncertain_food.py`](https://github.com/inferogenesis/cpomdp/blob/main/examples/bacillus_uncertain_food.py) (`pip install "cpomdp[examples]"`).
+
+### How far ahead before information is worth a detour?
+
+An agent on an open plane wants a goal it cannot locate. Its prior points the wrong way. A beacon well off that line is the only thing that can say where the goal really is. Walking there costs ground.
+
+Run the same world once per planning horizon. At `H = 2` the agent walks straight to the spot it already believed in and settles there. It never checks. At `H = 14` it walks *away* from that spot, reads the beacon, finds out it was wrong, and then goes to the real goal. Only `H` changed.
+
+![One agent run once per planning horizon: at short horizons it settles where its prior said, and past a crossing it detours to the beacon, learns where the goal really is, and goes there](docs/assets/crossover_horizon.gif)
+
+The margin between the two plans, `ΔG(H) = G(detour) − G(direct)` in nats, crosses zero exactly once. The epistemic pull is flat, because sensing once is worth what sensing once is worth. The pragmatic gradient decays under it. Freeze `R` at a constant and the sweep never crosses at any horizon, so the behaviour belongs to the state-dependent sensor and the horizon together.
+
+Reproduce it with [`examples/crossover_horizon_figure.py`](https://github.com/inferogenesis/cpomdp/blob/main/examples/crossover_horizon_figure.py).
+
+**Why the horizon is the question.** [State-dependent observation noise reintroduces epistemic value in linear-Gaussian active inference](https://arxiv.org/abs/2607.20306) (Corva 2026) establishes that `R(x)` makes the epistemic term non-constant, so a linear-Gaussian agent can be curious at all. Non-constant is not the same as decision-changing. The horizon at which curiosity starts changing which plan an agent picks is a separate question, and it has a measured answer.
+
+**The answer is one-dimensional, and it is proven.** On the corridor cue task, `H* = 7`: the first horizon whose argmin is a two-phase sense-then-commit walk rather than a direct reach. That comes from enumerating every sequence in the declared action set `{0, ±1, ±2}` to depth `H`, so it decides the flip rather than sampling for it, and the search returns a `CompletenessCertificate` saying how many policies it was obliged to visit and how many it did. Zero the epistemic term and the crossing moves out to `H ≈ 10`, which is what makes the pull load-bearing rather than incidental. The numbers are registered in [`warrant_numbers.md`](https://github.com/inferogenesis/cpomdp/blob/main/warrant_numbers.md), the model is [`examples/ffg/crossover.py`](https://github.com/inferogenesis/cpomdp/blob/main/examples/ffg/crossover.py), and `tests/test_example_checks.py::test_crossover_check` asserts it on every merge and release. The `7` is an upper bound: on the wider `{−3…2}`, which contains the unconstrained optimal reach, it is 6.
+
+**The plane above is the readable version, not the proof.** It contrasts two named plans instead of searching, so its crossing is an exact statement about those two plans and says nothing about the argmin over all plans. Its `H = 7` and the corridor's `H* = 7` are different quantities on different models that happen to coincide.
+
+More in the [examples gallery](https://github.com/inferogenesis/cpomdp/blob/main/examples/README.md), including the [FFG examples](https://github.com/inferogenesis/cpomdp/blob/main/examples/ffg/README.md), where a branch-coupled state-dependent sensor resolves a hidden context and can't be flattened to a Kalman filter.
 
 ## Install
 
@@ -112,18 +142,26 @@ agent.infer_states([0.5])             # perceiving is fine
 agent.sample_action()                 # ValueError: this Agent has no objective ...
 ```
 
-## What it handles
+## What's in the box
 
-cpomdp handles linear-Gaussian models end to end — and, as of v0.3, a little past the "linear-Gaussian" label. The mean dynamics and observations are linear and the noise is Gaussian, so perception is **exact Kalman filtering**, no approximation. For action you get both steady-state **LQR** (reach a target state) and **Expected Free Energy** selection (seek information) — the epistemic, information-seeking behaviour that arrived in v0.3.
+| you want to | reach for |
+| ----------------------------------------- | ---------------------------------------------------------------------------- |
+| perceive, exactly | `Agent.infer_states`, `KalmanBackend` |
+| reach a target state | `StateGoal` with `LQRSelector` |
+| act on expected free energy, one step | `ObservationGoal` with `EFESelector`, `expected_free_energy` |
+| ...over an H-step horizon | `cpomdp.efe.policy_efe`, `policy_efe_trace` |
+| ...searched exhaustively, with a certificate | `cpomdp.enumeration`, `EnumeratedEfeSearch`, `RecedingHorizonSelector`, `OpenLoopSelector` |
+| sense more sharply in some places than others | `CallableSensor`, state-dependent `R(x)` |
+| diffuse more in some states than others | `CallableProcessNoise`, state-dependent `Q(x)` |
+| declare a branching model | `CouplingGraph`, `Coupling`, `CouplingGraphBackend` |
+| ask whether a state-dependent sensor earns its keep | `probe_model` → `SensorReport` |
+| check a rollout stayed well conditioned | `cpomdp.diagnostics.rollout_conditioning` |
+| perceive but never act | a model with no `control`, `Agent(model)` alone |
+| re-plan every step, closed loop | `cpomdp.enumeration.RecedingHorizonSelector` (`replan_interval = 1`) |
+| commit to one plan and execute it | `cpomdp.enumeration.OpenLoopSelector` (`replan_interval = H`) |
+| swap the inference engine | the `InferenceBackend` protocol, or `cpomdp.backends.rxinfer.RxInferBackend` |
 
-What v0.3 added beyond the fixed linear-Gaussian model is state-dependence in the *noise*. The mean stays linear, but:
-
-- **state-dependent sensing `R(x)`** — the observation noise can vary with the state, so some places see more sharply than others (the beacon in the example above);
-- **state-dependent process noise `Q(x)`** — the dynamics can diffuse more in some states than others;
-- an **H-step planning horizon** for EFE selection;
-- an optional **declarable model-structure layer**.
-
-It's the state-dependent noise that gives the agent a reason to seek information: when sensing is sharper somewhere, going there is worth something. The mean is still linear, though — genuinely **nonlinear sensors** (a curved `g(x)` that needs a second-order moment match) are the next step, not here yet.
+The state-dependence is in the *noise*. The mean stays linear. Genuinely **nonlinear sensors**, a curved `g(x)` needing a second-order moment match, are the next step and are not here yet.
 
 ## Swappable backends
 
@@ -131,7 +169,7 @@ You can swap the inference engine if you want to. `KalmanBackend` is the default
 
 ## Status
 
-Still pre-1.0: v0.3 aims to secure the public API, however if you have a request or suggestion to make this front-facing API more usable please open a GitHub issue, I'm happy to listen. Until 1.0 a minor version is where breaking changes can land.
+Still pre-1.0. v0.4.4 is the current release. It added the multi-step slice of expected free energy: horizon rollouts, exhaustive search with completeness certificates, and the horizon at which a planner stops reaching and starts sensing. The `Agent` / `infer_states` / `sample_action` surface has been stable since v0.3 and is what I am trying to hold steady. If you have a request or a suggestion that would make that front-facing API more usable, please open a GitHub issue. Until 1.0 a minor version is where breaking changes can land.
 
 ## Development
 
@@ -141,9 +179,9 @@ I used an AI coding assistant (Claude Opus-4.8) as a tool under close review: to
 
 ## Contributions
 
-If you would like to contribute either your dev time or help steer the direction of the toolbox, please add a GitHub issue or discussion thread. I am monitoring this repository closely and would love to collaborate.
+If you would like to contribute either your dev time or help steer the direction of the toolbox, please add a GitHub issue or discussion thread. I am monitoring this repository closely and would love to collaborate. [CONTRIBUTING.md](CONTRIBUTING.md) covers the setup, the hooks, and the bar a PR has to clear.
 
-If you notice a better method in something I've already done or are just curious and want to chat I am more than happy to talk through my decision processes. I intend to blog my construction of cpomdp provided it doesn't interfere with developing it.
+If you notice a better method in something I've already done or are just curious and want to chat I am more than happy to talk through my decision processes and improve on my work. I intend to blog my construction of cpomdp provided it doesn't interfere with developing it.
 
 ## Acknowledgements
 

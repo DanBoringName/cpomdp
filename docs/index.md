@@ -1,5 +1,5 @@
 <!-- This page is the README, single-sourced. Edit README.md, not this file.
-     The snippet include needs pymdownx.snippets (configured in mkdocs.yml). -->
+     The include is expanded by mkdocs_hooks.py, which also repoints its links. -->
 
 --8<-- "README.md"
 

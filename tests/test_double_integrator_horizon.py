@@ -14,6 +14,7 @@ No new src code here — the behaviour emerges from `policy_efe` (B2) and
 
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 from cpomdp.efe import expected_free_energy, policy_efe
 from cpomdp.selection import EFESelector, Preference
@@ -55,7 +56,10 @@ class TestDoubleIntegratorHorizon:
         sel = EFESelector(model, n_candidates=41, action_bounds=(-2.0, 2.0), horizon=2)
         assert float(sel.select(_BELIEF, _GOAL)[0]) > 0.0
 
+    @pytest.mark.slow
     def test_h2_choice_matches_brute_force_oracle(self):
+        # 161 independent two-step rollouts against a 41-candidate select, ~33s: over
+        # the marker's threshold, so it gates on merge and release rather than on PRs.
         # The H=2 choice is the constant action minimising the 2-step rollout EFE over a
         # fine independent grid (policy_efe is the B3-verified rollout).
         model = _double_integrator()

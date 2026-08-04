@@ -121,18 +121,22 @@ convention = "google"
 [tool.ruff.lint.per-file-ignores]
 # Tests document themselves by name; don't require docstrings on them.
 "tests/**" = ["D"]
+# The ffg demos sit a directory below `examples/gallery.py`, so each extends sys.path
+# before importing it. That statement has to come before the import, which is E402 by
+# construction. `conftest.py` does the same job for the test process.
+"examples/ffg/*" = ["E402"]
 
 [tool.ty.environment]
 python-version = "3.10"
 extra-paths = ["examples", "examples/ffg"]
 
 [tool.ty.src]
-include = ["src", "tests"]
+include = ["src", "tests", "examples", "mkdocs_hooks.py"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
 markers = [
     "rxinfer: tests that require the RxInfer/Julia backend (deselect with '-m \"not rxinfer\"')",
-    "slow: slow paper-number regression gates, e.g. the exhaustive crossover enumeration (deselect with '-m \"not slow\"'); run on merge-to-main and release, not on PRs",
+    "slow: any test whose call time exceeds SLOW_TEST_SECONDS in conftest.py, currently 20s (deselect with '-m \"not slow\"'); run on merge-to-main and release, not on PRs. conftest reports unmarked tests over the threshold at the end of a run",
 ]

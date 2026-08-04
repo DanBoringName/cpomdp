@@ -36,9 +36,9 @@ class Preference:
     case (visit one of several goals) is RFC-002, deferred; this type is the seam
     that a mixture ``Preference`` plugs into.
 
-    ``precision`` is unused by ``LQRSelector`` (it is baked into the controller's
-    Riccati solve at construction); it is carried here for the EFE pragmatic term
-    added in Phase 1A.
+    ``precision`` is unused by [`LQRSelector`][cpomdp.LQRSelector] (it is baked into
+    the controller's Riccati solve at construction); it is carried here for the EFE
+    pragmatic term added in Phase 1A.
     """
 
     goal: Float64[Array, "n"]
@@ -84,10 +84,10 @@ class Preference:
 class ActionSelector(Protocol):
     """Chooses an action from a belief and a preference.
 
-    The abstraction wall for action selection: ``LQRSelector`` is the fixed-sensor
-    case (EFE collapses to LQR, ADR-003); ``EFESelector`` is the state-dependent
-    one. ``Agent`` depends only on this, never on a concrete
-    selector.
+    The abstraction wall for action selection: [`LQRSelector`][cpomdp.LQRSelector] is
+    the fixed-sensor case (EFE collapses to LQR, ADR-003);
+    [`EFESelector`][cpomdp.EFESelector] is the state-dependent one.
+    [`Agent`][cpomdp.Agent] depends only on this, never on a concrete selector.
     """
 
     def select(self, belief: Belief, preference: Preference) -> Float64[Array, "p"]:
@@ -222,13 +222,14 @@ class EFESelector:
 class FfgEfeSelector:
     """EFE action selection over a branching FFG backend (issue #26).
 
-    The FFG counterpart of ``EFESelector``: instead of ``_efe_step`` on a flat model it
-    ``vmap``s ``_ffg_efe_step`` over the candidate action grid, reading ``μ⁺``/``Σ⁺``
+    The FFG counterpart of [`EFESelector`][cpomdp.EFESelector]: instead of
+    ``_efe_step`` on a flat model it ``vmap``s ``_ffg_efe_step`` over the candidate
+    action grid, reading ``μ⁺``/``Σ⁺``
     from the backend's ``predicted_belief`` (structural couplings folded in) and aiming
     the epistemic term at ``target`` — a joint-state block (a node's block via
     ``backend.block`` for ``info_target``, or the whole state). One-step
     (``horizon = 1``); the H-step FFG rollout is a later seam. Conforms to
-    ``ActionSelector``.
+    [`ActionSelector`][cpomdp.ActionSelector].
     """
 
     def __init__(
