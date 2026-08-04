@@ -4,7 +4,7 @@ Decisions are append-only. Each records the choice, the evidence, and the date.
 
 A path inside an ADR is the path as of that ADR's date. It is not a claim about the
 current tree and it is not maintained against the tree. ADR-008 and ADR-013 both name
-`examples/bacillus_seeking_food.py`, which was removed after v0.4.4. The entries still
+`examples/bacillus_seeking_food.py`, which v0.4.4 removed. The entries still
 name it, and that is the record working rather than rotting. `CHANGELOG.md` is where a
 path goes when it moves.
 

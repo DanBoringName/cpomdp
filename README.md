@@ -169,7 +169,7 @@ You can swap the inference engine if you want to. `KalmanBackend` is the default
 
 ## Status
 
-Still pre-1.0. v0.4.4 is the current release. It added the multi-step slice of expected free energy: horizon rollouts, exhaustive search with completeness certificates, and the horizon at which a planner stops reaching and starts sensing. The `Agent` / `infer_states` / `sample_action` surface has been stable since v0.3 and is what I am trying to hold steady. If you have a request or a suggestion that would make that front-facing API more usable, please open a GitHub issue. Until 1.0 a minor version is where breaking changes can land.
+Still pre-1.0. v0.4.4 is the current release. It added the multi-step slice of expected free energy: horizon rollouts, exhaustive search with completeness certificates, and the horizon at which a planner stops reaching and starts sensing. The demos were rebuilt on top of it. The crossover now also runs on the flat Kalman/EFE route, the cue-maze task works in any number of dimensions, and the shared plotting machinery lives in `examples/gallery.py`. The `Agent` / `infer_states` / `sample_action` surface has been stable since v0.3 and is what I am trying to hold steady. If you have a request or a suggestion that would make that front-facing API more usable, please open a GitHub issue. Until 1.0 a minor version is where breaking changes can land.
 
 ## Development
 

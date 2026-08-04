@@ -2,9 +2,72 @@
 
 Everything worth noting lands here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [semantic versioning](https://semver.org). While we're pre-1.0, treat the minor version as the place breaking changes can show up.
 
-## [Unreleased]
+## [0.4.4] — 2026-08-04
+
+The multi-step slice of expected free energy. Scoring one policy over a horizon was already
+here; this release adds searching over a policy family and certifying that the search was
+exhaustive, which is what the crossover measurement needed. The headline is `H* = 7`: the
+horizon at which the best plan on the coupled-tree cue task stops being a direct reach and
+becomes a two-phase sense-then-commit walk. Every horizon is a complete enumeration, so the
+flip is decided rather than sampled.
+
+Nothing on the H = 1 path moved. The existing suite passes unmodified and the one-step
+arithmetic stays byte-identical to 0.4.3.
+
+`examples/crossover_horizon_figure.py` puts the same crossover on the flat Kalman/EFE
+route, with a frozen-`R` twin as its control. `examples/ffg/cue_maze.py` builds the cue
+task for any number of dimensions. About 390 lines duplicated across eight scripts moved
+into `examples/gallery.py`, and every committed asset re-renders byte-identical across the
+move. Three example checks that could exit zero on a failure are now gated in
+`tests/test_example_checks.py`. Two demos were removed.
 
 ### Added
+
+- `cpomdp.enumeration` — the exhaustive search family, deliberately a separate object from
+  `EFESelector`'s continuous grid so the two warrants cannot be confused. `FiniteActionSet`
+  is versioned, so an action added after results are seen shows up in the diff rather than
+  in the prose. `EnumeratedEfeSearch` enumerates `A^H` and returns the argmin policy with
+  the full `G` vector. `CompletenessCertificate` asserts expected against visited and raises
+  `IncompleteEnumerationError` on a mismatch, which is what earns the search a `PROVED`
+  warrant where a grid earns only `CORROBORATED` (ADR-030, ADR-031).
+- `EnumeratedEfeSearch.over_backend` scores enumerated policies on an FFG backend instead of
+  a flat model. Scoring is injected as a strategy, so the enumeration, the certificate and
+  the cost accounting are shared rather than duplicated. A reduce-to-flat oracle gates it:
+  on a coupling-free backend it reproduces the flat search exactly (ADR-034).
+- `RecedingHorizonSelector` and `OpenLoopSelector`, both `ActionSelector`s wrapping the
+  enumerated search. They stay separate because the two modes genuinely differ, and a
+  measurement has to declare which one it used. Both report `cost_per_plan = |A|^H · H` and
+  a `replan_interval`. Neither reports the grid's `n_candidates × horizon`, which would
+  under-count the real work by a factor of `|A|^(H−1)`.
+- `policy_efe_trace`, returning a `PolicyEfeTrace`: the per-step `g`, pragmatic, epistemic,
+  μ⁺, Σ⁺, Σ_post and S that the rollout scan already computed and then discarded. It sits
+  beside the hot path rather than in it, so the selector stays allocation-free. Its sums
+  equal the scalars `policy_efe` returns under `assert_array_equal`, which is the proof that
+  it is the same arithmetic and not a second implementation.
+- `policy_efe_ffg` and `policy_efe_ffg_trace`, the H-step rollout on a coupling graph, with
+  the epistemic term aimed at a named node at the coupling-resolved μ⁺. Gated from both
+  ends: at H = 1 it is byte-identical to the one-step FFG kernel, and with no coupling it
+  matches `policy_efe` (ADR-032).
+- `cpomdp.crossover` — `crossover_statistic`, `crossover_horizon` and `CrossoverStatistic`.
+  The horizon aggregation is the symmetric between-policy contrast `ΔG = Δc − Δε`. At H = 1
+  it collapses to the anchors `Δε = 1.7232`, `Δc = 4.4910`, `ΔG = +2.7678` nats, pinned at a
+  tolerance of `1e-4` (ADR-033).
+- `diagnostics.rollout_conditioning` — per-step `cond(Σ⁺)`, `cond(S)`, `cond(Σ_post)`, the
+  minimum eigenvalue of the posterior covariance, and a positive-definiteness flag, computed
+  host-side. Three `S` re-inversions under `R(x)` against a contracting Σ is where orders of
+  magnitude go missing quietly. The eigenvalue bar is an assertion and not a clamp, because
+  a clamp launders the failure it was meant to catch.
+- `examples/ffg/crossover.py` — the crossover measurement, gated. It prints the exhaustive
+  argmin per horizon, the mechanism split (disclosed as post-selection, because the pair it
+  scores was found by the search), an independent NumPy kernel on the headline number, the
+  counterfactual showing the flip is epistemically driven, and the conditioning against its
+  registered bars.
+- `examples/ffg/crossover_sweep.py` — the constant-action null. A constant walk overshoots
+  the cue and never exploits, so the constant family cannot express the two-phase plan at
+  all. That null is the reason the exhaustive search is necessary, which is why it ships as
+  a check rather than as a footnote.
+- A `slow` pytest marker for the exhaustive gate. Pull requests run without it; merges to
+  main and releases run with it.
 
 - `examples/crossover_horizon_figure.py` — a showcase of the epistemic/pragmatic crossover on
   an open plane, and the first demo of it on the *flat* Kalman/EFE route rather than the factor
@@ -21,7 +84,7 @@ Everything worth noting lands here. The format follows [Keep a Changelog](https:
   drops out of the margin. The term itself stays nonzero and grows with `H` (ADR-003). Renders
   the animation plus a three-panel companion. `--check` prints the sweep and asserts what the
   figures claim, gated in `tests/test_example_checks.py`. Its crossing lands at `H = 7`,
-  which is the same integer as 0.4.4's registered `H*` and is unrelated to it: different
+  which is the same integer as this release's registered `H*` and is unrelated to it: different
   model, different backend, whole-state epistemic rather than node-restricted, and no
   search at all. The demo says so in its own output, and neither number should be quoted
   as the other.
@@ -52,6 +115,14 @@ Everything worth noting lands here. The format follows [Keep a Changelog](https:
   gates it, dead links included.
 
 ### Changed
+
+- `EFESelector` now reports a `warrant` of `CORROBORATED`. It samples a continuum, so it can
+  corroborate a universal over the action space but never decide one. The enumerated
+  search's `PROVED` prints in different words for exactly that reason.
+- `examples/ffg/crossover.py --check` reports the four registered falsifiers one line each,
+  in three-valued outcomes, rather than closing on a single `PASS`. A falsifier that is void
+  by construction did not pass a test, and one the gate skips now says so instead of
+  borrowing the write-up's answer (ADR-029).
 
 - The README's crossover section says what the horizon result is for. It now cites
   arXiv:2607.20306, which establishes that `R(x)` makes the epistemic term non-constant,
@@ -131,76 +202,6 @@ Everything worth noting lands here. The format follows [Keep a Changelog](https:
   `tests/test_agent.py`, `tests/test_efe_selector.py` and `tests/test_efe.py`, whose
   `TestPrecisionControlsBalance` was written for it. ADR-008 and ADR-013 still name the path;
   `DECISIONS.md` is append-only, so those references stand as the historical record.
-
-## [0.4.4] — 2026-08-01
-
-The multi-step slice of expected free energy. Scoring one policy over a horizon was already
-here; this release adds searching over a policy family and certifying that the search was
-exhaustive, which is what the crossover measurement needed. The headline is `H* = 7`: the
-horizon at which the best plan on the coupled-tree cue task stops being a direct reach and
-becomes a two-phase sense-then-commit walk. Every horizon is a complete enumeration, so the
-flip is decided rather than sampled.
-
-Nothing on the H = 1 path moved. The existing suite passes unmodified and the one-step
-arithmetic stays byte-identical to 0.4.3.
-
-### Added
-
-- `cpomdp.enumeration` — the exhaustive search family, deliberately a separate object from
-  `EFESelector`'s continuous grid so the two warrants cannot be confused. `FiniteActionSet`
-  is versioned, so an action added after results are seen shows up in the diff rather than
-  in the prose. `EnumeratedEfeSearch` enumerates `A^H` and returns the argmin policy with
-  the full `G` vector. `CompletenessCertificate` asserts expected against visited and raises
-  `IncompleteEnumerationError` on a mismatch, which is what earns the search a `PROVED`
-  warrant where a grid earns only `CORROBORATED` (ADR-030, ADR-031).
-- `EnumeratedEfeSearch.over_backend` scores enumerated policies on an FFG backend instead of
-  a flat model. Scoring is injected as a strategy, so the enumeration, the certificate and
-  the cost accounting are shared rather than duplicated. A reduce-to-flat oracle gates it:
-  on a coupling-free backend it reproduces the flat search exactly (ADR-034).
-- `RecedingHorizonSelector` and `OpenLoopSelector`, both `ActionSelector`s wrapping the
-  enumerated search. They stay separate because the two modes genuinely differ, and a
-  measurement has to declare which one it used. Both report `cost_per_plan = |A|^H · H` and
-  a `replan_interval`. Neither reports the grid's `n_candidates × horizon`, which would
-  under-count the real work by a factor of `|A|^(H−1)`.
-- `policy_efe_trace`, returning a `PolicyEfeTrace`: the per-step `g`, pragmatic, epistemic,
-  μ⁺, Σ⁺, Σ_post and S that the rollout scan already computed and then discarded. It sits
-  beside the hot path rather than in it, so the selector stays allocation-free. Its sums
-  equal the scalars `policy_efe` returns under `assert_array_equal`, which is the proof that
-  it is the same arithmetic and not a second implementation.
-- `policy_efe_ffg` and `policy_efe_ffg_trace`, the H-step rollout on a coupling graph, with
-  the epistemic term aimed at a named node at the coupling-resolved μ⁺. Gated from both
-  ends: at H = 1 it is byte-identical to the one-step FFG kernel, and with no coupling it
-  matches `policy_efe` (ADR-032).
-- `cpomdp.crossover` — `crossover_statistic`, `crossover_horizon` and `CrossoverStatistic`.
-  The horizon aggregation is the symmetric between-policy contrast `ΔG = Δc − Δε`. At H = 1
-  it collapses to the anchors `Δε = 1.7232`, `Δc = 4.4910`, `ΔG = +2.7678` nats, pinned at a
-  tolerance of `1e-4` (ADR-033).
-- `diagnostics.rollout_conditioning` — per-step `cond(Σ⁺)`, `cond(S)`, `cond(Σ_post)`, the
-  minimum eigenvalue of the posterior covariance, and a positive-definiteness flag, computed
-  host-side. Three `S` re-inversions under `R(x)` against a contracting Σ is where orders of
-  magnitude go missing quietly. The eigenvalue bar is an assertion and not a clamp, because
-  a clamp launders the failure it was meant to catch.
-- `examples/ffg/crossover.py` — the crossover measurement, gated. It prints the exhaustive
-  argmin per horizon, the mechanism split (disclosed as post-selection, because the pair it
-  scores was found by the search), an independent NumPy kernel on the headline number, the
-  counterfactual showing the flip is epistemically driven, and the conditioning against its
-  registered bars.
-- `examples/ffg/crossover_sweep.py` — the constant-action null. A constant walk overshoots
-  the cue and never exploits, so the constant family cannot express the two-phase plan at
-  all. That null is the reason the exhaustive search is necessary, which is why it ships as
-  a check rather than as a footnote.
-- A `slow` pytest marker for the exhaustive gate. Pull requests run without it; merges to
-  main and releases run with it.
-
-### Changed
-
-- `EFESelector` now reports a `warrant` of `CORROBORATED`. It samples a continuum, so it can
-  corroborate a universal over the action space but never decide one. The enumerated
-  search's `PROVED` prints in different words for exactly that reason.
-- `examples/ffg/crossover.py --check` reports the four registered falsifiers one line each,
-  in three-valued outcomes, rather than closing on a single `PASS`. A falsifier that is void
-  by construction did not pass a test, and one the gate skips now says so instead of
-  borrowing the write-up's answer (ADR-029).
 
 ### Deferred and unsupported
 
