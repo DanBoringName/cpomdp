@@ -1,4 +1,4 @@
-# cpomdp
+# cpomdp — Continuous Active Inference for Python
 
 [![PyPI](https://img.shields.io/pypi/v/cpomdp.svg)](https://pypi.org/project/cpomdp/)
 [![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.21334562-blue.svg)](https://doi.org/10.5281/zenodo.21334562)
