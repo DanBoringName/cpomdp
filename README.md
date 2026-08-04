@@ -179,9 +179,9 @@ I used an AI coding assistant (Claude Opus-4.8) as a tool under close review: to
 
 ## Contributions
 
-If you would like to contribute either your dev time or help steer the direction of the toolbox, please add a GitHub issue or discussion thread. I am monitoring this repository closely and would love to collaborate.
+If you would like to contribute either your dev time or help steer the direction of the toolbox, please add a GitHub issue or discussion thread. I am monitoring this repository closely and would love to collaborate. [CONTRIBUTING.md](CONTRIBUTING.md) covers the setup, the hooks, and the bar a PR has to clear.
 
-If you notice a better method in something I've already done or are just curious and want to chat I am more than happy to talk through my decision processes. I intend to blog my construction of cpomdp provided it doesn't interfere with developing it.
+If you notice a better method in something I've already done or are just curious and want to chat I am more than happy to talk through my decision processes and improve on my work. I intend to blog my construction of cpomdp provided it doesn't interfere with developing it.
 
 ## Acknowledgements
 
