@@ -127,10 +127,10 @@ class LinearGaussianModel:
     no ``control`` is a pure filtering (tracking) model.
 
     Three optional fields (all default ``None`` → the plain fixed-matrix model)
-    extend it: ``observation`` (an [ObservationModel][cpomdp.ObservationModel] for
+    extend it: ``observation`` (an [`ObservationModel`][cpomdp.ObservationModel] for
     state-dependent sensing ``R(x)``), ``process_noise`` (a
-    [DynamicsNoise][cpomdp.DynamicsNoise] for state-dependent process noise
-    ``Q(x)``), and ``structure`` (a [ModelStructure][cpomdp.ModelStructure]
+    [`DynamicsNoise`][cpomdp.DynamicsNoise] for state-dependent process noise
+    ``Q(x)``), and ``structure`` (a [`ModelStructure`][cpomdp.ModelStructure]
     declaring the factor / Markov-blanket partition).
     """
 

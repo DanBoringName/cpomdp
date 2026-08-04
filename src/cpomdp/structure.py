@@ -81,11 +81,11 @@ class ModelStructure:
     - ``channels`` -- name -> observation-row indices: the sensory typing of outputs.
 
     Construct with the tuple form directly, or
-    [from_dicts][cpomdp.ModelStructure.from_dicts] for the dict form.
+    [`from_dicts`][cpomdp.ModelStructure.from_dicts] for the dict form.
     Every field normalises to ``(("name", (idx, ...)), ...)`` so the whole object is
     hashable — it must be, it rides in the model's pytree aux_data. There is no
     construction-time ``_validate``: every real check needs the model, so it lives in
-    the opt-in [validate][cpomdp.ModelStructure.validate].
+    the opt-in [`validate`][cpomdp.ModelStructure.validate].
     """
 
     factors: _Groups

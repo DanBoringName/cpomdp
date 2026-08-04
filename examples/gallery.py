@@ -552,7 +552,10 @@ def check_two_route_agreement(
         f"var={float(flattened.cov[0, 0]):.6f}"
     )
     print(f"  max |difference|       : {gap:.2e}  ->  {'PASS' if agrees else 'FAIL'}")
-    assert agrees, f"{headline} routes differ by {gap:.2e}, tolerance {tolerance:.0e}"
+    if not agrees:
+        raise AssertionError(
+            f"{headline} routes differ by {gap:.2e}, tolerance {tolerance:.0e}"
+        )
 
 
 def figure_main(

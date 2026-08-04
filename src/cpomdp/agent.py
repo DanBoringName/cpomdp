@@ -90,7 +90,8 @@ class Agent:
                 objective would dispatch — the escape hatch for regimes the
                 automatic dispatch declines (e.g. EFE on a fixed sensor).
             backend: The inference engine. Defaults to a per-step
-                ``KalmanBackend``; pass any ``InferenceBackend`` (e.g. a
+                [`KalmanBackend`][cpomdp.KalmanBackend]; pass any
+                [`InferenceBackend`][cpomdp.InferenceBackend] (e.g. a
                 steady-state Kalman or the RxInfer oracle) to swap engines.
 
         Raises:
@@ -231,7 +232,7 @@ class Agent:
         """Alias for ``belief`` (read-only) — pymdp muscle-memory ``agent.qs``.
 
         The name is pymdp's, carried over for familiarity; the object is a Gaussian
-        [Belief][cpomdp.Belief], not a categorical posterior. Prefer ``belief``.
+        [`Belief`][cpomdp.Belief], not a categorical posterior. Prefer ``belief``.
         """
         return self.belief
 
