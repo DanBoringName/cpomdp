@@ -170,9 +170,11 @@ decays under a constant pull, and `ΔG` crosses zero exactly once.
 The right-hand panel below is the control. A beacon-and-goal task on a plane looks like
 the discrete cue tasks people already know, so the whole sweep is re-run with `R` frozen
 at a constant, everything else identical. Curiosity then never pays at any horizon.
-Freezing `R` zeroes the epistemic term. With a fixed noise the covariance recursion stops
-consulting the action, so both plans carry the identical covariance sequence. It takes
-`R(x)` *and* the horizon.
+What freezing `R` zeroes is `Δε`, not `ε`. With a fixed noise the covariance recursion
+stops consulting the action, so both plans carry the identical covariance sequence and
+whatever either one learns cancels out of the difference. Each plan's own `ε` is still
+nonzero and still grows with `H`. Action-invariance is the collapse, not absence. It
+takes `R(x)` *and* the horizon.
 
 ![The margin between the two plans against the planning horizon, crossing zero once, beside a frozen-R control that never crosses](../docs/assets/crossover_horizon.png)
 

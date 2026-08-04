@@ -169,7 +169,11 @@ def axis_action_set(
 
 
 def enumeration_cost(
-    action_set: FiniteActionSet, horizon: int, n_dims: int | None = None
+    action_set: FiniteActionSet,
+    horizon: int,
+    n_dims: int | None = None,
+    *,
+    context_dim: int = 1,
 ) -> tuple[int, int, float]:
     """`(policies, step_evals, peak_gib)` for one exhaustive sweep at this horizon.
 
@@ -189,10 +193,13 @@ def enumeration_cost(
     Args:
         action_set: the repertoire being enumerated.
         horizon: how many steps deep.
-        n_dims: spatial dimensions, which set the joint width `1 + 2·n_dims`. Defaults
-            to the action set's own `action_dim`, which is what `axis_action_set` builds
-            it from. A defaulted mismatch under-reads the one number that kills the
-            session, so there is no constant here to get wrong.
+        n_dims: spatial dimensions. Defaults to the action set's own `action_dim`,
+            which is what `axis_action_set` builds it from, so this one cannot drift.
+        context_dim: how wide the context node is, matching `build_maze`'s argument of
+            the same name. The joint is `context_dim + 2·n_dims` and the estimate is
+            quadratic in it, so leaving this defaulted against a two-wide context
+            under-reads by 1.44x on top of the 1.6x floor above. Nothing here can read
+            it off the action set. The caller has to carry it across.
 
     Returns:
         The policy count, the step-evaluation count, and a peak-memory estimate in GiB.
@@ -200,7 +207,7 @@ def enumeration_cost(
     if n_dims is None:
         n_dims = action_set.action_dim
     policies = action_set.size**horizon
-    joint = 1 + 2 * n_dims
+    joint = context_dim + 2 * n_dims
     per_policy = 8 * (horizon * action_set.action_dim + 4 * joint * joint)
     return policies, policies * horizon, policies * per_policy / 1024**3
 
@@ -315,6 +322,8 @@ def build_maze(
             and that is the default. A wider context is numerically inert here — every
             EFE component is bit-identical across widths — so it exists only to exercise
             the node-shape bookkeeping against a graph whose two nodes differ in width.
+            Inert in the *answer*, not in the *cost*: it widens the joint, and
+            `enumeration_cost` is quadratic in that. Pass it there too.
 
     Returns:
         A `CouplingGraphBackend` with an `n_dims`-wide control on the position block.

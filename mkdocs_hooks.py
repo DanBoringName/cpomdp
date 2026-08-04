@@ -17,7 +17,16 @@ repoints them on the way into a page:
 | `#a-heading`                    | untouched. Anchors already work in both     |
 
 A relative link with no target in the repository logs a mkdocs warning, so
-`mkdocs build --strict` fails on it.
+`mkdocs build --strict` fails on it. Reference definitions (`[label]: path`)
+are repointed and checked alongside inline links. Fenced blocks and inline
+code spans are skipped, indented or not.
+
+**Known gap: a four-space indented code block is not recognised**, so a link
+inside one is rewritten and dead-link checked as though it were prose. The gap
+is deliberate. Any pattern that matches an indented code block also matches
+four-space list continuation, and a list item holding a link is ordinary
+markdown. Closing this would trade a build that aborts loudly for a link that
+ships silently wrong. Use a fence.
 """
 
 from __future__ import annotations
@@ -37,11 +46,22 @@ log = logging.getLogger("mkdocs.plugins.single_source")
 
 _INCLUDE = re.compile(r'^--8<--[ \t]+"([^"]+)"[ \t]*$', re.MULTILINE)
 
-# A fenced code block, or a link/image target. Both in one pattern is what keeps
-# fenced blocks intact: a fence matches first and is handed back untouched, so a
-# link inside a code sample is never rewritten.
-_FENCE_OR_LINK = re.compile(
-    r"(?P<fence>^(?P<ticks>```+|~~~+)[^\n]*\n.*?^(?P=ticks)[ \t]*$)"
+# Code to skip and links to repoint, in one pattern. Alternatives are tried left to
+# right, so a code region matches first and is handed back untouched and a link inside
+# a code sample is never rewritten. Order is the mechanism, not a tidiness choice.
+_LINK_SCAN = re.compile(
+    # A fenced block. Both rows of ticks may be indented. A fence inside a numbered
+    # step is ordinary markdown, and anchoring at column 0 made its links rewritable.
+    r"(?P<fence>^[ \t]*(?P<ticks>```+|~~~+)[^\n]*\n.*?^[ \t]*(?P=ticks)[ \t]*$)"
+    # An inline span, one line, no backtick inside it. The `+` on the inner class is
+    # load-bearing: with `*` a bare ``` line matches here, and when the scan reaches a
+    # fence mid-line the fence alternative never gets its turn.
+    r"|(?P<code>`+[^`\n]+`+)"
+    # A reference definition, `[label]: target "title"`. It resolves to a real link, so
+    # it is repointed rather than skipped.
+    r"|(?P<ref>^(?P<ref_indent>[ \t]{0,3})\[(?P<label>[^\]\n]+)\]:[ \t]*"
+    r"<?(?P<ref_target>[^()<>\s]+)>?(?P<ref_title>[ \t]+\"[^\"\n]*\")?[ \t]*$)"
+    # An inline link or image target.
     r"|\]\([ \t]*<?(?P<target>[^()<>\s]+)>?(?P<title>[ \t]+\"[^\"]*\")?[ \t]*\)",
     re.MULTILINE | re.DOTALL,
 )
@@ -119,23 +139,36 @@ def rewrite_links(
 
     Returns:
         The rewritten markdown, and every link whose target does not exist in
-        the repository, in the order they appear. Fenced code is left alone.
+        the repository, in the order they appear. Fenced code and inline code
+        spans are left alone.
     """
     missing: list[str] = []
 
-    def repoint(match: re.Match[str]) -> str:
-        if match.group("fence") is not None:
-            return match.group(0)
-        target = match.group("target")
+    def repointed(target: str) -> str | None:
+        """The site target, or None if this link is not ours to rewrite."""
         repo_path = _repo_path(target, source)
         if repo_path is None:
-            return match.group(0)
+            return None
         if not (layout.repo_root / repo_path).exists():
             missing.append(target)
-        rewritten = resolve_link(target, source=source, page=page, layout=layout)
-        return f"]({rewritten}{match.group('title') or ''})"
+        return resolve_link(target, source=source, page=page, layout=layout)
 
-    return _FENCE_OR_LINK.sub(repoint, text), missing
+    def repoint(match: re.Match[str]) -> str:
+        # Anything that matched without naming a target is a code region: hand it back.
+        if (target := match.group("target")) is not None:
+            rewritten = repointed(target)
+            if rewritten is None:
+                return match.group(0)
+            return f"]({rewritten}{match.group('title') or ''})"
+        if (target := match.group("ref_target")) is not None:
+            rewritten = repointed(target)
+            if rewritten is None:
+                return match.group(0)
+            label, title = match.group("label"), match.group("ref_title") or ""
+            return f"{match.group('ref_indent')}[{label}]: {rewritten}{title}"
+        return match.group(0)
+
+    return _LINK_SCAN.sub(repoint, text), missing
 
 
 def expand_includes(

@@ -19,6 +19,13 @@ sys.path.insert(0, str(_examples / "ffg"))
 
 # The threshold the `slow` marker means, in seconds. Change it here. The marker's
 # description in pyproject.toml points at this name rather than repeating the number.
+#
+# Wall clock is machine-relative, so the rule needs a reference or it produces a
+# different verdict per reviewer. Marks are decided on the durations of an isolated
+# run on the owner's development machine. A slower box will see the reporter below
+# flag tests that are marked correctly by that rule. That is the report doing its job
+# on the wrong hardware, not a marking bug. Only reproduce it on the reference before
+# adding a marker.
 SLOW_TEST_SECONDS = 20.0
 
 _over_threshold: list[tuple[str, float]] = []

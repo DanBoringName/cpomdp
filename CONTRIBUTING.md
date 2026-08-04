@@ -52,6 +52,21 @@ save, point it at ruff yourself; just don't rely on it, the hooks are what count
 - a few **hygiene** checks: no trailing whitespace, files end in a newline, YAML and
   TOML parse, no leftover merge-conflict markers.
 
+## The docs site
+
+Four pages under `docs/` are one-line stubs: `index.md`, `changelog.md`,
+`examples.md` and `examples-ffg.md`. Each is a `--8<--` snippet include of a file
+that lives outside `docs/`, because GitHub and PyPI expect `README.md` and
+`CHANGELOG.md` at the repo root while MkDocs only serves what's under `docs_dir`.
+Edit the source file, not the stub. `mkdocs_hooks.py` pastes the content in at
+build time and repoints the relative links, so one file reads correctly in both
+places. The stubs are excluded from markdownlint and cspell.
+
+```bash
+uv run --group docs mkdocs build --strict # how to build mkdocs; what CI runs; fails on a bad link
+uv run --group docs mkdocs serve          # live preview at localhost:8000
+```
+
 ## Running things by hand
 
 ```bash

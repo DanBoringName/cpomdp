@@ -17,7 +17,8 @@ Everything worth noting lands here. The format follows [Keep a Changelog](https:
   the epistemic pull is flat while the pragmatic gradient decays under it. A frozen-R twin re-runs
   the whole sweep with `R` pinned and never crosses, so the behaviour is attributable to the
   state-dependent sensor and the horizon together rather than to the beacon-and-goal geometry.
-  Under a fixed sensor the epistemic term is a constant at every horizon (ADR-003). Renders
+  Under a fixed sensor the epistemic term is the same for both plans at every horizon, so it
+  drops out of the margin. The term itself stays nonzero and grows with `H` (ADR-003). Renders
   the animation plus a three-panel companion. `--check` prints the sweep and asserts what the
   figures claim, gated in `tests/test_example_checks.py`. Its crossing lands at `H = 7`,
   which is the same integer as 0.4.4's registered `H*` and is unrelated to it: different
@@ -39,6 +40,12 @@ Everything worth noting lands here. The format follows [Keep a Changelog](https:
   touched. Every committed asset re-renders byte-identical to its pre-refactor baseline.
   `tests/test_horizon_dimensions.py` builds its arena from `cue_maze` rather than inlining
   a copy of it.
+- `tests/test_cue_maze_parity.py`. `cue_maze.build_maze(1)` is claimed to reproduce
+  `epistemic_dissociation_figure.build_backend(cue_x=CUE_DETOUR_X)` element for element, and
+  the registered crossover is measured on the latter. The claim held on two files kept in
+  sync by hand. Now it holds on dims, root, A, Q, B, the coupling and its noise, C, and
+  `R(x)` sampled the length of the corridor rather than at one point. The frozen twins are
+  excluded, because they genuinely differ and `cue_maze.py` says why.
 - `mkdocs_hooks.py`. Expands `--8<--` snippet includes and rewrites the relative links
   inside them to site-local targets, so `examples/README.md` can carry links that work both
   on GitHub and on the published site without hard-coding either. `tests/test_docs_hooks.py`
@@ -57,14 +64,49 @@ Everything worth noting lands here. The format follows [Keep a Changelog](https:
 - `examples/bacillus_uncertain_food.py` is gated. `check_backend_agreement` — `KalmanBackend`
   against the FFG `ChainBackend` on one scripted input sequence, `atol=1e-7` — now runs in
   `tests/test_example_checks.py`. The README's flagship had no test of any kind before this.
+- `gallery.precision_field` samples the model's own `noise_fn` instead of re-deriving the
+  well from its parameters, and takes the channel to read as a required argument. It had
+  been asserting the sensor was a `CallableSensor` and then ignoring it, so on the flagship
+  it drew the right channel by coincidence of how that model's `block_diag` is ordered. A
+  demo with a different layout would have got a silently wrong figure that still passed the
+  assert. One `vmap` replaces the `res²` Python-level calls, so the field is also cheaper to
+  draw. The flagship's field agrees with the old computation to 2e-15, float noise from the
+  `vmap` and nothing else, well under the width of a contour band.
+- `gallery.print_two_route_agreement` is `check_two_route_agreement` and raises on a
+  disagreement. It printed `FAIL` and returned, and neither caller was gated, so a broken
+  equivalence would have exited zero. `coupling_graph_figure.check` and
+  `chemotaxis_figure.check` are public and run in `tests/test_example_checks.py`.
+- `DECISIONS.md` states at the top that a path inside an ADR is the path as of that ADR's
+  date. `examples/bacillus_seeking_food.py` and `examples/bacillus_lqr.py` are named by
+  ADR-008 and ADR-013 and no longer exist, which the append-only rule requires and which the
+  file previously left the reader to work out.
+- `mkdocs_hooks.py` skips a fenced block wherever it is indented, and skips inline code
+  spans. Both were anchored at column zero, so a fence inside a numbered step, which is
+  ordinary markdown, had its links rewritten *and* reported dead, and `mkdocs build --strict`
+  aborted the docs deploy on a correct README edit. Reference definitions (`[label]: path`)
+  are now repointed and dead-link checked too. They resolve to real anchors and previously
+  escaped both, so the repository's layout shipped to the site. A four-space indented code
+  block is still not recognised, and the module docstring says so and says why: the same
+  pattern matches four-space list continuation, so closing it would trade a loud build
+  failure for a silently wrong link. All four included sources rewrite byte-identically
+  across the change.
+- `cue_maze.enumeration_cost` takes `context_dim`. It hardcoded a joint width of
+  `1 + 2·n_dims` while `build_maze` builds `context_dim + 2·n_dims`, and the estimate is
+  quadratic in that width, so a two-wide context was priced 1.44x low and a four-wide one
+  2.56x low, on top of the 1.6x floor the docstring already warns about, against a number
+  whose whole job is to stop a sweep taking the machine down.
+  `tests/test_horizon_dimensions.py` recovers the width the estimate charged for and pins
+  it to the built backend's own `n_total` across five `(n_dims, context_dim)` pairs.
 - The `slow` pytest marker is a wall-clock rule now, not a description of one test.
   Anything past `conftest.SLOW_TEST_SECONDS` (20s) carries it and runs on merge-to-main
   and release rather than on pull requests. `conftest.py` measures each run and prints
   any unmarked test that has drifted over, so the rule does not depend on anyone
-  remembering it. Two tests cross the line and are newly marked:
-  `test_double_integrator_horizon.py::test_h2_choice_matches_brute_force_oracle` (~33s)
-  and `test_example_checks.py::test_crossover_horizon_check` (~20s). Pull-request
-  coverage is unaffected at 93.8% against the 80% gate.
+  remembering it. One test crosses the line and is newly marked:
+  `test_double_integrator_horizon.py::test_h2_choice_matches_brute_force_oracle` (~21s).
+  Marks are decided on an isolated run on the owner's development machine, which
+  `conftest.py` now records as the reference. Wall clock is machine-relative, and without
+  one the same suite marks differently per reviewer. Pull-request coverage is unaffected at
+  93.8% against the 80% gate.
 
 ### Removed
 

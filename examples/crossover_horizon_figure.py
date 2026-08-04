@@ -52,10 +52,13 @@ Nothing grows past anything.
 **The control that makes it attributable.** A beacon-and-goal task on a plane looks like
 the discrete cue tasks readers already know, so the whole sweep is re-run with `R` held
 at a constant matched to the direct path, everything else identical. Curiosity then
-never pays at any horizon in range. Freezing `R` zeroes the epistemic term outright.
-With a fixed noise the covariance recursion never consults the action, so both plans
-carry the identical covariance sequence. Both the state-dependent sensor and the
-horizon are load-bearing. Neither produces the crossing alone.
+never pays at any horizon in range. What freezing `R` zeroes is `Δε`, not `ε`. With a
+fixed noise the covariance recursion never consults the action, so both plans carry the
+identical covariance sequence, and whatever either one learns cancels out of the
+difference. Each plan's own `ε` stays nonzero and grows with `H` (0.005 nats at `H = 2`,
+0.042 at `H = 16`). The collapse ADR-003 records is action-invariance, not absence.
+Both the state-dependent sensor and the horizon are load-bearing. Neither produces the
+crossing alone.
 
 Where the crossing lands belongs to these particular numbers. The shape carries over.
 
@@ -362,15 +365,13 @@ def frozen_reference_noise(horizon: int = H_MAX) -> float:
     the beacon, so the average sits just under the dull far-field value, which is the
     point: the twin is the sensor the near-sighted agent actually experiences, held
     still.
+
+    It averages `pinned_noise` rather than walking the path a second time. Sampling
+    `R(x)` twice invites the two samplers to drift apart in which state they hand it,
+    and today they would disagree silently: `beacon_noise` reads the position block
+    alone, so a wrong goal block is invisible until the well ever keys on one.
     """
-    params = sensor_params()
-    position = np.zeros(CONTEXT_DIMS)
-    readings = []
-    for step in direct_policy(horizon):
-        position = position + step
-        state = jnp.asarray(np.concatenate([position, np.zeros(CONTEXT_DIMS)]))
-        readings.append(float(np.asarray(beacon_noise(state, params))[-1, -1]))
-    return float(np.mean(readings))
+    return float(np.mean(pinned_noise(direct_policy(horizon))))
 
 
 def pinned_noise(policy: np.ndarray) -> np.ndarray:
@@ -557,11 +558,12 @@ def check() -> None:
             f"out of ground to differ over",
         ),
         (
-            "freezing R zeroes the epistemic term outright, rather than shrinking it",
+            "freezing R zeroes the epistemic contrast, rather than shrinking it",
             float(frozen_pull.max()) == 0.0,
             f"largest |Δε| under a frozen sensor is {frozen_pull.max():.1f}. The "
             "covariance recursion stops consulting the action, so both plans carry "
-            "the identical covariance sequence",
+            "the identical covariance sequence. Neither plan's own ε is zero, and "
+            "both grow with H. What collapses is the difference",
         ),
     ]
 

@@ -465,7 +465,11 @@ def render(regimes, runs, out_path, *, fps=20):
     xlim = (allpts[:, 0].min() - pad, allpts[:, 0].max() + pad)
     ylim = (allpts[:, 1].min() - pad, allpts[:, 1].max() + pad)
 
-    field_xs, field_ys, field = gallery.precision_field(xlim, ylim, build_model())
+    # Channel 2: the first displacement row. Rows 0-1 are proprioception, pinned at the
+    # fixed `R_SELF`. Reading the field off those would draw a flat sheet.
+    field_xs, field_ys, field = gallery.precision_field(
+        xlim, ylim, build_model(), channel=2
+    )
     field_levels = np.linspace(field.min(), field.max(), 9)
     n_frames = len(runs[regimes[0]["key"]][0])
 

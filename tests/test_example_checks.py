@@ -9,6 +9,8 @@ environment without the ``examples`` extra. ``conftest.py`` puts ``examples/`` a
 """
 
 import bacillus_uncertain_food
+import chemotaxis_figure
+import coupling_graph_figure
 import crossover
 import crossover_horizon_figure
 import crossover_sweep
@@ -44,20 +46,35 @@ def test_uncertain_food_backend_agreement():
     assert max_cov_diff < 1e-7, f"covariances diverge by {max_cov_diff:.2e}"
 
 
+def test_coupling_graph_two_routes_agree():
+    """`CouplingGraph.infer` on a branching tree matches the hand-flattened Kalman.
+
+    The demo prints the verdict, and until it was wired up here nothing consumed it: a
+    disagreement printed `FAIL` and exited zero.
+    """
+    coupling_graph_figure.check()
+
+
+def test_chemotaxis_two_routes_agree():
+    """The same equivalence on the five-node chemotaxis network, hub inferred through
+    its leaves. Its verdict was equally unconsumed."""
+    chemotaxis_figure.check()
+
+
 def test_crossover_sweep_check():
     """The constant reach/walk pair never crosses over — the search-family artefact that
     makes the exhaustive varying-sequence search necessary."""
     crossover_sweep.check()
 
 
-@pytest.mark.slow
 def test_crossover_horizon_check():
     """The open-plane margin between a direct plan and a detour. The two animated
     agents choose differently. The margin crosses zero exactly once as the horizon
     grows. The epistemic pull stays flat while the pragmatic gradient decays under it,
     and a frozen-R twin never crosses at any horizon in range.
 
-    Two 16-horizon sweeps, live and frozen, at ~20s."""
+    Two 16-horizon sweeps, live and frozen. ~12s on the reference machine, under the
+    marker's threshold, and this is the demo's only gate. It stays on the PR path."""
     crossover_horizon_figure.check()
 
 

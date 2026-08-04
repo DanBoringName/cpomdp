@@ -296,16 +296,21 @@ def render(out_path: Path) -> Path:
     return out_path
 
 
-def _print_check() -> None:
+def check() -> None:
+    """Both routes' belief over the hidden CheA hub, and the assertion that they agree.
+
+    Plotting-free, so `tests/test_example_checks.py` can call it in the base
+    environment.
+    """
     native, flat, gap = _posteriors()
-    gallery.print_two_route_agreement(
+    gallery.check_two_route_agreement(
         "hidden CheA hub — same network, two routes:", native, flat, gap, EQUIV_TOL
     )
 
 
 def main() -> None:
-    """``--check`` prints both routes' CheA posteriors; otherwise render the figure."""
-    gallery.figure_main(render, "docs/assets/chemotaxis.png", check=_print_check)
+    """``--check`` asserts both routes agree on CheA, otherwise render the figure."""
+    gallery.figure_main(render, "docs/assets/chemotaxis.png", check=check)
 
 
 if __name__ == "__main__":

@@ -23,7 +23,7 @@ Needs the ``examples`` extra (matplotlib, not a runtime dependency of the librar
 
     uv run --extra examples python examples/ffg/coupling_graph_figure.py
 
-Pass ``--check`` to print the two routes' posteriors and their agreement, skipping the
+Pass ``--check`` to print the two routes' posteriors and assert they agree, skipping the
 render (no plotting deps on that path).
 """
 
@@ -468,9 +468,14 @@ def render(out_path: Path) -> Path:
     return out_path
 
 
-def _print_check() -> None:
+def check() -> None:
+    """Both routes' belief over the root, and the assertion that they agree.
+
+    Plotting-free, so `tests/test_example_checks.py` can call it in the base
+    environment.
+    """
     native, flat, gap = _posteriors()
-    gallery.print_two_route_agreement(
+    gallery.check_two_route_agreement(
         "belief over r — same tree, two routes:",
         native,
         flat,
@@ -481,8 +486,8 @@ def _print_check() -> None:
 
 
 def main() -> None:
-    """``--check`` prints the two routes' posteriors; otherwise render the figure."""
-    gallery.figure_main(render, "docs/assets/coupling_graph.png", check=_print_check)
+    """``--check`` asserts the two routes agree, otherwise render the figure."""
+    gallery.figure_main(render, "docs/assets/coupling_graph.png", check=check)
 
 
 if __name__ == "__main__":

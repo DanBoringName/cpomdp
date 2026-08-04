@@ -26,6 +26,7 @@ import cue_maze
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 import cpomdp.crossover
 from cpomdp.backends.coupling import CouplingGraphBackend
@@ -408,3 +409,48 @@ class TestEnumeratedSearchAtMultiDimAction:
         members = {tuple(a) for a in np.asarray(action_set.actions)}
         assert {tuple(row) for row in policies.reshape(-1, 2)} == members
         assert len({tuple(p.ravel()) for p in policies}) == 25
+
+
+def _priced_joint_width(action_set, horizon: int, n_dims: int, context_dim: int) -> int:
+    """The joint width `enumeration_cost` charged for, recovered from its estimate.
+
+    `per_policy = 8·(H·p + 4·joint²)`, so the width is the only unknown left once the
+    policy count and the action width are known. Reading it back is what lets the test
+    compare against the real graph rather than against a repeated formula.
+    """
+    policies, _, peak_gib = cue_maze.enumeration_cost(
+        action_set, horizon, n_dims, context_dim=context_dim
+    )
+    per_policy = peak_gib * 1024**3 / policies
+    joint_squared = ((per_policy / 8) - horizon * action_set.action_dim) / 4
+    return round(joint_squared**0.5)
+
+
+class TestEnumerationCostPricesTheRealJoint:
+    """The memory estimate is quadratic in the joint width, and overshooting the live
+    ceiling kills the whole session. So the width it charges for has to be the width the
+    graph actually builds, at every `(n_dims, context_dim)` the maze offers.
+
+    `n_dims` is read off the action set and cannot drift. `context_dim` cannot be:
+    nothing in an action set knows how wide the context node is, so the caller carries
+    it across by hand. That is exactly the kind of constant that goes stale.
+    """
+
+    @pytest.mark.parametrize(
+        ("n_dims", "context_dim"),
+        [(1, 1), (2, 1), (2, 2), (3, 1), (2, 4)],
+    )
+    def test_the_priced_width_is_the_backend_s_own(self, n_dims, context_dim):
+        action_set = cue_maze.axis_action_set(n_dims)
+        backend = cue_maze.build_maze(n_dims, context_dim=context_dim)
+        priced = _priced_joint_width(action_set, 2, n_dims, context_dim)
+        assert priced == backend.n_total
+
+    def test_a_wider_context_is_charged_for(self):
+        # The regression itself: a hardcoded `1 + 2·n_dims` returns the same estimate at
+        # every context width, so a `context_dim=2` sweep is priced as a `context_dim=1`
+        # one and under-reads by (6/5)² on the dominant term.
+        action_set = cue_maze.axis_action_set(2)
+        narrow = cue_maze.enumeration_cost(action_set, 2, 2, context_dim=1)[2]
+        wide = cue_maze.enumeration_cost(action_set, 2, 2, context_dim=2)[2]
+        assert wide > narrow

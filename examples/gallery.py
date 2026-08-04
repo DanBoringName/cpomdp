@@ -427,34 +427,55 @@ def precision_field(
     xlim: tuple[float, float],
     ylim: tuple[float, float],
     model,
+    *,
+    channel: int,
     res: int = 130,
 ):
-    """Sensor sharpness, `−ln R`, sampled over the arena, as `(xs, ys, field)`.
+    """Sensor sharpness `−ln R[channel, channel]` over the arena, as `(xs, ys, field)`.
 
     Drawn as a few discrete contour bands, a faint signal-strength map showing where
-    the world is legible: bright at the beacon, dark in the murk. Read off the same
-    `R(x)` the agents actually filter under rather than a redrawing of it.
+    the world is legible: bright at the beacon, dark in the murk. The sample comes from
+    the model's own `noise_fn`, so this is the `R(x)` the agents filter under rather
+    than a redrawing of it.
+
+    `channel` is required rather than defaulted because a block-diagonal `R` carries
+    more than one well and only one of them is the information channel. A model whose
+    first rows are fixed proprioception would plot a flat field under a default of 0,
+    and the figure would still render.
+
+    The sweep varies the first two state entries, the arena position both plane demos
+    put there. Every other block is held at the model's prior mean. A `noise_fn` that
+    keyed on one of those blocks would draw a field that is not a function of position,
+    which is not a thing a contour map can show.
 
     Args:
         xlim: the arena's x extent, as `(low, high)`.
         ylim: its y extent.
         model: the model whose `observation` is the `CallableSensor` to sample.
+        channel: which row of `R(x)` to read the sharpness off.
         res: how many samples per axis.
 
     Returns:
         The x samples, the y samples, and the `res × res` field, indexed `[y, x]`.
     """
+    sensor = model.observation
+    if not isinstance(sensor, CallableSensor):
+        raise TypeError(
+            "precision_field draws a state-dependent R(x). This model's observation is "
+            f"{type(sensor).__name__}, which has no field to draw"
+        )
     xs = np.linspace(*xlim, res)
     ys = np.linspace(*ylim, res)
-    sensor = model.observation
-    assert isinstance(sensor, CallableSensor)  # the field is that sensor's R(x)
-    params = sensor.noise_params
-    field = np.empty((res, res))
-    for j, yy in enumerate(ys):
-        for i, xx in enumerate(xs):
-            r = float(beacon_noise(jnp.array([xx, yy]), params)[0, 0])
-            field[j, i] = -np.log(r)  # higher = sharper sensing
-    return xs, ys, field
+    grid_x, grid_y = np.meshgrid(xs, ys)  # both (res, res), indexed [y, x]
+    states = np.tile(np.asarray(model.prior.mean, dtype=float), (res * res, 1))
+    states[:, 0] = grid_x.ravel()
+    states[:, 1] = grid_y.ravel()
+    # One vmapped sweep rather than res² Python-level calls into jax.
+    noise = jax.vmap(sensor.noise_fn, in_axes=(0, None))(
+        jnp.asarray(states), sensor.noise_params
+    )
+    sharpness = -np.log(np.asarray(noise[:, channel, channel]))  # higher = sharper
+    return xs, ys, sharpness.reshape(res, res)
 
 
 # --- expected free energy over a candidate set ---------------------------------------
@@ -498,7 +519,7 @@ def efe_sweep(model, belief, goal, actions):
 
 
 # --- check reporting ------------------------------------------------------------------
-def print_two_route_agreement(
+def check_two_route_agreement(
     headline: str,
     native,
     flattened,
@@ -507,14 +528,20 @@ def print_two_route_agreement(
     *,
     mean_symbol: str = "μ",
 ) -> None:
-    """Print two inference routes' scalar posteriors side by side, and their agreement.
+    """Print two inference routes' posteriors side by side, then assert they agree.
 
     The demos that flatten a graph by hand to check the native route all report the
     same shape: both posteriors, the largest difference, and a verdict against a
     declared tolerance. The tolerance is printed with the gap rather than assumed,
     so a passing line still shows what it passed against.
+
+    It raises rather than printing `FAIL` and returning. A verdict that only prints
+    exits zero on a disagreement, which reads as a gate and is not one.
+
+    Raises:
+        AssertionError: if the two routes differ by `tolerance` or more.
     """
-    verdict = "PASS" if gap < tolerance else "FAIL"
+    agrees = gap < tolerance
     print(headline)
     print(
         f"  CouplingGraph.infer    : {mean_symbol}={float(native.mean[0]):.6f}  "
@@ -524,7 +551,8 @@ def print_two_route_agreement(
         f"  flattened KalmanBackend: {mean_symbol}={float(flattened.mean[0]):.6f}  "
         f"var={float(flattened.cov[0, 0]):.6f}"
     )
-    print(f"  max |difference|       : {gap:.2e}  ->  {verdict}")
+    print(f"  max |difference|       : {gap:.2e}  ->  {'PASS' if agrees else 'FAIL'}")
+    assert agrees, f"{headline} routes differ by {gap:.2e}, tolerance {tolerance:.0e}"
 
 
 def figure_main(

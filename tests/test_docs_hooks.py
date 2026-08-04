@@ -126,6 +126,66 @@ class TestRewriteLinks:
         assert "```markdown\n[source](demo.py)\n```" in rewritten
         assert f"[real]({REPO_URL}/blob/main/examples/demo.py)" in rewritten
 
+    def test_a_fence_indented_in_a_list_item_is_not_a_link(self, layout):
+        # An ordinary numbered step. Anchoring the ticks at column 0 made these links
+        # rewritable *and* reported dead, which aborts `mkdocs build --strict` on an
+        # edit that is correct markdown.
+        text = "1. run it:\n\n    ```bash\n    see [x](nope.py)\n    ```\n"
+        rewritten, missing = rewrite_links(
+            text, source=GALLERY, page="examples.md", layout=layout
+        )
+        assert rewritten == text
+        assert missing == []
+
+    def test_an_inline_code_span_is_not_a_link(self, layout):
+        text = "write `[source](demo.py)` to link it, as in [real](demo.py)\n"
+        rewritten, missing = rewrite_links(
+            text, source=GALLERY, page="examples.md", layout=layout
+        )
+        assert "`[source](demo.py)`" in rewritten
+        assert f"[real]({REPO_URL}/blob/main/examples/demo.py)" in rewritten
+        assert missing == []
+
+    def test_a_reference_definition_is_repointed(self, layout):
+        # `[x]: path` resolves to a real anchor, so leaving it alone shipped the
+        # repository's layout to the site and skipped the dead-link check entirely.
+        text = '[demo]: ../docs/assets/demo.gif "the demo"\n\nsee ![a][demo]\n'
+        rewritten, missing = rewrite_links(
+            text, source=GALLERY, page="examples.md", layout=layout
+        )
+        assert rewritten.startswith('[demo]: assets/demo.gif "the demo"\n')
+        assert missing == []
+
+    def test_a_dead_reference_definition_is_reported(self, layout):
+        text = "[gone]: ../docs/assets/missing.gif\n"
+        _, missing = rewrite_links(
+            text, source=GALLERY, page="examples.md", layout=layout
+        )
+        assert missing == ["../docs/assets/missing.gif"]
+
+    def test_a_scheme_autolink_is_left_alone(self, layout):
+        # `<docs/index.md>` is not a link in the first place. CommonMark autolinks
+        # need a scheme, and a scheme-bearing one is external. Nothing to rewrite.
+        text = "<https://example.com/a.md> and <demo.py>\n"
+        rewritten, missing = rewrite_links(
+            text, source=GALLERY, page="examples.md", layout=layout
+        )
+        assert rewritten == text
+        assert missing == []
+
+    def test_a_four_space_code_block_is_a_known_gap(self, layout):
+        """Pinned, not desired. See the gap named in `mkdocs_hooks`'s docstring.
+
+        The same pattern would match four-space list continuation, so closing this
+        would stop rewriting links inside indented list items, putting a silent wrong
+        link where a loud build failure used to be. Fixing it breaks this test.
+        """
+        text = "text\n\n    see [source](demo.py)\n"
+        rewritten, _ = rewrite_links(
+            text, source=GALLERY, page="examples.md", layout=layout
+        )
+        assert f"[source]({REPO_URL}/blob/main/examples/demo.py)" in rewritten
+
     def test_a_link_to_nothing_is_reported(self, layout):
         text = "![gone](../docs/assets/missing.gif)\n"
         _, missing = rewrite_links(
