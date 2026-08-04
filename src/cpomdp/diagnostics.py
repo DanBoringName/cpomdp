@@ -38,18 +38,47 @@ reachable state". A negative is evidence, not proof.
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol, cast
 
+import jax
 import numpy as np
+from jaxtyping import Float64
 from numpy.typing import ArrayLike
 
 if TYPE_CHECKING:
-    # Annotation-only: the rollout diagnostic reads a trace's fields by duck typing,
-    # so diagnostics does not depend on efe at runtime (efe already depends on nothing
+    # Annotation-only: every diagnostic here reads its argument's fields by duck typing,
+    # so diagnostics depends on none of these at runtime (they already depend on nothing
     # here). Keeps the dependency one-way.
     from cpomdp.efe import PolicyEfeTrace
+    from cpomdp.types import Belief, LinearGaussianModel
+
+
+class ProbeBackend(Protocol):
+    """The three members ``probe_model`` reads off a graph backend.
+
+    Structural rather than a name, because three members is what the function requires.
+    Any backend growing them works, and the diagnostic keeps its one-way dependency on
+    the backends package. ``CouplingGraphBackend`` satisfies it.
+    """
+
+    @property
+    def observation_model(self) -> tuple[jax.Array, jax.Array]:
+        """``(C, R)`` over the joint state."""
+        ...
+
+    def predicted_belief(
+        self, prior: "Belief", action: ArrayLike | None = None
+    ) -> "Belief":
+        """The belief one prediction step ahead under ``action``."""
+        ...
+
+    def observation_noise_at(self, mean: ArrayLike) -> Float64[jax.Array, "m m"]:
+        """The stacked ``R`` linearized at a predicted mean."""
+        ...
+
 
 __all__ = [
+    "ProbeBackend",
     "RolloutConditioning",
     "SensorReport",
     "epistemic_value",
@@ -194,8 +223,8 @@ def _linearizations(
 
 
 def probe_model(
-    model,
-    belief,
+    model: "LinearGaussianModel | ProbeBackend",
+    belief: "Belief",
     actions: Sequence[ArrayLike],
     *,
     tol: float = 1e-12,
@@ -225,12 +254,13 @@ def probe_model(
         raise ValueError("probe_model needs at least one action to predict under.")
 
     if hasattr(model, "predicted_belief"):  # a graph backend
-        sensor_model = np.asarray(model.observation_model[0], dtype=float)
-        predicted = [model.predicted_belief(belief, np.asarray(a)) for a in actions]
+        backend = cast("ProbeBackend", model)
+        sensor_model = np.asarray(backend.observation_model[0], dtype=float)
+        predicted = [backend.predicted_belief(belief, np.asarray(a)) for a in actions]
         means = np.asarray([np.asarray(p.mean, dtype=float) for p in predicted])
         covs = [np.asarray(p.cov, dtype=float) for p in predicted]
         noises = [
-            np.asarray(model.observation_noise_at(mu), dtype=float) for mu in means
+            np.asarray(backend.observation_noise_at(mu), dtype=float) for mu in means
         ]
     else:  # a flat LinearGaussianModel
         sensor_model = np.asarray(model.sensor_model, dtype=float)

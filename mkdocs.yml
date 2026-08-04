@@ -75,7 +75,9 @@ nav:
       - Process noise: api/dynamics.md
       - Model structure: api/structure.md
       - Backends: api/backends.md
+      - Factor graph models: api/ffg.md
       - Action selection & goals: api/selection.md
       - Expected free energy: api/efe.md
+      - Diagnostics: api/diagnostics.md
       - Control (internal): api/control.md
   - Changelog: changelog.md
