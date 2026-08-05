@@ -49,6 +49,7 @@ from cpomdp.efe import policy_efe_ffg, policy_efe_ffg_trace
 from cpomdp.enumeration import EnumeratedEfeSearch, FiniteActionSet
 from cpomdp.selection import Preference
 from cpomdp.types import Belief
+from cpomdp.warrant import CheckReport, Outcome, Tier, Warrant, check_summary
 
 # The rollout-hygiene bars this shares with tests/test_rollout_hygiene.py: a floor under
 # min-eigenvalue(Σ_post) and a ceiling on cond(Σ⁺), cond(S), cond(Σ_post).
@@ -186,6 +187,32 @@ def _numpy_score(policy) -> float:
     return total
 
 
+def flip_margin_error(g_one: float, g_two: float) -> float:
+    """The error the declared conditioning ceiling allows on ``g_one - g_two``.
+
+    A float64 solve at condition number ``k`` returns a result whose relative error is
+    about ``k * eps``. The rollout-hygiene discipline declares ``cond <= COND_CEILING``
+    and ``tests/test_rollout_hygiene.py`` gates every ``Σ⁺``, ``S`` and ``Σ_post``
+    against it, so each score is good to ``|G| * COND_CEILING * eps`` and their
+    difference to twice that.
+
+    This is the bar the flip is measured against. It is derived from a ceiling that was
+    already declared and already enforced, not chosen to fit the measured margin. The
+    measured conditioning is far below the ceiling (``max cond = 1003`` on the H* walk),
+    so the true error is some five orders smaller again and this bound is loose in the
+    safe direction.
+
+    Args:
+        g_one: one policy's summed EFE.
+        g_two: the other's.
+
+    Returns:
+        A bound on the numerical error in their difference, in nats.
+    """
+    eps = float(np.finfo(float).eps)
+    return 2.0 * max(abs(g_one), abs(g_two)) * COND_CEILING * eps
+
+
 def conditioning(policy):
     """The registered rollout conditioning for a plan.
 
@@ -243,46 +270,104 @@ def epistemic_counterfactual(horizon=FLIP_H, actions=None):
 
 
 # --- the registered falsifiers, reported by both the bare run and the gate ----------
-# The four D3 falsifiers registered for this crossover, one line each in the
-# three-valued vocabulary of ADR-029: NOT TRIGGERED (the check ran and the condition did
-# not obtain), FIRED (it obtained, and the claim is refuted), NOT APPLICABLE (void by
-# construction, so it is evidence for nothing and does not count as a survivor). A
-# falsifier this gate does not run says so and names where it was measured, rather than
-# vanishing into a summary line. The two NOT TRIGGERED rows are backed by the assertions
-# in check() steps 1 and 2, so nothing here is decoration.
-FALSIFIERS = (
-    (
-        "1. no crossover at feasible H",
-        "NOT TRIGGERED",
-        f"argmin is cue-ward at H* = {FLIP_H}, inside H_MAX = {H_MAX} (step 1)",
-    ),
-    (
-        "2. flip not clean at H*/H*-1",
-        "NOT TRIGGERED",
-        "ΔG changes sign once, argmin flips at the same step (step 2)",
-    ),
-    (
-        "3. not reproducible across seeds",
-        "NOT APPLICABLE",
-        "no observation draw: the open-loop enumeration is deterministic",
-    ),
-    (
-        "4. H* unstable under refinement",
-        "NOT RUN HERE",
-        f"step-0.5 refinement costs {9**7 * 7} steps; see the write-up",
-    ),
-)
+def falsifiers() -> tuple[CheckReport, ...]:
+    """The four D3 falsifiers registered for this crossover, one report each.
+
+    A falsifier does not pass. ``NOT TRIGGERED`` is "it ran and the condition did not
+    obtain", so the claim survives it. ``NOT APPLICABLE`` is void by construction, so
+    it is evidence for nothing and is not a survivor. ``NOT RUN HERE`` was measured
+    elsewhere. Neither of the last two ran, so neither carries a warrant: the prover
+    cell is ``—``, because attributing one would claim evidence that was never produced.
+
+    Rows 1 and 2 read on both axes at once, which is the point of carrying them
+    separately. On the prover axis they are ``PROVED``, each resting on the exhaustive
+    per-horizon enumeration and carrying its completeness certificate, so "no policy in
+    the declared set flips earlier" is decided rather than sampled. On the tier axis
+    they are ``B``: the margin is measured against the error ``COND_CEILING`` allows on
+    a difference of two scores, named in the detail with the ``H*`` qualifier beside it.
+
+    A margin inside that bound is ``NOT RESOLVED``, not a failure. The ordering would
+    genuinely be undetermined, and the honest report of a tie is a tie.
+    """
+    backend, _, _, target = _setup()
+    certificate = EnumeratedEfeSearch.over_backend(
+        backend, ACTION_SET, target=target, horizon=FLIP_H
+    ).certificate
+    walk, reach = _numpy_score(_walk(FLIP_H)), _numpy_score(_reach(FLIP_H))
+    bound = flip_margin_error(walk, reach)
+    separated = abs(walk - reach) > bound
+    # A tie routes to NOT RESOLVED rather than to an exception. The bound is a bar the
+    # margin is read against, and "these two are too close to order" is a finding.
+    flip = Outcome.NOT_TRIGGERED if separated else Outcome.NOT_RESOLVED
+    bar = (
+        f"|ΔG| = {abs(walk - reach):.4f} vs error bound {bound:.2e} "
+        f"(cond ≤ {COND_CEILING:.0e}), {abs(walk - reach) / bound:.0e}x"
+    )
+    # Travels with the number everywhere it is quoted: the declared set clips the reach
+    # at -2 while the unconstrained optimum is -3, so 7 is an upper bound on H*, and a
+    # set containing -3 flips at 6. The bound above certifies the arithmetic, which was
+    # never the exposure here.
+    upper = f"H* = {FLIP_H} is an upper bound (set clips the reach at -2, optimum -3)"
+    return (
+        CheckReport(
+            name="1. no crossover at feasible H",
+            warrant=Warrant.PROVED,
+            outcome=flip,
+            tier=Tier.B,
+            detail=(
+                f"argmin is cue-ward at H* = {FLIP_H}, inside H_MAX = {H_MAX}. "
+                f"{upper}. {bar}"
+            ),
+            evidence=certificate,
+        ),
+        CheckReport(
+            name="2. flip not clean at H*/H*-1",
+            warrant=Warrant.PROVED,
+            outcome=flip,
+            tier=Tier.B,
+            detail=(
+                f"ΔG changes sign once, argmin flips at the same step. {upper}. {bar}"
+            ),
+            evidence=certificate,
+        ),
+        CheckReport(
+            name="3. not reproducible across seeds",
+            warrant=None,
+            outcome=Outcome.NOT_APPLICABLE,
+            tier=Tier.C,
+            detail="void by construction: no observation draw to vary across seeds",
+        ),
+        CheckReport(
+            name="4. H* unstable under refinement",
+            warrant=None,
+            outcome=Outcome.NOT_RUN_HERE,
+            tier=Tier.C,
+            detail=(
+                f"step-0.5 refinement costs {9**7 * 7} steps. Recorded in the "
+                "write-up, and the live exposure on this number"
+            ),
+        ),
+    )
 
 
 def _print_falsifiers() -> None:
-    """Print the registered falsifiers with an ADR-029 outcome each, never one PASS."""
-    tested = sum(1 for _, outcome, _ in FALSIFIERS if outcome == "NOT TRIGGERED")
-    print(
-        f"\nRegistered D3 falsifiers ({len(FALSIFIERS)} registered, {tested} tested "
-        "here, none fired):"
-    )
-    for name, outcome, why in FALSIFIERS:
-        print(f"   {name:<33} {outcome:<14} {why}")
+    """Print the registered falsifiers on both axes, then the run's counts.
+
+    Prover and tier print as separate columns because they answer separate questions.
+    A row can be decided and have nothing stated behind its margin, or measured against
+    a tight bar and only sampled. Collapsing them into one verdict loses whichever half
+    the reader needed.
+    """
+    reports = falsifiers()
+    print(f"\nRegistered D3 falsifiers ({len(reports)} registered):")
+    print(f"   {'':<33} {'outcome':<15} {'prover':<13} {'tier':<5} why")
+    for report in reports:
+        prover = report.warrant.value if report.warrant else "—"
+        print(
+            f"   {report.name:<33} {report.outcome.value:<15} "
+            f"{prover:<13} {report.tier.value:<5} {report.detail}"
+        )
+    print(f"\n{check_summary(reports)}")
     print("   full accounting: research/r10_open_loop_crossover.md, chapter 7")
 
 
@@ -394,6 +479,19 @@ def check() -> None:
     dg = {h: g for h, _, _, g in mech}
     assert dg[FLIP_H - 1] > 0  # reach still wins at H*-1
     assert dg[FLIP_H] < 0  # walk wins at H* -- a clean single sign change
+    # Both sign changes clear the error COND_CEILING allows on a difference of two
+    # scores, so neither is a numerical near-tie read as a decision. A margin inside
+    # the bound is reported as NOT RESOLVED by `falsifiers()`, not raised here: a tie
+    # is a finding about the measurement, and an exception would erase it.
+    for horizon in (FLIP_H - 1, FLIP_H):
+        walk_g, reach_g = _numpy_score(_walk(horizon)), _numpy_score(_reach(horizon))
+        if abs(dg[horizon]) <= flip_margin_error(walk_g, reach_g):
+            print(f"   NOT RESOLVED: ΔG({horizon}) sits inside the error bound")
+
+    # No registered falsifier fired. NOT RESOLVED and NOT APPLICABLE are outcomes to
+    # report, so only FIRED is a gate failure.
+    fired = [r.name for r in falsifiers() if r.outcome is Outcome.FIRED]
+    assert not fired, f"registered falsifiers fired: {fired}"
     grad = {h: c for h, _, c, _ in mech}
     assert grad[1] > pulls[0]  # the gradient starts above the pull
     assert grad[FLIP_H] < pulls[-1]  # ... and has decayed below it by H*

@@ -131,3 +131,40 @@ class TestOracleRejectsNonPd:
         monkeypatch.setattr(crossover, "logdet_pd", counting)
         crossover._numpy_score(crossover._walk(crossover.FLIP_H))
         assert len(calls) == 2 * crossover.FLIP_H
+
+
+class TestFlipSeparation:
+    """The flip margin against the error the declared conditioning ceiling allows.
+
+    `H* = 7` rests on `G(walk) < G(reach)`, a bare inequality between two computed
+    floats. Nothing said how far apart they had to be, so the claim was delivered with
+    no bar behind it while the conditioning bars sat one function away unused.
+
+    `COND_CEILING` is already declared and already gated in
+    `tests/test_rollout_hygiene.py`. A float64 solve at condition number `k` carries
+    relative error near `k * eps`, so it states an error on each `G` and, doubled, on
+    their difference. Asserting the separation against that bound is the flip measured
+    against something stated, not a threshold chosen to fit it.
+    """
+
+    def test_the_bound_is_the_declared_ceiling_propagated(self):
+        bound = crossover.flip_margin_error(425.0, -425.0)
+        expected = 2 * 425.0 * crossover.COND_CEILING * np.finfo(float).eps
+        np.testing.assert_allclose(bound, expected, rtol=1e-12)
+
+    def test_the_bound_scales_with_the_larger_magnitude(self):
+        # Relative error, so a pair ten times larger carries ten times the slack.
+        assert crossover.flip_margin_error(4250.0, 1.0) == pytest.approx(
+            10 * crossover.flip_margin_error(425.0, 1.0)
+        )
+
+    def test_the_margin_clears_the_bound(self, oracle_scores):
+        walk, reach = oracle_scores
+        assert abs(walk - reach) > crossover.flip_margin_error(walk, reach)
+
+    def test_the_bound_refuses_a_near_tie(self):
+        # The bar bites. Two values apart by less than the propagated error are not
+        # separated, whatever the sign of their difference says.
+        walk = 425.0
+        reach = walk + crossover.flip_margin_error(walk, walk) / 2
+        assert not abs(walk - reach) > crossover.flip_margin_error(walk, reach)

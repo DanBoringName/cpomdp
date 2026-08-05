@@ -18,6 +18,8 @@ import efe_collapse_figure
 import epistemic_dissociation_figure
 import pytest
 
+from cpomdp.warrant import Outcome, Tier, Warrant, check_summary
+
 
 def test_single_chain_theorem_check():
     """Theorem 1 (i)/(iii) on the single-chain model class: the epistemic value varies,
@@ -76,6 +78,45 @@ def test_crossover_horizon_check():
     Two 16-horizon sweeps, live and frozen. ~12s on the reference machine, under the
     marker's threshold, and this is the demo's only gate. It stays on the PR path."""
     crossover_horizon_figure.check()
+
+
+def test_crossover_falsifiers_are_reports():
+    """The four registered falsifiers, as `CheckReport`s the summary can count.
+
+    The `PROVED` rows must carry the real completeness certificate off the H* search.
+    A fabricated one would satisfy the constructor and claim an enumeration that never
+    ran, which is the failure the precondition exists to catch. Costs one search
+    construction (~1s), so it stays on the pull-request path where `check()` does not.
+    """
+    reports = crossover.falsifiers()
+    assert len(reports) == 4
+    proved = [r for r in reports if r.warrant is Warrant.PROVED]
+    assert len(proved) == 2
+    for report in proved:
+        assert report.evidence is not None
+        assert report.evidence.complete
+        assert report.evidence.expected == 5**crossover.FLIP_H
+        # The other axis: decided by enumeration, and measured against a stated bar.
+        # A Tier B row has to name the bar, or the tier is a label with nothing under
+        # it. `cond` is the ceiling the bound is propagated from.
+        assert report.tier is Tier.B
+        assert "cond" in report.detail
+        # The margin clears the bound today, so the flip is not a tie. A regression to
+        # one shows up here as NOT RESOLVED rather than as an exception inside check().
+        assert report.outcome is Outcome.NOT_TRIGGERED
+        # The qualifier travels with the number. H* = 7 is an upper bound because the
+        # declared set clips the reach at -2, and a Tier B row reads stronger than the
+        # claim is without it.
+        assert "upper bound" in report.detail
+
+    # The two that never ran stay distinct, and neither claims a prover.
+    unrun = {r.outcome: r for r in reports if r.warrant is None}
+    assert set(unrun) == {Outcome.NOT_APPLICABLE, Outcome.NOT_RUN_HERE}
+
+    summary = check_summary(reports)
+    assert "PROVED" in summary
+    assert "FIRED" not in summary
+    assert "4 registered, 2 tested here, none fired" in summary
 
 
 @pytest.mark.slow

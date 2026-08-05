@@ -12,6 +12,8 @@ in ``cpomdp.enumeration``, covering searches alone. That name survives as an ali
 nothing with the summary should saying so.
 """
 
+from collections import Counter
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING
@@ -26,7 +28,7 @@ if TYPE_CHECKING:
     # when a Prover 1 check needs one.
     Evidence = CompletenessCertificate
 
-__all__ = ["CheckReport", "Outcome", "Tier", "Warrant"]
+__all__ = ["CheckReport", "Outcome", "Tier", "Warrant", "check_summary"]
 
 
 class Warrant(Enum):
@@ -55,21 +57,34 @@ class Warrant(Enum):
 
 
 class Outcome(Enum):
-    """What a check found, independent of how well it was warranted.
+    """What a registered falsifier did, independent of how well it was warranted.
 
-    ``PASS`` — the condition held.
-    ``FAIL`` — it did not, and the refutation is the result.
-    ``NOT_RESOLVED`` — the check ran and decided neither way. A tie, or a falsifier void
-    by construction that could not have fired here.
+    A falsifier does not pass. It fires or it does not, and the words are chosen so that
+    a run cannot be read as a column of ``PASS`` with the interesting distinctions
+    flattened out of it.
 
-    Three values, not two. Forcing a tie into ``PASS`` is how a check that decided
-    nothing gets counted among the ones that did, and a falsifier that cannot fire is
-    not evidence for the claim it was pointed at.
+    ``NOT_TRIGGERED`` — it ran, the condition did not obtain, the claim survives it.
+    ``FIRED`` — the condition obtained. The claim is refuted, and that is the result.
+    ``NOT_RESOLVED`` — it ran and the ordering is genuinely undetermined, because the
+    two quantities' intervals overlap. Narrow on purpose: this is a measured tie, not a
+    stand-in for a check that did not run.
+    ``NOT_APPLICABLE`` — void by construction. It could not have fired here, so it is
+    evidence for nothing and does not count among the survivors.
+    ``NOT_RUN_HERE`` — measured elsewhere, or not yet. The detail says where.
+
+    The last two never ran, so they carry no warrant. ``CheckReport`` enforces that.
     """
 
-    PASS = "PASS"
-    FAIL = "FAIL"
-    NOT_RESOLVED = "NOT_RESOLVED"
+    NOT_TRIGGERED = "NOT TRIGGERED"
+    FIRED = "FIRED"
+    NOT_RESOLVED = "NOT RESOLVED"
+    NOT_APPLICABLE = "NOT APPLICABLE"
+    NOT_RUN_HERE = "NOT RUN HERE"
+
+
+#: The outcomes of a falsifier that actually ran here. The other two did not, so they
+#: are not counted among the tested and cannot carry a warrant.
+_TESTED_HERE = (Outcome.NOT_TRIGGERED, Outcome.FIRED, Outcome.NOT_RESOLVED)
 
 
 class Tier(Enum):
@@ -98,8 +113,9 @@ class CheckReport:
 
     Args:
         name: which check this is, as it appears in the summary.
-        warrant: the prover class behind the claim.
-        outcome: whether the condition held, failed, or went undecided.
+        warrant: the prover class behind the claim, or ``None`` where the check
+            produced no evidence to classify.
+        outcome: what the falsifier did.
         tier: what the check was measured against.
         detail: why it reports what it reports, in one line. Required, so a report
             cannot be a bare outcome with extra fields.
@@ -107,18 +123,19 @@ class CheckReport:
             unused otherwise.
 
     Raises:
-        ValueError: if the warrant is ``PROVED`` and no evidence was given.
+        ValueError: if the warrant is ``PROVED`` and no evidence was given, or if a
+            check that never ran here carries a warrant anyway.
     """
 
     name: str
-    warrant: Warrant
+    warrant: Warrant | None
     outcome: Outcome
     tier: Tier
     detail: str
     evidence: "Evidence | None" = None
 
     def __post_init__(self) -> None:
-        """Reject ``PROVED`` with nothing behind it (ADR-030's rule, one level up)."""
+        """Reject a claim with nothing behind it, at either of two strengths."""
         if self.warrant is Warrant.PROVED and self.evidence is None:
             raise ValueError(
                 f"check {self.name!r} reports PROVED with no evidence. A decided "
@@ -127,10 +144,53 @@ class CheckReport:
                 "for a theorem (1 or 2). Report CERTIFIED for a bound over a compact "
                 "domain, CORROBORATED for a sample."
             )
+        if self.outcome not in _TESTED_HERE and self.warrant is not None:
+            raise ValueError(
+                f"check {self.name!r} is {self.outcome.value} and carries the warrant "
+                f"{self.warrant.value}. It produced no evidence here, so there is no "
+                "prover class to report. Leave the warrant None."
+            )
 
     def __str__(self) -> str:
         """The report as one summary line, in the warrant's own vocabulary."""
+        warrant = self.warrant.value if self.warrant else "—"
         return (
             f"{self.name}: {self.outcome.value} "
-            f"({self.warrant.value}, tier {self.tier.value}). {self.detail}"
+            f"({warrant}, tier {self.tier.value}). {self.detail}"
         )
+
+
+def check_summary(reports: Sequence[CheckReport]) -> str:
+    """Counts per ``(warrant, outcome)`` across a run, as a block of lines.
+
+    The header carries the accounting a reader needs first: how many falsifiers were
+    registered, how many this run actually tested, and how many fired. Registering four
+    and testing two is a different claim from testing four, and one number cannot say
+    both. The rows underneath say what warrant the tested ones carried, so a run that
+    survived everything without deciding anything prints as exactly that.
+
+    Pairs with no checks are left out, so the block is as long as the run was varied.
+    Ordering follows the enum declarations rather than the input, so two runs of the
+    same suite produce the same text. Checks with no warrant sort last, under ``—``.
+
+    Args:
+        reports: the run's reports, in any order.
+
+    Returns:
+        A newline-separated block: the accounting line, then one row per occupied pair.
+    """
+    counts = Counter((report.warrant, report.outcome) for report in reports)
+    tested = sum(1 for report in reports if report.outcome in _TESTED_HERE)
+    fired = sum(1 for report in reports if report.outcome is Outcome.FIRED)
+    lines = [
+        f"{len(reports)} registered, {tested} tested here, "
+        f"{f'{fired} fired' if fired else 'none fired'}"
+    ]
+    lines += [
+        f"   {(warrant.value if warrant else '—'):<13} "
+        f"{outcome.value:<15} {counts[warrant, outcome]}"
+        for warrant in (*Warrant, None)
+        for outcome in Outcome
+        if counts[warrant, outcome]
+    ]
+    return "\n".join(lines)

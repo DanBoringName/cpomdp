@@ -5,9 +5,10 @@
 domain) and moves to `cpomdp.warrant`, where checks can reach it too. `SearchWarrant`
 stays as an alias, so existing call sites keep their members and their return type.
 
-`CheckReport` is what a check emits: a warrant, an `Outcome`, a `Tier`, and a reason.
-Warrant and outcome are orthogonal, so a green run that is entirely corroborative reads
-as one instead of as a column of `PASS`.
+`CheckReport` is what a registered falsifier emits: a warrant, an `Outcome`, a `Tier`,
+and a reason. A falsifier does not pass, so `PASS` is not in the vocabulary at all. The
+prover column disambiguates warrant, never the outcome. A check that never ran carries
+no warrant, because attributing one claims evidence it did not produce.
 
 Imports `cpomdp.warrant`, so until it lands this module is collection-red — the
 `ModuleNotFoundError` naming it is the build cue.
@@ -27,7 +28,7 @@ from cpomdp.enumeration import (
 )
 from cpomdp.selection import EFESelector, Preference
 from cpomdp.types import Belief, LinearGaussianModel
-from cpomdp.warrant import CheckReport, Outcome, Tier, Warrant
+from cpomdp.warrant import CheckReport, Outcome, Tier, Warrant, check_summary
 
 
 def _model():
@@ -68,13 +69,36 @@ class TestWarrantLevels:
 
 
 class TestOutcome:
-    def test_the_three_outcomes(self):
-        assert Outcome.PASS.value == "PASS"
-        assert Outcome.FAIL.value == "FAIL"
-        assert Outcome.NOT_RESOLVED.value == "NOT_RESOLVED"
+    def test_a_falsifier_never_passes(self):
+        # Standing rule 6 is satisfied by not printing PASS, not by printing PASS
+        # beside a column that disambiguates it. The word must not be reachable.
+        values = {outcome.value for outcome in Outcome}
+        assert "PASS" not in values
+        assert not any(name == "PASS" for name in Outcome.__members__)
 
-    def test_no_fourth_outcome(self):
-        assert [o.name for o in Outcome] == ["PASS", "FAIL", "NOT_RESOLVED"]
+    def test_the_five_outcomes(self):
+        assert Outcome.NOT_TRIGGERED.value == "NOT TRIGGERED"
+        assert Outcome.FIRED.value == "FIRED"
+        assert Outcome.NOT_RESOLVED.value == "NOT RESOLVED"
+        assert Outcome.NOT_APPLICABLE.value == "NOT APPLICABLE"
+        assert Outcome.NOT_RUN_HERE.value == "NOT RUN HERE"
+
+    def test_no_sixth_outcome(self):
+        assert [o.name for o in Outcome] == [
+            "NOT_TRIGGERED",
+            "FIRED",
+            "NOT_RESOLVED",
+            "NOT_APPLICABLE",
+            "NOT_RUN_HERE",
+        ]
+
+    def test_the_three_that_did_not_run_stay_distinct(self):
+        # Void by construction, measured elsewhere, and a genuine tie are three
+        # different things. Collapsing them loses the survivor accounting.
+        assert (
+            len({Outcome.NOT_APPLICABLE, Outcome.NOT_RUN_HERE, Outcome.NOT_RESOLVED})
+            == 3
+        )
 
     def test_round_trips_through_its_value(self):
         for outcome in Outcome:
@@ -98,7 +122,7 @@ class TestCheckReport:
         self,
         *,
         warrant=Warrant.CORROBORATED,
-        outcome=Outcome.PASS,
+        outcome=Outcome.NOT_TRIGGERED,
         tier=Tier.C,
         evidence=None,
     ):
@@ -116,17 +140,17 @@ class TestCheckReport:
         report = self._report()
         assert report.name == "flip-decided"
         assert report.warrant is Warrant.CORROBORATED
-        assert report.outcome is Outcome.PASS
+        assert report.outcome is Outcome.NOT_TRIGGERED
         assert report.tier is Tier.C
 
     def test_detail_is_required(self):
-        # A check that cannot say why it reports what it reports is a bare PASS with
-        # extra fields. Omitting the reason must not construct.
+        # A check that cannot say why it reports what it reports is a bare outcome
+        # with extra fields. Omitting the reason must not construct.
         with pytest.raises(TypeError):
             CheckReport(  # ty: ignore[missing-argument]
                 name="flip-decided",
                 warrant=Warrant.CORROBORATED,
-                outcome=Outcome.PASS,
+                outcome=Outcome.NOT_TRIGGERED,
                 tier=Tier.C,
             )
 
@@ -134,7 +158,7 @@ class TestCheckReport:
         # A report is a record of what a check found. Editing one after the fact is
         # editing the finding.
         with pytest.raises(dataclasses.FrozenInstanceError):
-            self._report().outcome = Outcome.FAIL
+            self._report().outcome = Outcome.FIRED
 
     def test_evidence_is_absent_by_default(self):
         assert self._report().evidence is None
@@ -145,22 +169,61 @@ class TestCheckReport:
         assert report.evidence is cert
 
     def test_warrant_and_outcome_are_independent(self):
-        # The pairing this vocabulary exists for: a green run that decided nothing.
+        # The pairing this vocabulary exists for: a run that survived every falsifier
+        # and decided nothing.
         report = self._report()
-        assert report.outcome is Outcome.PASS
+        assert report.outcome is Outcome.NOT_TRIGGERED
         assert report.warrant is Warrant.CORROBORATED
 
     def test_renders_one_line_naming_all_of_it(self):
         line = str(self._report())
         assert line.count("\n") == 0
-        for part in ("flip-decided", "PASS", "CORROBORATED", "C", "cue-ward"):
+        for part in ("flip-decided", "NOT TRIGGERED", "CORROBORATED", "C", "cue-ward"):
             assert part in line
+
+    def test_a_check_with_no_warrant_renders_a_dash(self):
+        line = str(self._report(warrant=None, outcome=Outcome.NOT_APPLICABLE))
+        assert "—" in line
+
+
+class TestChecksThatNeverRanCarryNoWarrant:
+    """A check that produced no evidence has no prover verdict to report."""
+
+    def _report(self, *, warrant, outcome):
+        return CheckReport(
+            name="void-check",
+            warrant=warrant,
+            outcome=outcome,
+            tier=Tier.C,
+            detail="why",
+        )
+
+    @pytest.mark.parametrize("outcome", [Outcome.NOT_APPLICABLE, Outcome.NOT_RUN_HERE])
+    def test_a_check_that_never_ran_may_not_claim_a_prover(self, outcome):
+        # CORROBORATED means sampling-grade evidence was obtained. A falsifier void by
+        # construction sampled nothing, and one measured elsewhere sampled nothing
+        # here, so either would be attributing a warrant to a check that produced none.
+        with pytest.raises(ValueError, match="no evidence here"):
+            self._report(warrant=Warrant.CORROBORATED, outcome=outcome)
+
+    @pytest.mark.parametrize("outcome", [Outcome.NOT_APPLICABLE, Outcome.NOT_RUN_HERE])
+    def test_none_is_the_representable_state(self, outcome):
+        assert self._report(warrant=None, outcome=outcome).warrant is None
+
+    @pytest.mark.parametrize(
+        "outcome",
+        [Outcome.NOT_TRIGGERED, Outcome.FIRED, Outcome.NOT_RESOLVED],
+    )
+    def test_a_check_that_ran_may_carry_one(self, outcome):
+        # A genuine tie ran and produced evidence. It stays warrantable.
+        report = self._report(warrant=Warrant.CORROBORATED, outcome=outcome)
+        assert report.warrant is Warrant.CORROBORATED
 
 
 class TestProvedNeedsEvidence:
     """`PROVED` with nothing behind it does not construct."""
 
-    def _report(self, *, warrant, evidence=None, outcome=Outcome.PASS):
+    def _report(self, *, warrant, evidence=None, outcome=Outcome.NOT_TRIGGERED):
         return CheckReport(
             name="flip-decided",
             warrant=warrant,
@@ -182,13 +245,121 @@ class TestProvedNeedsEvidence:
         # The outcome does not exempt it. A refutation carrying PROVED claims the
         # refutation was decided, which needs the same backing as a decided pass.
         with pytest.raises(ValueError, match="PROVED"):
-            self._report(warrant=Warrant.PROVED, outcome=Outcome.FAIL)
+            self._report(warrant=Warrant.PROVED, outcome=Outcome.FIRED)
 
     @pytest.mark.parametrize("warrant", [Warrant.CERTIFIED, Warrant.CORROBORATED])
     def test_the_weaker_levels_need_none(self, warrant):
         # A bound and a sample carry their own story in `detail`. Only a claim to have
         # decided a universal needs something enumerable behind it.
         assert self._report(warrant=warrant).evidence is None
+
+
+class TestCheckSummary:
+    """Counts per (warrant × outcome), so a green run says what it decided."""
+
+    def _report(self, name, warrant, outcome, evidence=None):
+        return CheckReport(
+            name=name,
+            warrant=warrant,
+            outcome=outcome,
+            tier=Tier.C,
+            detail="why",
+            evidence=evidence,
+        )
+
+    def test_counts_each_pair(self):
+        summary = check_summary(
+            [
+                self._report("a", Warrant.CORROBORATED, Outcome.NOT_TRIGGERED),
+                self._report("b", Warrant.CORROBORATED, Outcome.NOT_TRIGGERED),
+                self._report("c", Warrant.CERTIFIED, Outcome.FIRED),
+            ]
+        )
+        assert "CORROBORATED" in summary
+        assert "CERTIFIED" in summary
+        assert "2" in summary
+
+    def test_a_corroborative_surviving_run_reads_as_one(self):
+        # The reason this function exists. Three falsifiers, none fired, none decisive.
+        summary = check_summary(
+            [
+                self._report(str(i), Warrant.CORROBORATED, Outcome.NOT_TRIGGERED)
+                for i in range(3)
+            ]
+        )
+        assert "CORROBORATED" in summary
+        assert "PROVED" not in summary
+
+    def test_pairs_with_no_checks_are_omitted(self):
+        summary = check_summary(
+            [self._report("a", Warrant.CERTIFIED, Outcome.NOT_TRIGGERED)]
+        )
+        assert "FIRED" not in summary
+        assert "NOT RESOLVED" not in summary
+
+    def test_a_firing_falsifier_is_visible(self):
+        summary = check_summary(
+            [
+                self._report("a", Warrant.CORROBORATED, Outcome.NOT_TRIGGERED),
+                self._report("b", Warrant.CORROBORATED, Outcome.FIRED),
+            ]
+        )
+        assert "FIRED" in summary
+        assert "1 fired" in summary
+
+    def test_the_header_separates_registered_from_tested(self):
+        # The accounting ADR-029 required and a single count cannot carry: four
+        # registered, two of which this run actually tested.
+        summary = check_summary(
+            [
+                self._report(
+                    "a", Warrant.PROVED, Outcome.NOT_TRIGGERED, _certificate()
+                ),
+                self._report("b", Warrant.CORROBORATED, Outcome.NOT_RESOLVED),
+                self._report("c", None, Outcome.NOT_APPLICABLE),
+                self._report("d", None, Outcome.NOT_RUN_HERE),
+            ]
+        )
+        assert "4 registered, 2 tested here, none fired" in summary.splitlines()[0]
+
+    def test_checks_with_no_warrant_sort_under_a_dash(self):
+        summary = check_summary(
+            [
+                self._report("a", None, Outcome.NOT_APPLICABLE),
+                self._report("b", Warrant.CORROBORATED, Outcome.NOT_TRIGGERED),
+            ]
+        )
+        rows = summary.splitlines()[1:]
+        assert rows[0].split()[0] == "CORROBORATED"
+        assert rows[1].split()[0] == "—"
+
+    def test_a_void_falsifier_is_not_counted_as_tested(self):
+        # ADR-029's gloss: evidence for nothing, and not a survivor.
+        summary = check_summary([self._report("a", None, Outcome.NOT_APPLICABLE)])
+        assert "1 registered, 0 tested here" in summary
+
+    def test_unresolved_is_not_folded_into_survival(self):
+        # The ADR-029 rule that survives the vocabulary change: a check that decided
+        # neither way is not counted among the ones that did.
+        summary = check_summary(
+            [
+                self._report("a", Warrant.CORROBORATED, Outcome.NOT_TRIGGERED),
+                self._report("b", Warrant.CORROBORATED, Outcome.NOT_RESOLVED),
+            ]
+        )
+        assert "NOT RESOLVED" in summary
+        assert "NOT TRIGGERED" in summary
+
+    def test_counts_are_stable_under_input_order(self):
+        reports = [
+            self._report("a", Warrant.CERTIFIED, Outcome.NOT_TRIGGERED),
+            self._report("b", Warrant.CORROBORATED, Outcome.FIRED),
+        ]
+        assert check_summary(reports) == check_summary(list(reversed(reports)))
+
+    def test_no_checks_is_not_a_blank_line(self):
+        # An empty suite is a finding, not a silence.
+        assert check_summary([]).strip() != ""
 
 
 class TestPublicSurface:

@@ -11,8 +11,9 @@ grid's `CORROBORATED` (a sample of a continuum, 3a). A `CompletenessCertificate`
 The locks:
 
 - `TestFiniteActionSet`: the declared, versioned set validates its shape and version.
-- `TestCompletenessCertificate`: the enumeration covers the full cartesian product; the
-  certificate reports expected == visited, `PROVED`, and a mismatch reads as incomplete.
+- `TestCompletenessCertificate`: the enumeration covers the full cartesian product, and
+  the certificate reports expected == visited under `PROVED`. A shortfall under `PROVED`
+  does not construct; the honest label for a partial enumeration is `CORROBORATED`.
 - `TestEnumeratedSearch`: the `G` vector and argmin match a plain itertools + policy_efe
   reference loop. That is an orchestration check; the EFE arithmetic is validated in
   policy_efe tests. On the beacon model a **varying** sequence strictly beats every

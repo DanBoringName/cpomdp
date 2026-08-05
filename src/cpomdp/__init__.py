@@ -62,7 +62,7 @@ from cpomdp.selection import (
 )
 from cpomdp.structure import ModelStructure
 from cpomdp.types import Belief, LinearGaussianModel
-from cpomdp.warrant import CheckReport, Outcome, Tier, Warrant
+from cpomdp.warrant import CheckReport, Outcome, Tier, Warrant, check_summary
 
 # Float64 throughout — the oracle matches to 1e-9 and JAX defaults to float32.
 # Process-global by necessity; see ADR-004.
@@ -102,6 +102,7 @@ __all__ = [
     "StateGoal",
     "Tier",
     "Warrant",
+    "check_summary",
     "expected_free_energy",
     "probe_model",
 ]
