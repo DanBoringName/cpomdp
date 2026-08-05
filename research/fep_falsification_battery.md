@@ -1,0 +1,412 @@
+# p\* programme — falsification criteria
+
+Reference checklist for the build. The argued version of this document lives outside the
+repo. Nothing here restates the case; use this to check scope, not to understand it.
+
+Standing rule: no number reaches prose unless the check suite prints and asserts it.
+
+**Currency.** `FALSIFY` a sign, ordering or count the process theory forbids ·
+`SEVERE-TEST` a pre-registered magnitude or exponent, in Mayo's sense · `DEMARCATE`
+where testability ends.
+
+**Tier.** `A` closed-form at machine precision · `B` a stated bar or certified bracket ·
+`C` computed, no statable bar. The word for C is *computed*, never *certified*.
+
+**Readiness.** `v0.4.x ✓` shipped · `PR-n · tag` scheduled, per `BUILD_PLAN.md` ·
+`further` needs capability not yet scheduled.
+
+---
+
+## The decomposition under test
+
+```
+E_{p*(·|u)}[F] = H(p*(·|u)) + D_KL[p*(y|u) ‖ p(y|u)] + E_{p*(·|u)}[ D_KL[q(x) ‖ p(x|y)] ]
+                 └── floor ──┘   └── misspecification ──┘   └────── inference gap ──────┘
+```
+
+Floor: a property of p\*, untouchable by policy. Misspecification: zero iff p = p\*.
+Inference gap: zero iff q = p(x|y). The standard accounting identifies p with p\* and
+collapses all three to the floor.
+
+---
+
+## A — The collapse: fixed-R linear-Gaussian under additive control has *exactly zero* action-dependent epistemic value
+
+**A1 · flat epistemic term** · FALSIFY · R-none, P1 eq. (4) · tier A · **v0.4.2 ✓**
+
+- Predict: per-step epistemic value constant across policies to machine precision.
+  `I[x;o|π] = ½ ln det(CΣ⁻Cᵀ + R) − ½ ln det R`, μ absent.
+- Build: `efe_collapse_figure.py`.
+- Falsify: any action-dependent variation above the printed numerical floor, fixed-R.
+- Does not buy: only that *this* model class collapses. It is the null the rest is
+  measured against, not evidence for the FEP.
+- Note: R1 is the *decomposition's* calibration zero, which is C1. A1 is P1's
+  mutual-information result, a distinct measurement sharing the correct/exact cell.
+
+**A2 · flattening reproduction** · FALSIFY · fixed-R triviality, Rmk 7 · tier A · **v0.4.2 ✓**
+
+- Predict: the fixed-gain Kalman schedule reproduces posterior mean and covariance for
+  every policy and observation sequence. `to_flat_model` succeeds.
+- Falsify: no reproducing schedule in the fixed-R regime. Indicts the implementation,
+  not the theory.
+- Does not buy: certainty equivalence here. Nothing about R(x).
+- **Do not** route through Cor 2. That is a *planning* reduction (Def 2), and Rmk 5
+  exhibits one coexisting with no Def-1 schedule (observation-independence fails). The
+  biconditional is false in general and holds here only by the fixed-R triviality.
+
+**A3 · structural, not accidental** · FALSIFY · P1 eq. (4) sweep · tier A · **v0.4.2 ✓ / trivial v0.5 hardening**
+
+- Predict: survives arbitrary perturbation of A, B, C, Q and of the *value* of fixed R.
+  Breaks only when R gains a state argument or control turns multiplicative.
+- Falsify: a fixed-R additive-control model with action-dependent epistemic value.
+- Does not buy: a structural silence is strong content. Register it as such, against
+  Family D's ties, which vanish under perturbation.
+
+---
+
+## B — The reintroduction: R(x) returns epistemic value, as determinant-visibility
+
+**B1 · dual effect (H3)** · FALSIFY · Thm 1(i) · tier B, ungated · **v0.4.2 ✓**
+
+- Mechanism: R(μ⁻) couples control to the posterior covariance; the Kalman gain
+  inherits the dependence.
+- Predict: Σ⁺ₖ(π) ≠ Σ⁺ₖ(π′) for some policies and some k, under H3 (R non-constant on
+  the reachable set of predicted means).
+- Build: `KalmanBackend` over `CallableSensor`.
+- Falsify: policy-independent posterior covariance despite verified H3.
+- Does not buy: covariance motion is necessary, not sufficient. See B3.
+- **Qualifier that travels (Rmk 2)**: the dual effect exhibited is a property of the
+  *agent's maintained Gaussian recursion*. Whether the exact non-Gaussian conditional
+  covariance carries a dual effect in the strict Bar-Shalom–Tse sense is open in P1.
+  Bounds B1 and E1's dual-control bridge.
+
+**B2 · determinant-visibility (H3′)** · FALSIFY · Thm 1(iii), Cor 1 · tier B · **v0.4.2 ✓ (scalar)**
+
+- Predict: εₖ(π) ≠ εₖ(π′) under H3′. Automatic for scalar observations under H1–H3
+  (Cor 1), epistemic value being strictly monotone in the noise variance.
+- Build: checkable sufficient condition Rmk 6, Löwner-comparable pinning covariances.
+- Falsify: flat epistemic value under verified H3′, or under verified H1–H3 in the
+  scalar case.
+- Does not buy: the title's claim rests on H3′, not H3. Keep the distinction
+  load-bearing.
+
+**B3 · the Rmk-4 knife-edge, dual effect *without* epistemic value** · FALSIFY · Ex 1 · tier B · **v0.4.2–v0.5, analytic, no new capability**
+
+- Predict: `R(x) = diag(r(x₁), s(x₁))` tracing `(1 + 1/r)(1 + 1/s) = const`. Every
+  per-step epistemic value equals `½ ln 3` for every policy while Σ⁺ₖ varies. Parts
+  (i)–(ii) fire, (iii) does not.
+- Falsify: epistemic value moving on the exact analytic level set. Breaks the H3/H3′
+  distinction and the determinant-visibility calibration of the whole result.
+- Scope: unproved (deferred item 10) is vector-case *positivity* for Thm 1(iii) in
+  general, not this example, which exhibits the level set in closed form.
+- Does not buy: corroborates the *visibility* reading specifically. Most severe
+  self-imposed test in the battery.
+
+**B4 · behavioural dissociation** · FALSIFY · P1 section 5 · tier B · **v0.4.2 ✓**
+
+- Predict: Agent A (fixed R, frozen at the prior position) and Agent B (R(x)) set off
+  together toward the shared-prior arm. Only B reads the cue, learns the context and
+  crosses. Opposite arms, sole difference R vs R(x).
+- Build: `epistemic_dissociation_figure.py`, continuous T-maze, two-node coupling tree.
+- Falsify: A also crosses, or B fails to, under matched preferences and matched
+  pragmatic pull.
+- Does not buy: the outbound leg is confounded, both heading to the cue for the
+  pragmatic reason. The objective-level extension strips it: B's epistemic value peaks at
+  a cue off the pragmatic path, worth **1.72 nats** against a **4.49-nat** pragmatic
+  gradient.
+
+**B5 · no-flattening witness** · FALSIFY · Thm 1(ii) · tier B · **v0.4.2 ✓**
+
+- Mechanism: structural and data-free. A mean-shifting coupling under state-dependent R
+  makes the flat linearisation point μ⁺ diverge from the prior mean μ⁻.
+- Predict: `to_flat_model` raises `IncompatibleLinearizationError` on the
+  R(x)-plus-coupling configuration before any data is processed. The identical topology
+  with fixed R flattens without complaint.
+- Falsify: the published one-liner, any fixed linear-Gaussian filter whose Kalman
+  recursion reproduces Agent B's posteriors on every observation sequence. Drops the
+  guard, the check suite and Thm 1 together.
+- **Do not** oversell the tripwire as the theorem. The claim is a **negative existential**
+  which no execution can establish (ledger section 3). Thm 1(ii) proves it, the code
+  witnesses that one named route fails. Refutable by one counterexample, never
+  confirmable. Infinite-dimensional representations are left open by theorem and code
+  alike. P1 section 5 splits this correctly; the split must survive into Paper 2.
+
+---
+
+## C — The decomposition as an instrument (p\* ≠ p)
+
+Off-diagonal cells carry the claim. The calibration zero validates nothing on its own.
+
+**C1 · calibration zero** · calibration · R1 · toolbox B, F · tier A · **PR-5 · v0.4.5**
+
+- Predict: p = p\*, exact filter → misspecification and inference gap both below `1e-12`.
+- Falsify: a nonzero floor top-left. Textbook zero (Kalman is the exact Bayesian filter
+  for fixed-R LG), so a nonzero reading indicts the instrument. Concede its textbook
+  status; the contribution is the cross.
+- Does not buy: necessary calibration, not a result.
+
+**C2 · misspecification isolation** · FALSIFY · R2 · toolbox B constructors · tier A/B · **PR-5 · v0.4.5**
+
+- Predict: parameter-perturb the model, keep inference exact → `D_KL[p* ‖ p]` positive
+  and stable across a **declared** seed set, inference gap below `1e-12`.
+- Falsify: the inference gap moving under pure misspecification. Cross-contamination
+  falsifies separability, the core metrological claim.
+- Does not buy: this cell, not C1, is what makes the instrument an instrument.
+
+**C3 · inference-gap isolation** · FALSIFY · R3 · toolbox B degraded variants · tier A/B · **PR-5 · v0.4.5**
+
+- Predict: p = p\*, degrade inference (frozen gain / wrong fixed R / diagonal-only
+  covariance) → inference gap positive, misspecification below `1e-12`.
+- Falsify: misspecification moving under pure inference degradation.
+- Does not buy: with C2, the two-term separability the one-term accounting cannot
+  represent.
+
+**C4 · additivity** · FALSIFY · R4 · toolbox F · tier A · **PR-5 · v0.4.5**
+
+- Predict: `H(p*) + misspecification + inference gap` reconstruct measured `E[F]` within
+  the four-term bound.
+- Falsify: residual above tolerance. The decomposition is incomplete, a fourth term
+  exists, or a term is mis-estimated. Each is a real result about the accounting.
+- Does not buy: closure of *this* decomposition on *this* model class.
+
+**C5 · incompleteness demonstration** · DEMARCATE · R2 + R3 at a matched total · tier A/B · **PR-5 · v0.4.5**
+
+- Predict: two agents the collapsed accounting scores *identically* at the same total
+  surprise, one misspecified-but-exact and one correct-but-approximate, matched to equal
+  `E[F]`, which the instrument separates.
+- Build: **solve for the matched pair analytically**, not by root-search over
+  perturbation magnitude. A searched match carries the searcher's tolerance and is
+  Prover 3a; a constructed match is Tier A.
+- Falsify: no such matched pair exists. That collapses the instrument to one dimension
+  and *vindicates* the standard accounting.
+- Does not buy: demarcates incompleteness. It does not falsify the FEP. Frame as
+  incompleteness of the received accounting, **never** as refuting the FEP.
+
+**C6 · breaking the calibration zero under R(x)** · FALSIFY · R6 · toolbox C · tier B · **PR-9 · v0.5**, gated on GATE-D4
+
+- Mechanism: under R(x) the exact posterior is non-Gaussian and every tractable rule is
+  a Gaussian surrogate, so the gap is strictly positive by theorem. The correct/exact
+  cell is unreachable.
+- Predict: correct model, plug-in inference, R(x) → inference gap positive and separated
+  from zero by more than the certified numerical error.
+- Build: the exact reference filter is needed to *certify the separation*, not merely to
+  observe a positive number. GATE-D4's bound is what licenses "separated from zero".
+- Falsify: gap at machine precision under R(x) plug-in inference. Contradicts Part 2's
+  positivity theorem (v2.1's B6) and indicts either the theorem or the reference filter.
+- Does not buy: a positive gap is *predicted*, so measuring it confirms nothing and
+  refutes nothing. The falsifiable content is that the gap cannot be driven to zero.
+
+**Reporting requirement, C1–C3** (ledger section 4). "Below 1e-12" licenses only *smaller
+than 1e-12 in these units*, never *zero*. Every cell prints the pinned term, the moving
+term's magnitude beside it, their **separation ratio**, and `cond(Σ)` / `cond(S)` for the
+matrices inverted. A cell reporting only the small number is not evidence: a term
+naturally `O(1e-13)` clears the bar trivially.
+
+---
+
+## D — Quantitative severe tests
+
+Protocol: register the diagnosis, not the conclusion. Never discover a threshold by
+raising a parameter until the result fires. Require the sign flip at the registered point
+*and* one step below.
+
+**D1 · fidelity-ladder ordering** · SEVERE · R7 · toolbox C, D · tier B · **PR-9 · v0.5**, gated on GATE-D4
+
+- Predict: along plug-in `R(μ⁻)` → Spinello–Stilwell iterated → belief-smoothed
+  `E[R(x)]` → exact reference, the inference gap decreases at a certified tolerance, ε
+  non-constant throughout.
+- Falsify: non-monotone ordering. Registered as a *conjecture with a predicted
+  direction*, not a theorem: higher approximation order does not imply monotone KL to the
+  exact posterior, and Rmk 3 calls the smoothed rule a refinement only in the
+  approximation-order sense. A non-monotone result belongs in the paper, not a drawer.
+- **Warrant constraint** (ledger section 5): reportable only when the difference between
+  adjacent rungs exceeds the sum of their certified bars. Pre-register the minimum
+  separation that counts. Overlapping bars are pre-committed to a **third outcome,
+  `NOT_RESOLVED`**, neither confirmation nor refutation. Without Tier B this leg produces
+  four computed numbers in an order, which is not a result in either direction.
+- Does not buy: weaker content than D2's exponent. The qualitative half.
+
+**D2 · scaling exponent** · SEVERE · R8 · toolbox C, F · tier B · **PR-9 · v0.5**, gated on GATE-D4
+
+- Predict: `gap ∝ (curvature of R) × (belief spread)²`. Sweep both factors
+  independently, fit the exponent, require it inside a pre-registered interval **around
+  2** in the regime where the second-order term dominates.
+- **Prerequisite** (ledger section 5): demonstrate the fit window is non-empty *before*
+  fitting. Squeezed from both ends: higher-order terms contaminate at large spread, and
+  relative error against the certified bound diverges at small spread. Print the window's
+  bounds on both swept axes and the signal-to-bound ratio across it. An empty window is
+  **VOID**, not FAIL: report the leg unmeasurable and drop it rather than fitting anyway.
+  The lower edge sits near `√(k·δ_ref/curvature)`, so a tighter bound widens it.
+- Falsify: fitted exponent outside the registered interval, within a demonstrated
+  non-empty window. Two failure modes pre-registered as *boring* and excluded from the
+  agreement criterion in advance: a clean quadratic with an unexplained prefactor, and an
+  exponent contaminated by higher-order terms at large spread.
+- Does not buy: bears on the surrogate-vs-exact geometry only, not on the FEP's core.
+
+**D3 · crossover horizon H\*** · SEVERE · R10 · toolbox A, E · tier B · **v0.4.4 ✓ measured, PR-2 + PR-5 · v0.4.5 complete**
+
+- Predict: sweep H; there exists H\* at which the accumulated epistemic pull overtakes
+  the pragmatic gradient, so reach becomes walk. Sign flip asserted at H\* **and**
+  H\* − 1. Anchored at H = 1 (pull 1.72 nats, gradient 4.49 nats), forcing H\* > 1.
+- **Registered value: H\* = 7.** Coupled-tree cue task, exhaustive over the declared
+  `{0, ±1, ±2}`, one dimension, completeness certificate at each horizon. H = 1 anchors
+  pinned at `Δε = 1.7232`, `Δc = 4.4910`, `ΔG = +2.7678` nats to `1e-4` (ADR-033).
+  Registered before R10 drafting begins.
+- **Qualifiers that travel with the number**: H\* = 7 is an **upper bound**, because the
+  action grid clips the reach. The action mode (receding-horizon or open-loop) is
+  declared on the result, never silently read as closed-loop. The mechanism split is
+  disclosed as post-selection, because the scored pair was found by the search.
+- Build: toolbox A shipped at v0.4.4, `cpomdp.enumeration` supplying exhaustive `|A|^H`
+  search under a cardinality certificate, which is what makes the flip decided rather
+  than sampled. Toolbox E (control bracket) outstanding, PR-5.
+- Falsify: no crossover at any feasible H; or a flip that is not clean at H\* and
+  H\* − 1; or not reproducible across seeds; **or H\* not stable under action-set
+  refinement**.
+- **Fourth falsifier, registered before it is run.** Two axes, separate and not
+  interchangeable: **extension** is a wider magnitude range at the same spacing,
+  **refinement** is finer spacing over the same range. Write the predicted direction and
+  its argument per axis *before* running; where no direction can be argued, register a
+  stability test at `|ΔH*| ≤ 1` rather than dressing a stability check as a directional
+  prediction. Pre-declared budget: `5^7 = 78,125`, `7^7 = 823,543`, `9^7 = 4,782,969`,
+  `9^8 ≈ 4.3 × 10^7` if H\* rises under refinement. Budget overrun is **VOID**, never
+  "stable". `cue_maze.best_reachable_noise` is the void guard: a refined set that cannot
+  land on the cue gives a null indistinguishable from "information is never worth the
+  detour", which is geometry, not a result.
+- Does not buy: a prediction about the planning horizon, not about the R(x) mechanism. A
+  null weakens the "reach becomes walk" reading without touching Thm 1.
+
+**D4 · certified discretisation bound · GATE-D4** · SEVERE · R9 · toolbox C · tier B · **PR-8 · v0.4.5, hard gate**
+
+- Predict: the reference filter's error is stated as a number, small relative to R6's
+  signal by a **pre-agreed factor**. The factor is written down *before* the bound is
+  computed.
+- Build: a certified bound, not a fine grid with a convergence plot. Interval arithmetic
+  or a proved quadrature error bound, licensing *for all x in the domain,
+  |p_grid − p_exact| ≤ δ*. Emits `CERTIFIED` (3c), never `PROVED` (3b).
+- Falsify: the bound is not statable at the pre-agreed factor. Tier B collapses to
+  Tier C, Part 2's numbers become uncertified, and the response is a different paper.
+- Gate mechanics: v0.4.5 is cut at PR-8's merge whatever the outcome, so a re-scoped
+  paper cites a release rather than a commit. C6, D1 and D2 do not merge against an
+  uncertified reference.
+- Does not buy: certification of the instrument, not a claim about agents. Existential
+  for Part 2. State it in the abstract, not the appendix.
+
+---
+
+## E — Is the FEP doing independent work?
+
+**E1 · vs dual control** · DEMARCATE · R5 · toolbox E · tier A signature / B leg · **PR-5 · v0.4.5 (signature), v0.5 (R(x) leg)**
+
+- Two regimes, kept apart. (a) Fixed-R control signature, where certainty equivalence
+  *holds*: certify `J_CE = J*` exactly by separation, bracket width `= J_LQG − J_LQR` in
+  closed form, `η_ctrl = 0` to a stated floor. (b) R(x) control leg at horizon > 1, where
+  certainty equivalence is genuinely *suboptimal*: `J_agent < J_CE` and `η_ctrl ≠ 0`, so
+  the comparison is real rather than degenerate.
+- Build: finite-horizon Riccati, needed twice: the full-information floor `J_lower` and
+  the matched-horizon comparison against the EFE planner. **Match the horizon.** A
+  receding-horizon planner at horizon H implies the finite-horizon gain with zero
+  terminal cost, which converges to but does not equal the steady-state gain. An
+  unmatched comparison shrinks with H and looks exactly like a bug.
+- Falsify (the *independence* claim, not the FEP): the R(x) bracket and the crossover
+  are fully predicted by dual control with no active-inference-specific content. Expected
+  outcome; state it as such.
+- Does not buy: corroborates the *unification* thesis, which is P1's actual claim. Not
+  an independent-prediction thesis. Do not let a reader take the bridge as novel physics.
+
+**E2 · vs reward-plus-information-bonus** · DEMARCATE · rival-agent harness · tier B · **further**
+
+- Test: search for any `reward + λ·(info gain)` agent reproducing Agent B's
+  action-dependent epistemic value **and** the crossover H\* simultaneously.
+- Constraint: λ and the precision parameter γ are each declared **fixed or free in the
+  model specification**, never at analysis time. A free parameter discovered during
+  analysis is an accommodation; one declared in the spec is a hypothesis.
+- Falsify (independence): one λ reproduces both signatures across tasks.
+- Does not buy: separates "the FEP predicts the trade-off" from "the FEP re-labels a
+  trade-off already tuned by hand". Both publishable; only one supports independence.
+
+**E3 · observational equivalence, why the battery is in silico** · DEMARCATE · toolbox B seam · **PR-3 · v0.4.5**
+
+- Build: the `World`/`Agent` seam, where the type system makes it impossible for the
+  agent to read the world's parameters (the discipline of `IncompatibleLinearizationError`).
+  A test asserts the absence of the path, not that it is unused.
+- **The pinned conjunct that costs something** (ledger section 6): driving a **common
+  exogenous action sequence** is what makes `H(p*)` cancel. It also severs the control
+  loop. Under R(x) an agent choosing its own actions steers toward low-noise regions and
+  changes its own inference gap, so a gap measured under an imposed sequence can
+  misrepresent the closed-loop gap. Record it on the result object as a declared,
+  contestable modelling choice. Never read exogenous-action results as closed-loop.
+- Falsify: none. Boundary condition under which A–D are severe at all.
+
+---
+
+## F — The wall
+
+**F1 · strong-FEP identifiability from behaviour** · DEMARCATE · **closed**
+
+- Status: answered in the negative by the good-regulator theorem and inverse-RL
+  non-identifiability. Any behaviour is FE-minimising for some (model, preferences).
+  Untestable as posed.
+- Open lever: *multi-environment* identifiability. A system minimising free energy across
+  many environments with a *shared* generative model is more constrained than one observed
+  in a single environment. The only route through the wall not already closed. Revisit
+  only if it bites harder than it currently looks.
+
+**F2 · scoring a real organism** · DEMARCATE · **further**
+
+- Status: the instrument measures the gap between a *known* p\*. Aimed at an organism,
+  p\* must be estimated, which is exactly the non-identifiable step the in-silico design
+  dissolves.
+- Bridge: certified estimation of p\* with error bars propagating into the two KL terms
+  would have to exist first. Name the bridge; do not build it.
+
+**F3 · E. coli as a structural instance** · FALSIFY · **further**
+
+- Claim only that its sensing instantiates Thm 1's *structure*, reachable
+  heteroscedasticity in the observation channel. Attribute **no** generative model to the
+  organism.
+- Predict (structural, deferred item 12, needs nothing new theoretically): chemotactic
+  sensing is reachably state-dependent, the kinase readout's reliability depending on a
+  controllable operating point, placing E. coli inside the R(x) model class.
+- Falsify: the organism's sensing is not reachably heteroscedastic.
+- **Do not conflate** with deferred item 13, reproducing Mattingly et al. (2021)'s
+  quantitative benchmark (η ≈ 0.65, β ≈ 0.22 bits/s/mm², v₀ ≈ 22.6 µm/s, external and
+  deferred). That needs point-process emissions (item 2), a rate-distortion module
+  (item 7) and directed-information estimation (item 8), and still does not cross F1 or
+  F2. The structural instance attributes nothing and needs nothing.
+- Does not buy: hold it to "instance of the structure", never "confirmation of the FEP".
+
+---
+
+## Standing prohibitions
+
+1. **Never obtain a term by subtracting `H(p*)`.** Under a common exogenous action
+   sequence it is a shared constant and cancels, leaving two reparameterisation-invariant
+   KL divergences computable without estimating an entropy.
+2. **Never route A2 through Corollary 2.** Def 2 is a planning reduction; the
+   biconditional is false in general.
+3. **Never present B5's witness as the theorem.** Negative existential, code witnesses
+   one route.
+4. **Never claim C5 refutes the FEP.** It demarcates incompleteness of the received
+   accounting.
+5. **Never report a separation without its ratio and conditioning.**
+6. **Never call a budget overrun or an empty window a null.** Both are `VOID`.
+7. **Never read an exogenous-action result as closed-loop.**
+8. **Never quote H\* = 7 without the upper-bound qualifier and the action mode.**
+9. **Never let a declared set go unversioned.** Action sets, rule ladders, constructor
+   crosses, seed lists, functional variants each live in the model spec, so an addition
+   after results are seen appears in the diff rather than in the prose.
+10. **Never print 3a and 3b as the same `PASS`.** A grid sample of a continuum
+    corroborates; a fully enumerated finite set with a cardinality certificate decides.
+
+---
+
+## Readiness roll-up
+
+| Tag | Carries | Gates |
+|---|---|---|
+| **v0.4.2 ✓** | P1 witness | A1–A3, B1–B5 |
+| **v0.4.3 ✓** | `cpomdp.diagnostics`, per-claim theorem suite, FFG PD fixes. **Not** the scoring harness | — |
+| **v0.4.4 ✓** | multi-step EFE, exhaustive enumerator + completeness certificate | D3's measurement |
+| **v0.4.5** | PR-1 warrant vocabulary · PR-2 R10 hardening · PR-3 World/Agent seam · PR-4 scoring harness · PR-5 control bracket + Part 1 results · PR-7 reference filter + rule family · PR-8 **GATE-D4** | C1–C5, E3, E1 signature, D3 completion, D4 |
+| **v0.5** | PR-9 window harness + Part 2 results · PR-10 Paper 3 Part 2 · PR-11 release | C6, D1, D2, E1 R(x) leg. R1–R10 all print and assert |
+| **further** | rival harness, parameter estimation, point-process and rate-distortion modules | E2, F2, F3 |

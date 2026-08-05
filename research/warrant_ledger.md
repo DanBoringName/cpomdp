@@ -2,7 +2,7 @@
 
 ### What cpomdp can show, prove, and falsify — and what it cannot, ever
 
-*Companion to the falsification battery. This document fixes the epistemic scope of the instrument before any test is designed against it. The rule it enforces: no test may claim more than its prover licenses. Written against cpomdp v0.4.2 as built, with v0.4.3–v0.5 capability marked as gated rather than available.*
+*Companion to `fep_falsification_battery.md`. This document fixes the epistemic scope of the instrument before any test is designed against it. The rule it enforces: no test may claim more than its prover licenses. Written against cpomdp v0.4.2 as built; revised against v0.4.4 as released 2026-08-04, with v0.4.5–v0.5 capability marked as gated rather than available. The certified-discretisation gate is named **GATE-D4** throughout and no longer by version number: it re-pins to v0.4.5, since v0.4.4 shipped multi-step EFE and the exhaustive enumerator and does not contain the bound.*
 
 *Vocabulary warning, because two "tier" scales collide in this programme. **Certification tiers A/B/C** classify how well a number is known. **Register tiers 1/2** classify deferred work by whether it ships a feature. They are unrelated. This document writes "Tier A/B/C" and "register Tier 1/2" and never abbreviates either.*
 
@@ -42,13 +42,13 @@ Tiers classify *how well a number is known*. They cut across the prover question
 | **B** | Numerically certified: a stated error bar or a certified bracket | Prover 3, with 3c where a bound is proved | Interval claims; separations exceeding the bound; comparisons whose difference exceeds combined bars | **Partly now, partly gated** — see below |
 | **C** | Computed, no statable error bar at feasible cost | Prover 3a alone | Suggestion, exploration, figures. Never certification; the word is "computed" | Available, disclosed as such |
 
-**Tier B is not one thing, and the v0.4.4 gate does not bind all of it.** Two populations:
+**Tier B is not one thing, and GATE-D4 does not bind all of it.** Two populations:
 
 *Tier B available now (v0.4.2).* Claims computed inside the agent's own closed-form Gaussian recursion, which touch no grid: Theorem 1(i)'s covariance separation, Corollary 1's scalar epistemic separation, Example 1's closed-form level set, the typed structural guard. The programme already treats fixed-R and R(x) as its two *exhibited* model classes, with the deferred Hierarchical Gaussian Filter offered as "a second Tier B witness", which presupposes a first. Battery tests B1–B5 sit here legitimately at v0.4.2.
 
-*Tier B gated on v0.4.4.* Any number routed through the exact reference filter, which is where the certified discretisation bound lives: the absolute inference gap under R(x), the fidelity ladder, the scaling exponent. In battery terms C6, D1, D2, and the reference-dependent parts of D3.
+*Tier B gated on GATE-D4 (v0.4.5).* Any number routed through the exact reference filter, which is where the certified discretisation bound lives: the absolute inference gap under R(x), the fidelity ladder, the scaling exponent. In battery terms C6, D1, D2, and the reference-dependent parts of D3.
 
-The gate's failure clause is likewise scoped: if the bound is not statable at the pre-agreed factor, *Part 2's numbers* become uncertified and the paper is a different paper. That is existential for Part 2 and correctly gated at v0.4.4 rather than discovered at drafting. It is not a claim that the tier as a category is empty today.
+The gate's failure clause is likewise scoped: if the bound is not statable at the pre-agreed factor, *Part 2's numbers* become uncertified and the paper is a different paper. That is existential for Part 2 and correctly gated at GATE-D4 rather than discovered at drafting. It is not a claim that the tier as a category is empty today.
 
 **Tier C's two causes** — grid cost exponential in latent dimension, and genuine infinite-dimensionality — behave differently but **both admit promotion routes**, contrary to the intuition that structural limits are permanent. The first retreats with better quadrature. The second retreats by *certificate*: the deferred delay-differential model class is Tier C by genuine infinite-dimensionality, with a finite truncation plus a truncation certificate landing it in Tier B. That is the register's own example and it is the only place the third certificate kind gets exhibited rather than asserted.
 
@@ -115,7 +115,7 @@ No test refutes a lone proposition. Every measurement confronts a conjunction, a
 
 **Pinned by construction:** the world process p\*, because the world is built rather than inferred; the agent's model p, separately, with a type seam making circularity impossible rather than discouraged; preferences, by fiat; the exogenous action sequence, driven identically into every agent under comparison; the evaluation rule, swappable through the rule-family interface; inference quality, degradable through the frozen-gain, wrong-fixed-R and diagonal-covariance variants; the random seed stream, matched across arms, which is what makes the off-diagonal attribution stable rather than a seed artefact; and the planning horizon, fixed inside the instrument.
 
-That is an unusually long list, and it is the programme's real methodological advantage. When a defect appears with p = p\* asserted at machine precision, it cannot be attributed to misspecification. Most of this apparatus arrives with the v0.4.3 scoring harness and the v0.4.4 rule family, not at v0.4.2.
+That is an unusually long list, and it is the programme's real methodological advantage. When a defect appears with p = p\* asserted at machine precision, it cannot be attributed to misspecification. Most of this apparatus arrives with the scoring harness (PR-3, PR-4) and the rule family (PR-7), not at v0.4.2.
 
 **Not pinnable, external:** whether the model class fits any natural phenomenon; whether an organism's generative model resembles p; whether attributed preferences are the ones held; whether the horizon used matches a real agent's.
 
@@ -161,13 +161,13 @@ Family G asks which free-energy functional an agent is running. Reading that thr
 
 **The fixed-R trap, stated precisely.** In the fixed-R additive-control linear-Gaussian regime the epistemic term is constant across policies — the predicted mean is absent from the closed form — and Koudahl et al. harden this: for the full functional, parts of the instrumental and epistemic terms cancel exactly, leaving KL control plus an additive constant regardless of how the objective is cut. A per-step policy-independent constant sums to a policy-independent constant, so the argument survives horizon summation. Consequently any two functionals differing **only in their epistemic term** are argmin-identical in fixed-R, including λ-weighted information bonuses, since λ·constant is still constant. A discrimination test run only there will find spurious behavioural agreement.
 
-**But the trap is narrower than "build everything in R(x)".** It bites only on epistemic-term discriminations. Functionals differing in the **risk or preference convention** stay discriminable in fixed-R at v0.4.2, and Paper 1's Appendix A names exactly that family: definitions of expected free energy differ in which factor of the joint is replaced by the preference prior, and the variants coexist in the literature. So Family G splits cleanly by target: preference-convention discriminations run now on Tier A closed forms; epistemic-term discriminations require R(x), and their quantitative half sits behind the v0.4.4 gate.
+**But the trap is narrower than "build everything in R(x)".** It bites only on epistemic-term discriminations. Functionals differing in the **risk or preference convention** stay discriminable in fixed-R at v0.4.2, and Paper 1's Appendix A names exactly that family: definitions of expected free energy differ in which factor of the joint is replaced by the preference prior, and the variants coexist in the literature. So Family G splits cleanly by target: preference-convention discriminations run now on Tier A closed forms; epistemic-term discriminations require R(x), and their quantitative half sits behind GATE-D4.
 
 **Best-warranted, and available now.** Where two fully specified functionals give different *values* on the same pinned Tier A setup, that difference is exact arithmetic rather than estimation. This is the strongest warrant in the programme.
 
 **Available as an existence claim, which is the right form.** "There exists a model class on which F₁ and F₂ prescribe different actions" is settled outright by one construction. Its negation is **not** equally cheap: "on this class the two are observationally equivalent" is a universal over the class, needing Prover 1, or Prover 3b if the policy set is finite and exhaustively enumerated — which at any feasible H with a small action set it *is* (the crossover measurement enumerates to H = 8), so equivalence on an enumerated policy set is provable by execution. Equivalence over a continuum of models or parameters is not. That asymmetry decides how each Family G result must be phrased.
 
-**Not available.** Any claim that a real agent runs one functional rather than another. Any universal that two functionals differ in general across a continuous model class, absent a theorem. Any quantitative discrimination routed through the exact reference filter, until v0.4.4.
+**Not available.** Any claim that a real agent runs one functional rather than another. Any universal that two functionals differ in general across a continuous model class, absent a theorem. Any quantitative discrimination routed through the exact reference filter, until GATE-D4.
 
 ---
 

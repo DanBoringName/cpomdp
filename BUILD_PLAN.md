@@ -1,0 +1,696 @@
+# cpomdp build plan / progress tracker
+
+Running checklist of what's built and what's next. Authoritative decisions live
+in `DECISIONS.md` (ADRs); this file is the roadmap.
+
+Conventions: `[x]` done, `[ ]` open, `[~]` partial. **⛔** marks a PR that cannot merge
+until GATE-D4 passes.
+
+Window: v0.4.4 → v0.5. Every remaining change for Papers 2 and 3, as merge-sized pull
+requests. Eleven PRs across two tags. Module and symbol names below are proposals. Each
+PR's ADR fixes them.
+
+---
+
+## Where this stands — v0.4.4, released 2026-08-04
+
+**Shipped ahead of schedule.** Toolbox **A** (multi-step EFE) was scheduled at v0.5.
+Toolbox **G-B** (exhaustive enumerator with a completeness certificate) was Paper 3's,
+scheduled at v0.6. Both landed at v0.4.4: `cpomdp.enumeration`, `FiniteActionSet`,
+`EnumeratedEfeSearch`, `CompletenessCertificate`, `IncompleteEnumerationError` (ADR-030,
+ADR-031). R10 is measured. `H* = 7`, exhaustive over the declared `{0, ±1, ±2}`, H = 1
+anchors pinned at `Δε = 1.7232`, `Δc = 4.4910`, `ΔG = +2.7678` nats to `1e-4` (ADR-033).
+
+**Scheduled and not shipped.** v0.4.3 shipped `cpomdp.diagnostics`,
+`tests/test_theorem.py` and the FFG positive-definiteness fixes. It did not ship toolbox
+**B** (the scoring harness) or **G-A** / **G-D** (the Paper 3 hedge), all three of which
+the original Phase 0 assumed it would. Those three, plus **C**, **C′**, **D**, **E**,
+**F1–F6** and **G-C**, are the whole of what follows.
+
+**Blast radius, and it shrank.** D3 was always gate-independent in content. With A and
+R10 banked at v0.4.4, a gate failure now costs Part 2's numbers and nothing else. R1–R5,
+R10, C5 and all of Paper 3 Part 1 are off the reference filter.
+
+---
+
+## Two tags
+
+**v0.4.5 — GATE-D4.** Cut at PR-8's merge, whatever the gate's outcome. This is the
+citation and rollback point. If the bound holds, it is where "certified" starts being
+true. If it fails, it is the witness the re-scoped Tier A papers cite, and without it that
+witness is "main at some commit".
+
+**v0.5 — terminal.** Everything Papers 2 and 3 need from cpomdp. Both pin v0.5. v0.6
+stops existing as a planned tag. Paper 4 adds no code, because standing rule 4 of its
+scoping is zero new numbers, so it appears here as a consumer of v0.5 only.
+
+Two naming decisions, closed:
+
+- [x] **`GATE-D4`**, never "the v0.4.4 gate" and never "the v0.4.5 gate". The bound is
+      named independently of the tag that carries it. Cite it as `GATE-D4 (PR-8, v0.4.5)`.
+      `research/warrant_ledger.md` is amended.
+- [x] **The `P2-n` namespace stands as an alias layer** for the external programme
+      paperwork, which is not tracked here. In-repo, only the toolbox letters have a live
+      consumer: `research/fep_falsification_battery.md` cites toolbox A–F in its build
+      lines. The bare letter `B` is retired, having had three live referents: build
+      item B, Workstream B1–B5, battery family B1–B5. PRs are the working unit.
+
+---
+
+## Warrant primer — read before writing any check
+
+Warrant is a property of the check, not of the number.
+
+| Prover | What it does | Label |
+| --- | --- | --- |
+| **1** pen-and-paper theorem | Universals within stated hypotheses | `PROVED`, numerics as *witness* |
+| **2** symbolic computation | Closed-form identities, algebraic non-existence | `PROVED` |
+| **3a** sampling a continuum | Exhibits existence, refutes a universal by counterexample. Never proves a universal, at any seed count | `CORROBORATED` |
+| **3b** exhaustive enumeration over a finite domain | *Decides* the universal, since ¬∃ ≡ ∀¬ | `PROVED`, only with a cardinality certificate |
+| **3c** validated numerics | Proves universals over a compact domain by construction | `CERTIFIED` |
+
+Outcome is orthogonal. Every check emits `warrant ∈ {PROVED, CERTIFIED, CORROBORATED}`
+and `outcome ∈ {PASS, FAIL, NOT_RESOLVED}`. Forcing a tie into `PASS` or `FAIL` is how
+ties become findings.
+
+Tiers cut across both. Tier A is a closed-form reference at machine precision. Tier B is
+a stated bar or a certified bracket. Tier C is computed with no statable bar, and the
+word there is *computed*, never *certified*.
+
+**The error that recurs.** An action *sweep* over a continuous range is a finite grid
+over an infinite domain, so 3a. A *policy enumeration* over a declared finite set is 3b.
+v0.4.4 already encodes this: `EFESelector` prints `CORROBORATED`, `EnumeratedEfeSearch`
+prints `PROVED`. PR-1 extends the vocabulary to checks and adds the missing third level.
+
+---
+
+## PR map
+
+| PR | Title | Serves | Blocked by | Alias | Size | Tag |
+| --- | --- | --- | --- | --- | --- | --- |
+| **PR-1** | Warrant plumbing and the `slogdet` oracle audit | 2, 3 | — | P2-3, F4, P2-9 | M | v0.4.5 |
+| **PR-2** | R10 hardening | 2, 3 | PR-1 | P2-9 | M | v0.4.5 |
+| **PR-3** | World/Agent seam, exogenous action, constructors | 2, 3 | PR-1 | P2-1a (B) | L | v0.4.5 |
+| **PR-4** | Paper 2 scoring: evaluator, cells, error bars | 2, 3 | PR-3 | P2-1b (B), F1–F3, F5 | L | v0.4.5 |
+| **PR-5** | Control bracket and Paper 2 Part 1 results | 2 | PR-4 | P2-4 (E) | L | v0.4.5 |
+| **PR-6** | Paper 3 toolbox and Part 1 results | 3 | PR-1, PR-3 | G-A, G-C, G-D | L | v0.4.5 |
+| **PR-7** | Exact reference filter and the rule ladder | 2, 3 | PR-3 | P2-5 (C), P2-7 (D) | L | v0.4.5 |
+| **PR-8** | **Certified discretisation bound · GATE-D4 · tag v0.4.5** | 2, 3 | PR-7 | P2-6 (C′) | L | v0.4.5 |
+| **PR-9** ⛔ | Window harness and Paper 2 Part 2 results | 2 | GATE-D4, PR-4 | P2-8 (F6) | L | v0.5 |
+| **PR-10** ⛔ | Paper 3 Part 2 results | 3 | GATE-D4, PR-2, PR-6 | — | M | v0.5 |
+| **PR-11** | v0.5 release | 2, 3 | all | — | M | v0.5 |
+
+Size key: S under a day, M two to four days, L a week or more. Grouping the original
+nineteen items into eleven PRs pushed six of them to L. That is the trade.
+
+**Critical path.** `PR-1 → PR-3 → PR-7 → PR-8 → PR-9 → PR-11`. It runs through the gate,
+so nothing shortens it except starting PR-7 early.
+
+**Parallel tracks.** PR-1 and PR-2 touch nothing else and can go first or alongside
+anything. PR-3 is the fan-out point. After it lands, three tracks run independently: the
+Paper 2 scoring track (PR-4 → PR-5), the reference-filter track (PR-7 → PR-8), and the
+Paper 3 track (PR-6). Only PR-9 and PR-10 wait on the gate.
+
+**Every PR.** `uv run --no-sync pytest -m "not rxinfer and not slow"` green,
+`uv run --no-sync ruff check src/cpomdp tests examples mkdocs_hooks.py` clean,
+`uv run --no-sync ty check` clean, `mkdocs build --strict` green whenever a docstring or
+doc page moves. A new name in `cpomdp.__all__` needs a `docs/api/` page before anything
+can link to it.
+
+---
+
+## PR-1 — Warrant plumbing and the `slogdet` oracle audit
+
+`serves: 2, 3` · `blocked by: —` · `alias: P2-3, F4, part of P2-9` · `size: M` ·
+`tag: v0.4.5` · `ADR-035`
+
+Do this first. Everything downstream self-labels off it, and a registered number depends
+on the audit half.
+
+- [ ] Promote `SearchWarrant` to a shared `Warrant` enum (proposed `cpomdp/warrant.py`)
+      and add **`CERTIFIED`** for Prover 3c. Keep `SearchWarrant` as an alias so
+      `EFESelector.warrant` and `EnumeratedEfeSearch.warrant` keep their labels
+      unchanged. Without `CERTIFIED`, every reference-filter number either borrows
+      `PROVED`, which overclaims, or reads `CORROBORATED`, which throws away the bound
+      GATE-D4 exists to buy.
+- [ ] Carry `(warrant, outcome, tier)` on **checks**, not only on selectors. Proposed
+      `CheckReport` NamedTuple in the same module.
+- [ ] Generalise ADR-029's three-valued outcome from `crossover.py --check` to the
+      suite. Do not rebuild it.
+- [ ] `PROVED` under 3b requires a `CompletenessCertificate`, enforced as a
+      **constructor precondition**. `PROVED` without a certificate becomes
+      unrepresentable rather than merely wrong.
+- [ ] Suite summary prints counts per `(warrant × outcome)`. A run that is green and
+      entirely corroborative is visibly that.
+- [ ] **The audit.** v0.4.3 fixed the kernel by routing `_efe_step` and
+      `_state_info_gain` through one `_logdet_pd` helper, testing positive definiteness
+      by Cholesky rather than by determinant sign. The changelog does not say the NumPy
+      oracle path was fixed. `examples/ffg/crossover.py` runs an independent NumPy kernel
+      on the headline number at **H = 7**, past the H = 3 regime where the
+      range-dependent noise branch makes this bite. Confirm it, do not assume it.
+- [ ] Add a test that a matrix with an even number of negative eigenvalues
+      (`diag(-1, -2)` is the canonical one) is rejected on **both** paths. Two paths that
+      both discard the sign agree wrongly, which is the worst outcome available and is
+      invisible to a two-route agreement check.
+- [ ] Until this merges, `H* = 7` is quoted at the warrant of an unaudited oracle.
+
+**Merge gate:** the negative-eigenvalue rejection test passes on kernel and oracle. The
+suite summary renders. No existing check loses its label. **ADR-035.**
+
+## PR-2 — R10 hardening
+
+`serves: 2, 3` · `blocked by: PR-1` · `alias: P2-9` · `size: M` · `tag: v0.4.5` ·
+`ADR-036`
+
+Gate-independent. Paper 3's G9 inherits the qualifier this produces.
+
+- [ ] **Declare the action mode on the registered result.** `RecedingHorizonSelector` and
+      `OpenLoopSelector` genuinely differ, and v0.4.4 requires a measurement to say which
+      it used. The M7b sweep drove `EnumeratedEfeSearch` directly, which is open-loop.
+      Confirm that in code, then carry the declaration into the paper. The ledger requires
+      R10 reported under its seam, never silently read as closed-loop.
+- [ ] **Run the fourth D3 falsifier: `H*` stability under action-set refinement.**
+      Registered in the battery before it is run, which is what keeps it a test. It is
+      load-bearing rather than precautionary, because the release itself calls `H* = 7` an
+      upper bound *because the grid clips the reach*.
+  - [ ] Two axes, registered separately. **Extension** is a wider magnitude range at the
+        same spacing. **Refinement** is finer spacing over the same range.
+  - [ ] Predicted direction and its argument written down **before running**, on each
+        axis. Where no direction can be argued in advance, register a stability test at a
+        stated tolerance (`|ΔH*| ≤ 1`) rather than dressing a stability check as a
+        directional prediction.
+  - [ ] Pre-declare the compute budget: `5^7 = 78,125`, `7^7 = 823,543`,
+        `9^7 = 4,782,969`, `9^8 ≈ 4.3 × 10^7` if `H*` rises under refinement. Budget
+        exceeded is **VOID**, meaning unmeasured, never "stable".
+  - [ ] Size the run against `free -g` before launching it. Treat
+        `cue_maze.enumeration_cost` as a floor and budget roughly 1.6× it. The WSL memory
+        cap is configured rather than physical, and an over-sized enumeration takes the
+        whole session down.
+  - [ ] Wire `cue_maze.best_reachable_noise` in as the void guard. A refined set that
+        cannot land on the cue produces a null indistinguishable from "information is
+        never worth the detour", which is pure geometry and not a result.
+  - [ ] Carry the `slow` marker. This runs on merge-to-main, not on pull requests.
+- [ ] Carry the post-selection disclosure into the paper. The mechanism split in
+      `crossover.py` is disclosed as post-selection, because the scored pair was found by
+      the search.
+- [ ] Keep the `H = 7` coincidence disclaimed once, near the number.
+      `examples/crossover_horizon_figure.py` crosses at the same integer on a different
+      model, a different backend, whole-state epistemic, no search.
+
+**Merge gate:** both axes report an outcome, `PASS`, `FAIL` or `VOID`, against their
+registered prediction. **ADR-036.**
+
+## PR-3 — World/Agent seam, exogenous action, constructors
+
+`serves: 2, 3` · `blocked by: PR-1` · `alias: P2-1a (B)` · `size: L` · `tag: v0.4.5` ·
+`ADR-037`
+
+The foundation, and the fan-out point. Paper 3 reuses the seam, the exogenous action mode
+and the constructors without modification, which is why the module boundary below is a
+test rather than a convention.
+
+- [ ] `World` owns p\*. `ScoredAgent` owns p. **No code path lets the agent read the
+      world's parameters**, enforced at the type level in the spirit of
+      `IncompatibleLinearizationError`. A test asserts the absence of the path, not
+      merely that it is unused.
+- [ ] `ExogenousActionSequence`: one common control sequence `u_{1:k}` driven into every
+      agent under comparison. This is what makes `H(p*)` a shared constant that cancels.
+      It also severs the control loop. Record that on the result object as a declared,
+      contestable modelling choice, not in a comment.
+- [ ] Constructors, declared as a versioned set in the same discipline as
+      `FiniteActionSet`. Model axis
+      `{correct, perturb_parameters(axis, magnitude) × declared magnitudes}`. Inference
+      axis `{exact, FrozenGain, WrongFixedR, DiagonalCovarianceOnly}`.
+- [ ] **Keep the module boundary the nineteen-PR plan bought with a PR split.** Nothing
+      in this seam may import PR-4's three-term evaluator, because Paper 3 explicitly
+      does not import it. Assert it with an import test. A test outlives a PR boundary.
+
+**Merge gate:** the no-read-path test passes. The import test holds. The constructor set
+round-trips through the model spec and shows up in a diff when extended. **ADR-037.**
+
+## PR-4 — Paper 2 scoring: evaluator, separation cells, error bars
+
+`serves: 2, and F5 serves 3` · `blocked by: PR-3` · `alias: P2-1b (B), F1, F2, F3, F5` ·
+`size: L` · `tag: v0.4.5` · `ADR-038`
+
+- [ ] `ThreeTermEvaluator` returns `Decomposition(misspecification, inference_gap)`, two
+      divergences directly computed. The type carries no entropy field and no entropy
+      estimator, which makes the standing prohibition on entropy subtraction structurally
+      unrepresentable rather than discouraged.
+- [ ] `AdditivityCheck` is a **separate object** taking an entropy estimator explicitly.
+      It is the only place `H(p*)` is estimated, which is why its residual carries an
+      entropy bar and the divergences do not.
+- [ ] **Reuse `CompletenessCertificate` from `cpomdp.enumeration` on the constructor
+      cross.** Expected cardinality `|model axis| × |inference axis|`, visited, equality
+      asserted, `IncompleteEnumerationError` on mismatch. This is the cheapest provability
+      purchase in the plan (Route 2), so do it first inside the PR.
+- [ ] Report the both-positive diagonal cell explicitly. Off-diagonal separations are only
+      meaningful against a cell where both terms move.
+- [ ] **F2.** Condition numbers `cond(Σ)` and `cond(S)` printed in every separation cell.
+      An ill-conditioned matrix manufactures or destroys twelve orders. Extend
+      `diagnostics.rollout_conditioning` rather than writing a second one.
+- [ ] **F3.** Separation ratio: the pinned term, the moving term's magnitude beside it,
+      and their ratio. "Below 1e-12" is empty if the term is naturally O(1e-13). The claim
+      is the ratio, roughly twelve orders, not the small number.
+- [ ] Absence of catastrophic cancellation checked wherever a term is computed as a
+      difference of large quantities.
+- [ ] **F1.** The additivity residual is `E[F]_measured − (H(p*) + D₁ + D₂)` and the bound
+      is `δ_F + δ_H + δ₁ + δ₂`, four terms. Omitting `δ_F` under-bounds the residual and
+      lets a real closure failure read as within tolerance.
+- [ ] **F5.** Common-mode propagation for differences. Quantities scored against one
+      reference share its discretisation error, which largely cancels in their
+      differences. Pre-register the resolution threshold as the error *on the difference*,
+      not the sum of the bars.
+- [ ] F5 is shared. Paper 3's **G10** is defined as propagation with common-mode
+      cancellation against the same reference filter. Build it once.
+
+**Merge gate:** the cross enumerates completely. R2 and R3 print at `PROVED`. No cell
+asserts a separation without printing its ratio and conditioning. The four-term bound is
+asserted. A difference and a sum-of-bars are shown to differ on a worked case.
+**ADR-038.**
+
+**Warrant:** R1 Tier A / Prover 1 with a 3a witness. R2 and R3 Tier A–B / **3b**. R4
+Tier B / 3a.
+
+## PR-5 — Control bracket and Paper 2 Part 1 results
+
+`serves: 2` · `blocked by: PR-4` · `alias: P2-4 (E), R1–R5, C5` · `size: L` ·
+`tag: v0.4.5`
+
+Gate-independent. It banks R1–R5 and C5 before the gate is even attempted, which is half
+of what survives a failure.
+
+- [ ] Finite-horizon backward Riccati recursion, needed twice: the full-information floor
+      `J_lower`, and matched-horizon comparison against the EFE planner. Extend
+      `cpomdp/control.py`, which already carries `LQRController`.
+- [ ] **Match the horizon.** A receding-horizon planner at horizon H implies the
+      finite-horizon gain with zero terminal cost, which converges to but does not equal
+      the steady-state gain. An unmatched comparison produces a mismatch that shrinks with
+      H and looks exactly like a bug. About twenty lines, and it must exist before any
+      control comparison runs.
+- [ ] Certainty-equivalent controller for `J_CE`.
+- [ ] Bracket width as the primary reported object. `η_ctrl` is derived, within-model,
+      with a stated resolution floor.
+- [ ] **R1** correct + exact: both terms below 1e-12, with the ratio and conditioning.
+- [ ] **R2** wrong + exact: misspecification positive and stable across a **declared**
+      seed set, and the inference gap below 1e-12.
+- [ ] **R3** correct + degraded: misspecification below 1e-12, inference gap positive.
+- [ ] **R4** additivity: three terms reconstruct measured `E[F]` within the four-term
+      bound.
+- [ ] **R5** Tier A control signature: `J_CE = J*` in closed form, bracket width
+      `= J_LQG − J_LQR`, `η_ctrl = 0` to the stated floor.
+- [ ] **C5** matched-pair dissociation. **Solve for the matched pair analytically, not by
+      root-search over perturbation magnitude** (Route 1). Frame it as demonstrating
+      incompleteness of the received accounting, never as refuting the FEP.
+
+**Merge gate:** `J_CE = J*` to machine precision in closed form. R1–R5 and C5 all print
+and assert. No check claims `PROVED` without a certificate.
+
+**Warrant:** R5 Tier A / Provers 1–2, the agreement of two independently computed closed
+forms. That is the strongest thing the tier table licenses without a bound.
+
+## PR-6 — Paper 3 toolbox and Part 1 results
+
+`serves: 3` · `blocked by: PR-1, PR-3` · `alias: G-A, G-C, G-D, G1–G5` · `size: L` ·
+`tag: v0.4.5` · `ADR-039`
+
+G-A and G-D were the original Phase 0 hedge, scheduled at v0.4.3 and never shipped. They
+are gate-independent and cheap. They are what stands between "a gate failure stalls the
+programme" and "a gate failure costs Part 2's numbers while Paper 3 Part 1 proceeds on
+Tier A results that need no reference filter at all". They belong ahead of PR-7, not
+after it.
+
+- [ ] **G-A.** A common interface making each action-selection functional swappable in one
+      line, with closed-form evaluation on the Tier A model class.
+- [ ] The variant list lives in the model spec and is **versioned**, so a variant added
+      after results are seen appears in the diff rather than in the prose.
+- [ ] **G-D.** Every functional comparison returns both the value difference and the
+      argmin comparison, and the suite asserts on both. This puts Paper 3's standing rule
+      4 in code rather than prose. Reporting one of the two is the equivocation the paper
+      exists to remove.
+- [ ] **G-C.** Reward-plus-λ-information-gain rival agents, with λ and the precision
+      parameter γ each declared **fixed or free in the model specification** rather than
+      at analysis time. A free parameter discovered during analysis is an accommodation.
+      One declared in the spec is a hypothesis. The code should not let the two be
+      confused, and the declaration is mandatory at the type level.
+- [ ] **G1** constant-offset lemma. Prove it, then print the value difference and assert
+      it flat across policies to machine precision.
+- [ ] **G2** argmin-equivalence partition **with its completeness certificate**. The class
+      count is the paper's headline and must not be quoted before this runs.
+- [ ] **G3** value separation despite argmin identity.
+- [ ] **G4** preference-convention discrimination.
+- [ ] **G5** the fixed-R λ-sweep, which is G8's control.
+
+**Merge gate:** G1's constant offset prints and is flat across policies at H = 1. The G2
+certificate holds at the stated horizon and action set. An undeclared λ or γ is a
+construction error, not a runtime warning. **ADR-039.**
+
+**Warrant:** G2 is **3b**, decided rather than surveyed. G4 is 3a existence, settled by
+one construction.
+
+## PR-7 — Exact reference filter and the rule ladder
+
+`serves: 2, 3` · `blocked by: PR-3` · `alias: P2-5 (C), P2-7 (D)` · `size: L` ·
+`tag: v0.4.5`
+
+The hard item, and it is shared.
+
+- [ ] Grid or quadrature filter over a low-dimensional latent, accepting an **arbitrary
+      pointwise-evaluable likelihood** rather than an R(x)-specific one. The generality is
+      nearly free for a grid filter and is what lets later model classes reuse the engine.
+- [ ] Returns `E_p*[D_KL[q ‖ p(x|y)]]` directly.
+- [ ] Written against a **general transition kernel**, not a hard-coded linear-Gaussian
+      one. If Q(x) falls out of the internal interfaces at no cost, let it. Do not
+      document it, write examples against it, or claim it in release notes (issue #56).
+- [ ] Rule ladder, common interface: plug-in `R(μ⁻)`, Spinello–Stilwell iterated,
+      belief-smoothed `E[R(x)]`, exact reference at the top. Swappable in one line.
+- [ ] The rule list is **declared and versioned**, like `FiniteActionSet`. A rung added
+      after results are seen shows up in the diff.
+- [ ] Four rungs is a finite declared set, so the ladder carries a completeness
+      certificate too (Route 2). That is what lets R7 reach a decided ordering rather than
+      a sampled one.
+- [ ] **Compute and print the R6 gap here, at Tier C, before certification.** GATE-D4
+      compares the certified bound against that number by the pre-agreed factor, so the
+      gate cannot be evaluated until the uncertified signal exists. This ordering is easy
+      to miss and it blocks PR-8.
+
+**Merge gate:** agreement with the closed-form Kalman posterior in the fixed-R case, where
+the Kalman filter *is* the exact Bayesian filter. Each rung evaluates. The ladder
+enumerates completely.
+
+## PR-8 — Certified discretisation bound · GATE-D4 · tag v0.4.5
+
+`serves: 2, 3` · `blocked by: PR-7` · `alias: P2-6 (C′)` · `size: L` · `tag: v0.4.5` ·
+`ADR-040`
+
+- [ ] Write down the **pre-agreed factor** before this PR is opened. A factor agreed after
+      seeing the bound is not a gate.
+- [ ] A **certified** bound, not a fine grid with a convergence plot. Interval arithmetic
+      or a proved quadrature error bound, the device licensing *for all x in the domain,
+      |p_grid − p_exact| ≤ δ*.
+- [ ] Stated as a number and shown small relative to R6's measured signal by the
+      pre-agreed factor.
+- [ ] Emits `CERTIFIED`, not `PROVED`. The distinction is 3c against 3b and it is not
+      cosmetic.
+- [ ] **Cut v0.4.5 at this merge whatever the outcome.** Release notes record the gate
+      result as a number against the factor, `PASS` or `FAIL`. Changelog, `DECISIONS.md`
+      entry, `CITATION.cff` and `__init__.__version__` on the release commit, matching
+      v0.4.4's discipline.
+
+**Merge gate — hard, existential.** See "GATE-D4" below. **ADR-040.**
+
+## PR-9 ⛔ — Window harness and Paper 2 Part 2 results
+
+`serves: 2` · `blocked by: GATE-D4, PR-4` · `alias: P2-8 (F6), R6–R9` · `size: L` ·
+`tag: v0.5`
+
+- [ ] Before any exponent is fitted, demonstrate the D2 fit window is non-empty. Print its
+      bounds **on both swept axes** and the signal-to-bound ratio across it.
+- [ ] Three independent closure modes, all checked. Higher-order contamination at large
+      spread. Relative-error divergence against the bound at small spread. The
+      belief-smoothed rung requiring `E[R(x)]` to exist, which H1 puts no ceiling on, so
+      at high curvature a rung can drop off the ladder entirely.
+- [ ] An empty window is **VOID**, not `FAIL`. Report the leg unmeasurable and route it to
+      the adaptive-grid register item. The lower edge sits near `√(k·δ_ref/curvature)`, so
+      a tighter bound widens it directly. This is the one failure that code can fix.
+- [ ] **R6** gap positive and separated from the certified error by the pre-agreed factor.
+- [ ] **R7** ladder ordering, three-valued, with F5 difference propagation. Pre-register
+      the minimum separation that counts.
+- [ ] **R8** scaling exponent, only against a demonstrated non-empty window, else VOID.
+- [ ] **R9** the bound as a number, small relative to R6's signal.
+
+**Merge gate:** the window's bounds print, and R8 does not run until they do. R6–R9 print
+and assert at their stated tiers.
+
+## PR-10 ⛔ — Paper 3 Part 2 results
+
+`serves: 3` · `blocked by: GATE-D4, PR-2, PR-6` · `alias: G6–G10` · `size: M` ·
+`tag: v0.5`
+
+- [ ] **G6** class splitting under R(x).
+- [ ] **G7** argmin divergence separated from the certified error.
+- [ ] **G8** the λ-sweep under R(x).
+- [ ] **G9** crossover interaction, `H*` per functional, inheriting PR-2's action-set
+      qualifier.
+- [ ] **G10** certification report with common-mode propagation, reusing PR-4's F5.
+
+**Merge gate:** G6–G10 print and assert. G9 carries PR-2's stability outcome.
+
+## PR-11 — v0.5 release
+
+`serves: 2, 3` · `blocked by: all` · `size: M` · `tag: v0.5`
+
+- [ ] R1–R10 and G1–G10 all print and assert in one run.
+- [ ] Changelog, docs, examples gallery, deferred-and-unsupported section with an issue
+      per boundary.
+- [ ] Zenodo archive. **Papers 2 and 3 both pin v0.5.**
+- [ ] Close or re-register every carry-over below. Anything still open ships as
+      registered, never as silence.
+
+---
+
+## GATE-D4
+
+With one bound and two tags, the gate is a blocking condition on **PR-8** and an explicit
+merge block on **PR-9 and PR-10**.
+
+- [ ] Write down the pre-agreed factor before PR-8 is opened.
+- [ ] Mark PR-9 and PR-10 blocked in the tracker, not by convention. A gate honoured by
+      memory is not honoured.
+- [ ] Tag v0.4.5 at PR-8's merge regardless of outcome.
+
+**On failure: stop.** Do not merge PR-9 or PR-10 against an uncertified reference.
+
+**What survives a failure, and it is a paper.** Paper 2 re-scopes to Tier A: Part 1
+complete (R1–R5), R10 complete, C5, all of battery families A and B, C1–C5, D3, E1's
+Tier A leg, and all of F. **Paper 3 Part 1 is untouched**, because it is closed-form and
+touches no grid, so PR-6 still stands. What dies: D1, D2, C6, G7, G10, and the certified
+half of G6–G9. Two publishable units remain, which is what the hedge was built to
+preserve.
+
+---
+
+## Buying the highest level of provability
+
+Three routes, descending value per hour.
+
+### Route 1 — free: restate the claim so its natural prover is 1 or 2
+
+- **R1** is not "two numbers came out below 1e-12". In fixed-R linear-Gaussian with
+  p = p\* and exact inference, both divergences are **identically zero by construction**.
+  Prove it, then assert numerically as witness. Tier A, Prover 1.
+- **R5** is agreement of two independently computed closed forms. Do not compute `J_CE`
+  and `J*` by simulation and compare.
+- **C5's matched pair** should be **solved for analytically**, not found by root-search. A
+  searched match is 3a and carries the searcher's tolerance. A constructed match is
+  Tier A. Same result, two tiers apart.
+- **G1** is a lemma with a proof, not a numerical observation that an offset looks flat.
+
+### Route 2 — cheap: make the quantified domain finite and declared, then certify the cardinality
+
+The 3a → 3b conversion, and the largest return per hour on offer, because v0.4.4 already
+built the machinery. `CompletenessCertificate` exists. Pointing it at a new domain costs
+an afternoon and converts "we found no counterexample" into "there is no counterexample
+on this set".
+
+- [ ] **Constructor cross** (PR-4). R2 and R3 decided rather than sampled. **Do this one
+      first.**
+- [ ] **Evaluation-rule ladder** (PR-7). Four declared rungs, so once each rung is
+      `CERTIFIED`, "rung i < rung i+1 for all adjacent i" is a finite conjunction of
+      certified interval comparisons. **Decided, not sampled.** R7 reaches `PROVED`
+      conditional on `CERTIFIED` rung values, which is stronger than the original framing
+      and free.
+- [ ] **Functional variant list** (PR-6). G2's partition is already built on this, and the
+      same discipline applied to the rival-agent set extends it to G8.
+- [ ] **Seed sets.** A declared seed list with an asserted cardinality is a finite domain.
+      "Stable across seeds" over a declared list is decided. Over "some seeds we ran" it
+      is not.
+
+**The boundary, stated so it is not crossed.** A finite grid over a *continuous* range is
+still 3a. Sweeping perturbation *magnitude* on a grid corroborates. Enumerating a
+*declared set of magnitudes* decides a claim about that set and nothing more. The
+certificate licenses the enumeration, never the sweep.
+
+### Route 3 — paid: validated numerics
+
+3c is the only route to a universal over a continuum by execution, and it is what GATE-D4
+buys. R6, R7's rung values, R8, R9, G7 and G10 sit at Tier C without it.
+
+**Second-order return, worth pricing in.** A tighter bound does not only certify. It
+widens D2's fit window, whose lower edge sits at `√(k·δ_ref/curvature)`. Adaptive
+quadrature buys warrant on R6, R7 and R9, and it buys R8 the right to exist.
+
+### What cannot be bought
+
+- **R8's exponent.** A fitted exponent over a continuous sweep is 3a, permanently. Report
+  it `CORROBORATED` against a registered interval and stop. Its severity comes from having
+  been able to come out wrong, not from its warrant.
+- **Any universal over the action continuum.** `H* = 7` is decided over the declared
+  `{0, ±1, ±2}`. PR-2 bounds the artefact risk. It does not remove the qualifier.
+- **Equivalence over a continuum of models.** G2 is proved over an enumerated policy set
+  at a stated horizon and action set. Do not let the abstract widen it.
+- **Theorem 1's ceiling.** Finite-dimensional, H3′ for the title-strength claim, Remark 2's
+  dual-effect scoping. All three travel with every restatement.
+
+### Warrant ledger, per result
+
+| Result | Best prover attainable | Tier | Bought by |
+| --- | --- | --- | --- |
+| R1 | **1** plus a 3a witness | A | Route 1 |
+| R2, R3 | **3b** over the declared cross | A–B | Route 2, PR-4 |
+| R4 | 3a, **3c** if all four bars certified | B | PR-4 plus Route 3 |
+| R5 | **1–2** plus a machine-precision witness | A | Route 1, PR-5 |
+| R6 | **3c** | B | GATE-D4 |
+| R7 | **3b over rungs, conditional on 3c rung values** | B | Routes 2 and 3 |
+| R8 | 3a, the ceiling | B | Nothing. Say so |
+| R9 | **3c** | B | This *is* Route 3 |
+| R10 | **3b**, already achieved | B | Certificate, hardened by PR-2 |
+| G1 | **1** plus witness | A | Route 1 |
+| G2 | **3b** with certificate | A | Shipped at v0.4.4, applied at PR-6 |
+| G4 | **3a existence**, settled by one construction | A | Construction |
+| G7, G10 | **3c** | B | GATE-D4 |
+
+---
+
+## Failure routing
+
+| Failure | Routing |
+| --- | --- |
+| **GATE-D4 fails** | PR-9 and PR-10 do not merge. Paper 2 re-scopes to Tier A. Paper 3 becomes a Tier A paper on the collapse of the zoo. Two units survive |
+| **Ladder non-monotone** | Reported. Registered as a conjecture with a predicted direction, not a theorem |
+| **Adjacent rungs overlap** | `NOT_RESOLVED`. Needs PR-4's F5 to have any resolving power |
+| **D2 window empty** | VOID, routed to the adaptive-grid register item. PR-9 catches it before the fit |
+| **`H*` moves under refinement** | `FAIL` on the fourth falsifier. Report the sensitivity, scope the claim to the declared set. G9 inherits |
+| **Refinement exceeds budget** | VOID, unmeasured, never "stable" |
+| **Functionals coincide under R(x)** | Pre-registered as reportable. Part 1's proved degeneracy stands alone |
+| **C6 gap at machine precision under R(x)** | `FAIL` against a theorem. Bug hunt before result |
+
+---
+
+## Documents to amend
+
+Two tracked programme documents carry the gate.
+
+- [x] `research/warrant_ledger.md`. The five "v0.4.4 gate" sites read `GATE-D4`, the
+      header names v0.4.5 as the tag that carries it, the scoring-harness and rule-family
+      pinning points at PR-3/PR-4 and PR-7, and the opening line names the battery by
+      filename.
+- [ ] `research/warrant_ledger.md`, still open. Section 2's availability column moves off
+      bare version numbers onto PRs.
+- [x] `research/fep_falsification_battery.md`. Readiness reads `PR-n · tag` throughout,
+      `GATE-D4 at v0.4.6` reads `GATE-D4 · PR-8 · v0.4.5`, D3's "E outstanding, scheduled
+      v0.4.5" reads PR-5, and D3 now completes at v0.4.5 rather than v0.5, because PR-2
+      and PR-5 both land before the gate.
+- [ ] `research/fep_falsification_battery.md`, still open. Two items need a decision
+      rather than an edit, both listed under "Registered wording" below.
+- [ ] This file supersedes the earlier build plans. Anything still citing them is stale.
+
+**Registered wording, two open decisions.**
+
+- [ ] **D3's prediction sentence.** The battery registers "the accumulated epistemic pull
+      overtakes the pragmatic gradient". The ledger's section 10 records that as literally
+      false against the measurement: `Δε` is flat (1.72 → 1.64) and `Δc` decays
+      (4.49 → 0.86) to cross below it. The mechanism is a decaying pragmatic gradient. The
+      ledger says D3 should be restated in those terms. Restating a registered prediction
+      is not an editing call, so the battery still carries the original wording.
+- [ ] **E2's readiness.** The battery reads "further work" for the rival-agent harness.
+      PR-6 builds one for Paper 3's G-C. Whether Paper 3's harness serves Paper 2's E2 is
+      a scoping call, so the entry is unchanged.
+
+---
+
+## Standing build rules
+
+1. No number reaches prose unless the check suite prints and asserts it.
+2. Conditions are reported, not assumed. A `probe_model` per cell.
+3. "Certified" requires a stated tolerance. Otherwise the word is "computed".
+4. Import Paper 1 by number, never re-derive. Import Paper 2 by result ID in Paper 3.
+5. A public surface costs docs, tests, examples and a support commitment. Undocumented
+   capability that falls out of internal interfaces stays undocumented until it is
+   scheduled.
+6. Warrant is a property of the check, not of the number. The suite distinguishes 3a from
+   3b in its output vocabulary rather than printing both as `PASS`.
+7. **A declared set is versioned or it is not declared.** Action sets, rule ladders,
+   constructor crosses, seed lists, functional variants. Each lives in the model spec, so
+   an addition after results are seen appears in the diff rather than in the prose.
+8. **`PROVED` requires a certificate object, enforced at construction.** An enumerator
+   asserting its own completeness without checking cardinality proves nothing, and the
+   type system should say so before the test runs.
+9. **A blocked PR is blocked in the tracker, not by memory.**
+
+---
+
+## Carried forward from the v0.4.4 window
+
+The deferred register, one issue per boundary. Each ships as registered rather than as
+silence, per standing rule 5.
+
+- [ ] **#52** closed-loop `FfgEfeSelector` above H = 1. Unsupported, not untested.
+      ADR-034 notes the FFG-backed drivers would now make it nearly free. It stays
+      deferred, because nothing scoped needs it.
+- [ ] **#53** pruning the `|A|^H` enumerated search without losing the completeness
+      certificate. Defer rather than half-build. A design that does not start at the
+      certificate is not a design.
+- [ ] **#54** `GradientEfeSelector`, the continuous-action corroboration track. Detail
+      below.
+- [ ] **#55** notation unification. Detail below.
+- [ ] **#56** the Q(x) surface above H = 1. Works, undocumented, unclaimed. PR-7 must not
+      change that.
+- [ ] **#58** does `H*` collapse onto a dimensionless group. Design pass done, build
+      deferred.
+
+### Notation unification (#55)
+
+The `μ`/`Σ` predict/update superscript convention is inconsistent across the codebase.
+Three variants coexist. `efe.py` and its neighbours use `μ⁺`/`Σ⁺` for the predicted
+moment with `Σ_post` after observation. `kalman.py`, `ffg/chain.py` and `diagnostics.py`
+use standard Kalman `μ⁻`/`Σ⁻` with `post`. `coupling.py` uses both symbols for
+pre-coupling against coupling-resolved *predicted* means (ADR-019), a distinction
+orthogonal to predict/update.
+
+Variant 3 is the trap. A naive `μ⁺` → `μ⁻` sweep corrupts ADR-019's meaning.
+
+- [ ] Pick one canonical convention. Standard Kalman `Σ⁻`/`Σ⁺` is the textbook default and
+      what external readers expect. Record it as an ADR, since it touches ADR-003's
+      epistemic-collapse wording and ADR-019.
+- [ ] Give `coupling.py`'s pre-coupling against coupling-resolved means a **separate**
+      disambiguator, not the predict/update superscript, so ADR-019's distinction survives
+      the rename.
+- [ ] Sweep comments and docstrings across `src/` to the chosen convention. Verify it is a
+      pure doc change: arithmetic byte-identical, whole suite unmodified, `ruff` and `ty`
+      clean.
+
+### Continuous-action corroboration track (#54)
+
+A continuous-state agent should also exercise genuinely continuous action spaces, not
+only declared finite repertoires. `GradientEfeSelector` is that selector: gradient ascent
+on the differentiable `policy_efe` over a continuous action box.
+
+**Warrant: 3a / `CORROBORATED` only.** Gradient ascent finds a *local* optimum of a
+non-convex objective. Like the grid it searches a continuum without exhausting it, so it
+can never *decide* a universal over the action space. Every result it produces carries the
+`CORROBORATED` label, never `PROVED`, never a bare `PASS` (standing rule 6).
+
+**Home: the self-acting regimes, not the p\* scoring harness.** PR-3's harness runs in
+exogenous action mode and severs the control loop, so action *selection* is not part of
+the decomposition. Continuous action *values* already are. `GradientEfeSelector` belongs
+to the self-acting brackets: a corroborating companion to the crossover and, principally,
+to PR-5's control bracket, where a self-acting agent under R(x) steers toward low-noise
+regions and changes its own gap.
+
+**Wall: strictly separated from the enumerated evidence.** R10's crossover decision rides
+on the finite enumeration. A gradient-selected policy may corroborate alongside it. It
+must never enter the decisive cells, or the 3b certificate is contaminated back to 3a.
+
+- [ ] `GradientEfeSelector` over a continuous action box (`p >= 1`), returning the
+      optimised sequence and its `G`. Labelled `CORROBORATED`.
+- [ ] The warrant label travels with every continuous-action result, printed and asserted,
+      so a corroboration is never read as a certification.
+- [ ] No gradient result enters R10's enumerated evidence. The two families' outputs stay
+      separately labelled in any shared harness.
+
+**Not this track — register, do not build.** *Certified* continuous-action coverage,
+deciding "no action in the compact box flips", is Prover 3c. It needs a certified
+branch-and-bound with Lipschitz or interval bounds on `policy_efe` over the box. That is a
+distinct, larger, later workstream. `GradientEfeSelector` does not deliver it and nothing
+here should imply it does.
