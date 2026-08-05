@@ -2,6 +2,80 @@
 
 Everything worth noting lands here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [semantic versioning](https://semver.org). While we're pre-1.0, treat the minor version as the place breaking changes can show up.
 
+## [Unreleased]
+
+Warrant plumbing and the `slogdet` oracle audit. The two-level `SearchWarrant` becomes a
+shared three-level `Warrant` that checks can reach, and a check now reports what it found
+alongside how well it was warranted and what it was measured against. The audit half
+confirmed what v0.4.3 left behind: the kernel's log-determinant guard was never applied to
+the NumPy oracle the headline `H* = 7` is checked against.
+
+The `H = 7` numbers did not move. They are bit-identical across the guard, so it corrected
+an exposure rather than a result.
+
+### Added
+
+- `cpomdp.warrant` — the vocabulary every check labels itself from. `Warrant` carries the
+  prover class (`PROVED`, `CERTIFIED`, `CORROBORATED`), `Outcome` what a registered
+  falsifier did, `Tier` what it was measured against, and `CheckReport` all four with a
+  reason. `CERTIFIED` is new: validated numerics prove a universal over a compact domain,
+  which is stronger than a sample and weaker than a decision, and forcing it into either
+  neighbour overclaims or throws away the bound (ADR-035).
+- `check_summary` prints `n registered, m tested here, k fired`, then counts per
+  `(warrant × outcome)`. Registering four falsifiers and testing two is a different claim
+  from testing four, and one number cannot carry both.
+- `cpomdp.diagnostics.logdet_pd` — `ln det` behind a Cholesky positive-definiteness guard,
+  NaN otherwise. `slogdet` reports a sign separately, so reading only the magnitude returns
+  `ln 2` for `diag(-1, -2)`, a plausible number for a matrix whose log-determinant does not
+  exist. `epistemic_value` and the crossover demo's oracle both route through it.
+- `examples/ffg/crossover.py` gains `flip_margin_error`, the error the already-declared
+  `COND_CEILING` allows on a difference of two scores. `H* = 7` rested on a bare inequality
+  between two computed floats with nothing said about how far apart they had to be. The
+  bar is derived from a ceiling `tests/test_rollout_hygiene.py` already enforces rather
+  than invented for the claim. `warrant_numbers.md` records the derivation, that it was
+  written after the measurement, and why a stricter guard cannot rescue a failing result.
+
+### Fixed
+
+- The NumPy oracle in `examples/ffg/crossover.py` discarded `slogdet`'s sign on both halves
+  of its per-step epistemic. v0.4.3 fixed the shipped kernel and the changelog did not say
+  whether the oracle path went with it. It did not. Both paths now reject a matrix with an
+  even number of negative eigenvalues, which a two-route agreement check cannot catch on
+  its own: two routes that both discard the sign agree, and are both wrong.
+- The crossover falsifiers computed their outcome from `|ΔG| > bound`, a magnitude test on
+  a direction question. Nothing could emit `FIRED`, and a reversed argmin would have
+  printed as a survivor beside a hardcoded "argmin is cue-ward". Outcome and detail are now
+  computed from the exhaustive argmin, and the measurement is injectable so a refuting
+  result is something a test can execute.
+- `CompletenessCertificate(expected=9, visited=8, warrant=PROVED)` used to construct and
+  read `complete = False`, a certificate recording its own shortfall with the contradiction
+  one attribute access away. It now raises. The honest label for a partial enumeration is
+  `CORROBORATED`.
+
+### Changed
+
+- `SearchWarrant` is an alias of `Warrant`. Every call site keeps its members and its
+  return type, so `EFESelector.warrant` still reads `CORROBORATED` and
+  `EnumeratedEfeSearch.warrant` still reads `PROVED`.
+- `PROVED` without evidence does not construct, enforced in `CheckReport`. A completeness
+  certificate is the only evidence today. A theorem citation joins it when a Prover 1
+  check needs one. Evidence is a tuple, so a claim quantified over several enumerations carries
+  all their certificates rather than one of them.
+- A check that never ran carries no warrant. `CORROBORATED` asserts sampling-grade evidence
+  was obtained, so attributing it to a falsifier void by construction claims evidence that
+  does not exist. That cell reads `—`, enforced at construction.
+- `examples/ffg/crossover.py --check` reports its falsifiers on two axes. Rows 1 and 2 read
+  `PROVED` from the enumeration certificates and Tier B from the error bound. The `H* = 7`
+  upper-bound qualifier now travels in both detail strings, not only in the write-up. The
+  declared set clips the reach at `-2` while the optimum is `-3`. A margin inside its
+  bound reports `NOT RESOLVED` rather than raising, since a tie is a finding about the
+  measurement and an exception erases it.
+- ADR-029 said the check vocabulary must never ship in `cpomdp`. ADR-035 reverses that on
+  placement and extends it on content: three outcomes become five, `NOT RUN HERE` promoted
+  from a prose rule to a member, `NOT RESOLVED` added for a genuine tie. `PASS` is absent
+  from the enum. A falsifier does not pass, and printing `PASS` beside a prover column that
+  disambiguates it inverts the rule the prover column exists to satisfy.
+
 ## [0.4.4] — 2026-08-04
 
 The multi-step slice of expected free energy. Scoring one policy over a horizon was already
