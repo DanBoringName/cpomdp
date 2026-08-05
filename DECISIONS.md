@@ -1978,3 +1978,85 @@ distinct answer.
   falsifiers, and two values are the honest report there.
 - The cost of the rule is a print. If a later harness wants the outcomes machine-readable,
   that is a small addition to the harness and still not a library type.
+
+## ADR-035 — the warrant vocabulary ships, and a falsifier still does not pass
+
+**Date:** 2026-08-05
+**Status:** Accepted
+**Phase:** v0.4.5 (certifiable active inference, Paper 2 groundwork)
+**Reverses:** ADR-029 on where the vocabulary lives
+**Extends:** ADR-029 on what it says; ADR-030 (the completeness certificate); ADR-031
+(the two warrant vocabularies)
+
+### The question
+
+Two decisions had drifted apart. ADR-031 gave *searches* a warrant, `PROVED` for an
+exhaustive enumeration and `CORROBORATED` for a grid sample, and shipped it as
+`SearchWarrant` in `cpomdp.enumeration`. ADR-029 gave *checks* a three-valued outcome and
+put it deliberately in the harness, ruling that "the vocabulary lives in the harness and
+the write-up, never in `src/cpomdp`" because which claims are registered falsifiers belongs
+to the research programme.
+
+Three things then arrived that neither covers. Validated numerics over a compact domain
+prove a universal by construction, which is stronger than a sample and weaker than a
+decision, and the two-level enum has no word for it. Reference filters would need that word
+in `src`. And a check needs to report warrant, outcome and tier together, which means one
+type carrying all three, which means deciding where that type lives.
+
+### Decision
+
+**The vocabulary ships.** `cpomdp.warrant` holds `Warrant`, `Outcome`, `Tier`,
+`CheckReport` and `check_summary`, all public and documented. This reverses ADR-029's
+placement rule. The reason that rule gave has weakened: `EFESelector.warrant` was already a
+public property returning a type nobody could import, and the warrant is no longer only a
+research-programme concern once a library object reports one. ADR-029 was protecting
+against the library acquiring opinions about which claims are worth falsifying. That is
+untouched. `cpomdp.warrant` classifies evidence and names no claim.
+
+`Warrant` gains `CERTIFIED` for Prover 3c. `SearchWarrant` becomes an alias of `Warrant`,
+so every call site keeps its members and its return type. The promotion is not a rename.
+
+**A falsifier does not pass.** ADR-029's outcome vocabulary was right and is kept. The
+`BUILD_PLAN` primer proposed `{PASS, FAIL, NOT_RESOLVED}` for every check, and that was
+tried and rejected. Standing rule 6 asks the suite to distinguish a decided claim from a
+sampled one *rather than printing both as `PASS`*. Satisfying it by printing `PASS` beside
+a prover column that disambiguates it inverts the rule. `PASS` is absent from `Outcome`
+entirely, and a test asserts the word is unreachable.
+
+`Outcome` has five members. `NOT_TRIGGERED`, `FIRED` and `NOT_APPLICABLE` are ADR-029's,
+unchanged. `NOT_RUN_HERE` promotes ADR-029's second rule, that a falsifier the gate skips
+says so and names where it was measured, from prose to a member, so a harness author
+cannot forget it. `NOT_RESOLVED` is new and narrow: two quantities' intervals overlap and
+the ordering is genuinely undetermined. It is not a synonym for either of the two above,
+and collapsing the three loses the survivor accounting.
+
+**Two claims become unrepresentable.** `PROVED` without evidence does not construct. The
+evidence is a `CompletenessCertificate` today and a theorem citation when a Prover 1 check
+needs one. An outcome that never ran here may not carry a warrant at all: `CORROBORATED`
+asserts sampling-grade evidence was obtained, so attributing it to a falsifier void by
+construction claims evidence that does not exist. Its prover cell reads `—`.
+
+`CompletenessCertificate` gains the matching precondition: `PROVED` with `visited !=
+expected` no longer constructs. It previously did, reading `complete = False`, which left
+the contradiction one attribute access from anyone who did not look.
+
+### Consequences
+
+- `check_summary` prints `n registered, m tested here, k fired`, then counts per
+  `(warrant × outcome)`. Registering four falsifiers and testing two is a different claim
+  from testing four, and one number cannot carry both.
+- `examples/ffg/crossover.py` reports its four D3 falsifiers on both axes. Rows 1 and 2 are
+  `PROVED` from the enumeration certificate and Tier B from a stated error bound. Rows 3
+  and 4 are Tier C with no warrant.
+- A near-tie routes to `NOT_RESOLVED` rather than to an `AssertionError`. A tie is a
+  finding about the measurement, and raising erases it.
+- The `BUILD_PLAN` warrant primer is amended, since its outcome triple no longer matches
+  the shipped enum and every later PR self-labels off that primer.
+- Ordinary two-valued assertions are unaffected. ADR-029 scoped its vocabulary to
+  registered falsifiers and that scoping holds: "does the shipped number match the NumPy
+  oracle" still passes or raises, and needs no enum.
+- The cost of shipping the vocabulary is a public surface that has to be maintained past
+  1.0. Judged worth it because the alternative is every downstream harness inventing its
+  own labels, which is the drift ADR-031 exists to stop.
+
+---

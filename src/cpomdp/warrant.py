@@ -119,12 +119,15 @@ class CheckReport:
         tier: what the check was measured against.
         detail: why it reports what it reports, in one line. Required, so a report
             cannot be a bare outcome with extra fields.
-        evidence: what backs the claim. Required when the warrant is ``PROVED`` and
-            unused otherwise.
+        evidence: what backs the claim, as a tuple. Required non-empty when the warrant
+            is ``PROVED`` and unused otherwise. A tuple rather than one item because a
+            claim quantified over several enumerations rests on all their certificates,
+            and carrying one of them understates what was checked.
 
     Raises:
-        ValueError: if the warrant is ``PROVED`` and no evidence was given, or if a
-            check that never ran here carries a warrant anyway.
+        ValueError: if the warrant is ``PROVED`` and no evidence was given, if a check
+            that never ran here carries a warrant anyway, or if the evidence is not a
+            tuple.
     """
 
     name: str
@@ -132,11 +135,18 @@ class CheckReport:
     outcome: Outcome
     tier: Tier
     detail: str
-    evidence: "Evidence | None" = None
+    evidence: tuple["Evidence", ...] = ()
 
     def __post_init__(self) -> None:
         """Reject a claim with nothing behind it, at either of two strengths."""
-        if self.warrant is Warrant.PROVED and self.evidence is None:
+        if not isinstance(self.evidence, tuple):
+            raise ValueError(
+                f"check {self.name!r} passed evidence as "
+                f"{type(self.evidence).__name__}. Evidence is a tuple, so a claim "
+                "resting on several enumerations can carry all of their certificates. "
+                "Wrap a single one: (certificate,)."
+            )
+        if self.warrant is Warrant.PROVED and not self.evidence:
             raise ValueError(
                 f"check {self.name!r} reports PROVED with no evidence. A decided "
                 "universal needs something statable behind it: a completeness "

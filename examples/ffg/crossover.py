@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import itertools
 import sys
+from typing import NamedTuple
 
 import epistemic_dissociation_figure as demo
 import jax
@@ -46,7 +47,11 @@ import numpy as np
 from cpomdp.crossover import crossover_statistic
 from cpomdp.diagnostics import logdet_pd, rollout_conditioning
 from cpomdp.efe import policy_efe_ffg, policy_efe_ffg_trace
-from cpomdp.enumeration import EnumeratedEfeSearch, FiniteActionSet
+from cpomdp.enumeration import (
+    CompletenessCertificate,
+    EnumeratedEfeSearch,
+    FiniteActionSet,
+)
 from cpomdp.selection import Preference
 from cpomdp.types import Belief
 from cpomdp.warrant import CheckReport, Outcome, Tier, Warrant, check_summary
@@ -116,6 +121,52 @@ def argmin_at(horizon: int, action_set=ACTION_SET):
 def exhaustive_flip(action_set=ACTION_SET, max_horizon=MAX_H):
     """Per-horizon exhaustive argmin ``(H, n_policies, Gmin, argmin, cue_ward)``."""
     return [(h, *argmin_at(h, action_set)) for h in range(1, max_horizon + 1)]
+
+
+class FlipMeasurement(NamedTuple):
+    """One horizon's exhaustive enumeration, as the falsifiers read it.
+
+    Separating the measurement from the report is what lets the reporting logic be
+    exercised on a refuting result. Nothing in a live run can produce one, and a branch
+    no run can reach is a branch no run has tested.
+
+    Attributes:
+        horizon: the horizon enumerated.
+        certificate: that enumeration's completeness certificate.
+        delta_g: ``G(walk) - G(reach)`` at this horizon. Negative means the walk wins.
+        bound: the error ``COND_CEILING`` allows on that difference.
+        cue_ward: whether the *exhaustive* argmin visits the cue. The direction the
+            falsifier asks about, from the enumeration rather than from the pair.
+    """
+
+    horizon: int
+    certificate: CompletenessCertificate
+    delta_g: float
+    bound: float
+    cue_ward: bool
+
+    @property
+    def separated(self) -> bool:
+        """Whether the margin clears the error bound, so the ordering is decidable."""
+        return abs(self.delta_g) > self.bound
+
+
+def measure_flip(horizon: int) -> FlipMeasurement:
+    """Enumerate at ``horizon`` and read off everything the falsifiers need."""
+    n_policies, _, _, cue_ward = argmin_at(horizon)
+    backend, _, _, target = _setup()
+    certificate = EnumeratedEfeSearch.over_backend(
+        backend, ACTION_SET, target=target, horizon=horizon
+    ).certificate
+    walk, reach = _numpy_score(_walk(horizon)), _numpy_score(_reach(horizon))
+    assert certificate.expected == n_policies  # the two routes enumerate the same set
+    return FlipMeasurement(
+        horizon=horizon,
+        certificate=certificate,
+        delta_g=walk - reach,
+        bound=flip_margin_error(walk, reach),
+        cue_ward=cue_ward,
+    )
 
 
 # --- 2. the mechanism split (post-selection exposition) ----------------------------
@@ -270,7 +321,19 @@ def epistemic_counterfactual(horizon=FLIP_H, actions=None):
 
 
 # --- the registered falsifiers, reported by both the bare run and the gate ----------
-def falsifiers() -> tuple[CheckReport, ...]:
+def _bar(*measurements: FlipMeasurement) -> str:
+    """The margins and the bound each was read against, one clause per horizon."""
+    return "; ".join(
+        f"|ΔG({m.horizon})| = {abs(m.delta_g):.4f} vs bound {m.bound:.2e} "
+        f"({abs(m.delta_g) / m.bound:.0e}x)"
+        for m in measurements
+    )
+
+
+def falsifiers(
+    at_prior: FlipMeasurement | None = None,
+    at_flip: FlipMeasurement | None = None,
+) -> tuple[CheckReport, ...]:
     """The four D3 falsifiers registered for this crossover, one report each.
 
     A falsifier does not pass. ``NOT TRIGGERED`` is "it ran and the condition did not
@@ -279,56 +342,72 @@ def falsifiers() -> tuple[CheckReport, ...]:
     elsewhere. Neither of the last two ran, so neither carries a warrant: the prover
     cell is ``—``, because attributing one would claim evidence that was never produced.
 
-    Rows 1 and 2 read on both axes at once, which is the point of carrying them
-    separately. On the prover axis they are ``PROVED``, each resting on the exhaustive
-    per-horizon enumeration and carrying its completeness certificate, so "no policy in
-    the declared set flips earlier" is decided rather than sampled. On the tier axis
-    they are ``B``: the margin is measured against the error ``COND_CEILING`` allows on
-    a difference of two scores, named in the detail with the ``H*`` qualifier beside it.
+    Rows 1 and 2 read on both axes at once. On the prover axis they are ``PROVED``,
+    resting on exhaustive enumeration and carrying its certificates. On the tier axis
+    they are ``B``, the margin read against the error ``COND_CEILING`` allows on a
+    difference of two scores.
 
-    A margin inside that bound is ``NOT RESOLVED``, not a failure. The ordering would
-    genuinely be undetermined, and the honest report of a tie is a tie.
+    Every outcome and every detail here is computed from the measurements. The direction
+    comes from ``cue_ward``, off the exhaustive argmin, so a reversed result reports
+    ``FIRED`` instead of printing the old sentence beside a cleared magnitude test. A
+    margin inside its bound reports ``NOT RESOLVED``, because the ordering would then be
+    genuinely undetermined and the honest report of a tie is a tie.
+
+    Row 2 quantifies over two horizons, so it takes both measurements and both
+    certificates. Reading it off H* alone would let it survive on the H* margin while
+    ``ΔG(H*-1)`` sat inside its own bound.
+
+    Args:
+        at_prior: the measurement at ``H*-1``. Enumerated live when omitted.
+        at_flip: the measurement at ``H*``. Enumerated live when omitted.
     """
-    backend, _, _, target = _setup()
-    certificate = EnumeratedEfeSearch.over_backend(
-        backend, ACTION_SET, target=target, horizon=FLIP_H
-    ).certificate
-    walk, reach = _numpy_score(_walk(FLIP_H)), _numpy_score(_reach(FLIP_H))
-    bound = flip_margin_error(walk, reach)
-    separated = abs(walk - reach) > bound
-    # A tie routes to NOT RESOLVED rather than to an exception. The bound is a bar the
-    # margin is read against, and "these two are too close to order" is a finding.
-    flip = Outcome.NOT_TRIGGERED if separated else Outcome.NOT_RESOLVED
-    bar = (
-        f"|ΔG| = {abs(walk - reach):.4f} vs error bound {bound:.2e} "
-        f"(cond ≤ {COND_CEILING:.0e}), {abs(walk - reach) / bound:.0e}x"
-    )
+    at_prior = measure_flip(FLIP_H - 1) if at_prior is None else at_prior
+    at_flip = measure_flip(FLIP_H) if at_flip is None else at_flip
+
+    def crossover_exists() -> Outcome:
+        """Fires when the exhaustive argmin is not cue-ward at H*."""
+        if not at_flip.separated:
+            return Outcome.NOT_RESOLVED
+        return Outcome.NOT_TRIGGERED if at_flip.cue_ward else Outcome.FIRED
+
+    def flip_is_clean() -> Outcome:
+        """Fires unless the argmin is prior-ward at H*-1 and cue-ward at H*."""
+        if not (at_prior.separated and at_flip.separated):
+            return Outcome.NOT_RESOLVED
+        clean = at_flip.cue_ward and not at_prior.cue_ward
+        return Outcome.NOT_TRIGGERED if clean else Outcome.FIRED
+
+    def where(measurement: FlipMeasurement) -> str:
+        return "cue-ward" if measurement.cue_ward else "prior-ward"
+
     # Travels with the number everywhere it is quoted: the declared set clips the reach
     # at -2 while the unconstrained optimum is -3, so 7 is an upper bound on H*, and a
-    # set containing -3 flips at 6. The bound above certifies the arithmetic, which was
+    # set containing -3 flips at 6. The error bound certifies the arithmetic, which was
     # never the exposure here.
     upper = f"H* = {FLIP_H} is an upper bound (set clips the reach at -2, optimum -3)"
     return (
         CheckReport(
             name="1. no crossover at feasible H",
             warrant=Warrant.PROVED,
-            outcome=flip,
+            outcome=crossover_exists(),
             tier=Tier.B,
             detail=(
-                f"argmin is cue-ward at H* = {FLIP_H}, inside H_MAX = {H_MAX}. "
-                f"{upper}. {bar}"
+                f"argmin is {where(at_flip)} at H = {at_flip.horizon}, inside "
+                f"H_MAX = {H_MAX}. {upper}. {_bar(at_flip)}"
             ),
-            evidence=certificate,
+            evidence=(at_flip.certificate,),
         ),
         CheckReport(
             name="2. flip not clean at H*/H*-1",
             warrant=Warrant.PROVED,
-            outcome=flip,
+            outcome=flip_is_clean(),
             tier=Tier.B,
             detail=(
-                f"ΔG changes sign once, argmin flips at the same step. {upper}. {bar}"
+                f"argmin is {where(at_prior)} at H = {at_prior.horizon} and "
+                f"{where(at_flip)} at H = {at_flip.horizon}. {upper}. "
+                f"{_bar(at_prior, at_flip)}"
             ),
-            evidence=certificate,
+            evidence=(at_prior.certificate, at_flip.certificate),
         ),
         CheckReport(
             name="3. not reproducible across seeds",
@@ -350,15 +429,17 @@ def falsifiers() -> tuple[CheckReport, ...]:
     )
 
 
-def _print_falsifiers() -> None:
+def _print_falsifiers(reports: tuple[CheckReport, ...]) -> None:
     """Print the registered falsifiers on both axes, then the run's counts.
 
     Prover and tier print as separate columns because they answer separate questions.
     A row can be decided and have nothing stated behind its margin, or measured against
     a tight bar and only sampled. Collapsing them into one verdict loses whichever half
     the reader needed.
+
+    Takes the reports rather than building them, so the caller's enumerations are paid
+    for once.
     """
-    reports = falsifiers()
     print(f"\nRegistered D3 falsifiers ({len(reports)} registered):")
     print(f"   {'':<33} {'outcome':<15} {'prover':<13} {'tier':<5} why")
     for report in reports:
@@ -458,7 +539,7 @@ def _print_tables() -> None:
     print("   analytic bound: relief <= 0.77/step vs 2.77 detour -> H* >= 6.")
     print(f"   feasibility: declared to H_MAX = {H_MAX} (cost {hmax_cost} scored")
     print("   steps); the argmin is cue-ward at H = 7, 8, 9.")
-    _print_falsifiers()
+    _print_falsifiers(falsifiers())
 
 
 # --- the gate ----------------------------------------------------------------------
@@ -469,8 +550,11 @@ def check() -> None:
     assertions bear on), so the gate enumerates ~230k policies, not the full sweep.
     """
     # 1. Decisive: the exhaustive argmin is a reach at H*-1 and a cue-ward walk at H*.
-    assert argmin_at(FLIP_H - 1)[3] is False, "argmin should still be a reach at H*-1"
-    assert argmin_at(FLIP_H)[3] is True, "argmin should be a cue-ward walk at H*"
+    #    Measured once here and handed to `falsifiers()` below, so the two enumerations
+    #    are paid for once rather than per consumer.
+    at_prior, at_flip = measure_flip(FLIP_H - 1), measure_flip(FLIP_H)
+    assert at_prior.cue_ward is False, "argmin should still be a reach at H*-1"
+    assert at_flip.cue_ward is True, "argmin should be a cue-ward walk at H*"
 
     # 2. Mechanism: pull flat, gradient decays below it, clean sign change at H*/H*-1.
     mech = mechanism_curve()
@@ -479,19 +563,16 @@ def check() -> None:
     dg = {h: g for h, _, _, g in mech}
     assert dg[FLIP_H - 1] > 0  # reach still wins at H*-1
     assert dg[FLIP_H] < 0  # walk wins at H* -- a clean single sign change
-    # Both sign changes clear the error COND_CEILING allows on a difference of two
-    # scores, so neither is a numerical near-tie read as a decision. A margin inside
-    # the bound is reported as NOT RESOLVED by `falsifiers()`, not raised here: a tie
-    # is a finding about the measurement, and an exception would erase it.
-    for horizon in (FLIP_H - 1, FLIP_H):
-        walk_g, reach_g = _numpy_score(_walk(horizon)), _numpy_score(_reach(horizon))
-        if abs(dg[horizon]) <= flip_margin_error(walk_g, reach_g):
-            print(f"   NOT RESOLVED: ΔG({horizon}) sits inside the error bound")
-
-    # No registered falsifier fired. NOT RESOLVED and NOT APPLICABLE are outcomes to
-    # report, so only FIRED is a gate failure.
-    fired = [r.name for r in falsifiers() if r.outcome is Outcome.FIRED]
+    # No registered falsifier fired. A margin inside its bound reports NOT RESOLVED and
+    # a reversed argmin reports FIRED, both from the measurements above, so this reads
+    # the outcomes rather than re-deriving them. NOT RESOLVED and NOT APPLICABLE are
+    # findings to report; only FIRED is a gate failure.
+    reports = falsifiers(at_prior, at_flip)
+    fired = [r.name for r in reports if r.outcome is Outcome.FIRED]
     assert not fired, f"registered falsifiers fired: {fired}"
+    for report in reports:
+        if report.outcome is Outcome.NOT_RESOLVED:
+            print(f"   NOT RESOLVED: {report.name} — {report.detail}")
     grad = {h: c for h, _, c, _ in mech}
     assert grad[1] > pulls[0]  # the gradient starts above the pull
     assert grad[FLIP_H] < pulls[-1]  # ... and has decayed below it by H*
@@ -531,7 +612,7 @@ def check() -> None:
     print("gradient decays below a flat ~1.7-nat epistemic pull; zero it and the")
     print("flip moves to H~10, so the epistemic is load-bearing. Oracle- and")
     print("conditioning-confirmed.")
-    _print_falsifiers()
+    _print_falsifiers(reports)
 
 
 def main():

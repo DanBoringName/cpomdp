@@ -18,6 +18,7 @@ import efe_collapse_figure
 import epistemic_dissociation_figure
 import pytest
 
+from cpomdp.enumeration import CompletenessCertificate
 from cpomdp.warrant import Outcome, Tier, Warrant, check_summary
 
 
@@ -80,29 +81,120 @@ def test_crossover_horizon_check():
     crossover_horizon_figure.check()
 
 
-def test_crossover_falsifiers_are_reports():
-    """The four registered falsifiers, as `CheckReport`s the summary can count.
+def _measurement(horizon, *, delta_g, cue_ward, bound=1e-5):
+    """A synthetic `FlipMeasurement`, so the reporting can be driven off any result.
 
-    The `PROVED` rows must carry the real completeness certificate off the H* search.
-    A fabricated one would satisfy the constructor and claim an enumeration that never
-    ran, which is the failure the precondition exists to catch. Costs one search
-    construction (~1s), so it stays on the pull-request path where `check()` does not.
+    The live run only ever produces one shape, so every branch that a refuting or tied
+    result would take is unreachable from it. Injecting the measurement is what turns
+    those branches into something a test can execute.
+    """
+    return crossover.FlipMeasurement(
+        horizon=horizon,
+        certificate=CompletenessCertificate(
+            expected=5**horizon, visited=5**horizon, warrant=Warrant.PROVED
+        ),
+        delta_g=delta_g,
+        bound=bound,
+        cue_ward=cue_ward,
+    )
+
+
+def _rows(at_prior, at_flip):
+    """The two measured falsifiers, keyed by name prefix."""
+    reports = crossover.falsifiers(at_prior, at_flip)
+    return reports[0], reports[1]
+
+
+class TestCrossoverFalsifierReporting:
+    """The reporting logic, driven off measurements rather than off a live run."""
+
+    # The measured shape: reach wins at H*-1, walk wins at H*, both clear of the bound.
+    SURVIVING = (
+        {"delta_g": +0.5, "cue_ward": False},
+        {"delta_g": -0.152, "cue_ward": True},
+    )
+
+    def _pair(self, prior=None, flip=None):
+        prior = {**self.SURVIVING[0], **(prior or {})}
+        flip = {**self.SURVIVING[1], **(flip or {})}
+        return _measurement(6, **prior), _measurement(7, **flip)
+
+    def test_the_measured_shape_survives_both(self):
+        one, two = _rows(*self._pair())
+        assert one.outcome is Outcome.NOT_TRIGGERED
+        assert two.outcome is Outcome.NOT_TRIGGERED
+
+    def test_a_reversed_flip_fires_row_one(self):
+        # The defect this replaces: `abs(ΔG) > bound` cleared on a reversed result too,
+        # so a refutation printed as a survivor beside a hardcoded "argmin is cue-ward".
+        one, _ = _rows(*self._pair(flip={"delta_g": +0.152, "cue_ward": False}))
+        assert one.outcome is Outcome.FIRED
+        assert "prior-ward at H = 7" in one.detail
+
+    def test_a_flip_that_was_already_cue_ward_fires_row_two(self):
+        # Cue-ward at both horizons is not a clean flip, however wide the margins.
+        _, two = _rows(*self._pair(prior={"delta_g": -0.4, "cue_ward": True}))
+        assert two.outcome is Outcome.FIRED
+
+    def test_a_tie_at_the_flip_resolves_neither_row(self):
+        one, two = _rows(*self._pair(flip={"delta_g": 1e-9, "cue_ward": True}))
+        assert one.outcome is Outcome.NOT_RESOLVED
+        assert two.outcome is Outcome.NOT_RESOLVED
+
+    def test_a_tie_at_the_prior_horizon_resolves_only_row_two(self):
+        # Row 2 quantifies over both horizons, row 1 over H* alone. Reading row 2 off
+        # H* would let it survive while ΔG(H*-1) sat inside its own bound.
+        one, two = _rows(*self._pair(prior={"delta_g": 1e-9, "cue_ward": False}))
+        assert one.outcome is Outcome.NOT_TRIGGERED
+        assert two.outcome is Outcome.NOT_RESOLVED
+
+    def test_row_two_carries_a_certificate_for_each_horizon(self):
+        _, two = _rows(*self._pair())
+        assert [c.expected for c in two.evidence] == [5**6, 5**7]
+
+    def test_row_one_carries_the_flip_horizon_certificate(self):
+        one, _ = _rows(*self._pair())
+        assert [c.expected for c in one.evidence] == [5**7]
+
+    def test_the_detail_is_generated_from_the_measurement(self):
+        # Nothing about the result is hardcoded, so a changed measurement changes the
+        # sentence rather than leaving a stale one beside a new outcome.
+        one, _ = _rows(*self._pair(flip={"delta_g": -0.9, "cue_ward": True}))
+        assert "0.9000" in one.detail
+
+    def test_a_fired_row_reaches_the_summary(self):
+        reports = crossover.falsifiers(
+            *self._pair(flip={"delta_g": +0.152, "cue_ward": False})
+        )
+        # A reversed flip fires both: row 1 because the argmin is not cue-ward at H*,
+        # row 2 because prior-ward-then-cue-ward is what "clean" means.
+        summary = check_summary(reports)
+        assert "FIRED" in summary
+        assert "2 fired" in summary
+
+
+@pytest.mark.slow
+def test_crossover_falsifiers_are_reports():
+    """The four registered falsifiers on a live measurement of the H* boundary.
+
+    The `PROVED` rows must carry the real completeness certificates. A fabricated one
+    would satisfy the constructor and claim an enumeration that never ran, which is the
+    failure the precondition exists to catch. Enumerating both horizons is the cost
+    `check()` already pays, so this is marked slow and gates on merge; the reporting
+    logic itself is covered on the pull-request path by the class above.
     """
     reports = crossover.falsifiers()
     assert len(reports) == 4
     proved = [r for r in reports if r.warrant is Warrant.PROVED]
     assert len(proved) == 2
     for report in proved:
-        assert report.evidence is not None
-        assert report.evidence.complete
-        assert report.evidence.expected == 5**crossover.FLIP_H
+        assert report.evidence
+        assert all(c.complete for c in report.evidence)
         # The other axis: decided by enumeration, and measured against a stated bar.
         # A Tier B row has to name the bar, or the tier is a label with nothing under
-        # it. `cond` is the ceiling the bound is propagated from.
+        # it. `bound` is what the margin was read against.
         assert report.tier is Tier.B
-        assert "cond" in report.detail
-        # The margin clears the bound today, so the flip is not a tie. A regression to
-        # one shows up here as NOT RESOLVED rather than as an exception inside check().
+        assert "bound" in report.detail
         assert report.outcome is Outcome.NOT_TRIGGERED
         # The qualifier travels with the number. H* = 7 is an upper bound because the
         # declared set clips the reach at -2, and a Tier B row reads stronger than the
@@ -110,8 +202,8 @@ def test_crossover_falsifiers_are_reports():
         assert "upper bound" in report.detail
 
     # The two that never ran stay distinct, and neither claims a prover.
-    unrun = {r.outcome: r for r in reports if r.warrant is None}
-    assert set(unrun) == {Outcome.NOT_APPLICABLE, Outcome.NOT_RUN_HERE}
+    unrun = {r.outcome for r in reports if r.warrant is None}
+    assert unrun == {Outcome.NOT_APPLICABLE, Outcome.NOT_RUN_HERE}
 
     summary = check_summary(reports)
     assert "PROVED" in summary

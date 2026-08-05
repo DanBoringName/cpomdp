@@ -36,6 +36,7 @@
     "Corva",
     "covs",
     "cpomdp",
+    "dataclass",
     "demethylation",
     "Derpich",
     "deselectable",

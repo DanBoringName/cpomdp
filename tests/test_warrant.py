@@ -124,7 +124,7 @@ class TestCheckReport:
         warrant=Warrant.CORROBORATED,
         outcome=Outcome.NOT_TRIGGERED,
         tier=Tier.C,
-        evidence=None,
+        evidence=(),
     ):
         # Defaults to the report that needs no evidence: a sample, computed, green.
         return CheckReport(
@@ -161,12 +161,12 @@ class TestCheckReport:
             self._report().outcome = Outcome.FIRED
 
     def test_evidence_is_absent_by_default(self):
-        assert self._report().evidence is None
+        assert self._report().evidence == ()
 
     def test_carries_the_evidence_it_was_given(self):
         cert = _certificate()
-        report = self._report(warrant=Warrant.PROVED, tier=Tier.A, evidence=cert)
-        assert report.evidence is cert
+        report = self._report(warrant=Warrant.PROVED, tier=Tier.A, evidence=(cert,))
+        assert report.evidence == (cert,)
 
     def test_warrant_and_outcome_are_independent(self):
         # The pairing this vocabulary exists for: a run that survived every falsifier
@@ -223,7 +223,7 @@ class TestChecksThatNeverRanCarryNoWarrant:
 class TestProvedNeedsEvidence:
     """`PROVED` with nothing behind it does not construct."""
 
-    def _report(self, *, warrant, evidence=None, outcome=Outcome.NOT_TRIGGERED):
+    def _report(self, *, warrant, evidence=(), outcome=Outcome.NOT_TRIGGERED):
         return CheckReport(
             name="flip-decided",
             warrant=warrant,
@@ -239,7 +239,8 @@ class TestProvedNeedsEvidence:
 
     def test_proved_with_a_certificate_constructs(self):
         cert = _certificate()
-        assert self._report(warrant=Warrant.PROVED, evidence=cert).evidence is cert
+        report = self._report(warrant=Warrant.PROVED, evidence=(cert,))
+        assert report.evidence == (cert,)
 
     def test_a_failing_proved_check_still_needs_evidence(self):
         # The outcome does not exempt it. A refutation carrying PROVED claims the
@@ -247,17 +248,29 @@ class TestProvedNeedsEvidence:
         with pytest.raises(ValueError, match="PROVED"):
             self._report(warrant=Warrant.PROVED, outcome=Outcome.FIRED)
 
+    def test_evidence_must_be_a_tuple(self):
+        # A claim over several enumerations rests on all their certificates. A bare one
+        # would iterate as a sequence of fields somewhere downstream, or read as a
+        # complete backing for a claim it only half covers.
+        with pytest.raises(ValueError, match="tuple"):
+            self._report(warrant=Warrant.PROVED, evidence=_certificate())
+
+    def test_carries_a_certificate_per_enumeration(self):
+        # A check quantified over two horizons carries both.
+        pair = (_certificate(), _certificate())
+        assert self._report(warrant=Warrant.PROVED, evidence=pair).evidence == pair
+
     @pytest.mark.parametrize("warrant", [Warrant.CERTIFIED, Warrant.CORROBORATED])
     def test_the_weaker_levels_need_none(self, warrant):
         # A bound and a sample carry their own story in `detail`. Only a claim to have
         # decided a universal needs something enumerable behind it.
-        assert self._report(warrant=warrant).evidence is None
+        assert self._report(warrant=warrant).evidence == ()
 
 
 class TestCheckSummary:
     """Counts per (warrant × outcome), so a green run says what it decided."""
 
-    def _report(self, name, warrant, outcome, evidence=None):
+    def _report(self, name, warrant, outcome, evidence=()):
         return CheckReport(
             name=name,
             warrant=warrant,
@@ -313,7 +326,7 @@ class TestCheckSummary:
         summary = check_summary(
             [
                 self._report(
-                    "a", Warrant.PROVED, Outcome.NOT_TRIGGERED, _certificate()
+                    "a", Warrant.PROVED, Outcome.NOT_TRIGGERED, (_certificate(),)
                 ),
                 self._report("b", Warrant.CORROBORATED, Outcome.NOT_RESOLVED),
                 self._report("c", None, Outcome.NOT_APPLICABLE),
