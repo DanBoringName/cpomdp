@@ -1,0 +1,41 @@
+name: claude review
+
+on:
+  pull_request:
+    types: [opened]
+
+# Cancel superseded runs on the same ref to save CI minutes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: claude review
+    # Forks don't get the secret, so the action would fail auth validation.
+    if: github.event.pull_request.head.repo.fork == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+      - uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            Review this PR. Prioritise correctness bugs, broken invariants,
+            and API-contract changes. Skip formatting and naming nits —
+            those are handled by lint. Assert that the code changes
+            reflect the checklist in any present `BUILD_PLAN.md` file.
+
+            Post the review with `gh pr comment`.
+          claude_args: >-
+            --max-turns 10 --allowed-tools "Bash(gh pr diff:*),Bash(gh pr
+            view:*),Bash(gh pr comment:*)"
