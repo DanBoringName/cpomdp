@@ -16,6 +16,7 @@
     "AΣAᵀ",
     "bagaev",
     "beeliners",
+    "BLAS",
     "blkdiag",
     "boxstyle",
     "capstyle",
@@ -119,6 +120,7 @@
     "numpy",
     "Okabe",
     "Ornstein",
+    "Østergaard",
     "overclaims",
     "pillow",
     "prags",
@@ -180,7 +182,6 @@
     "yticks",
     "Zenodo",
     "zorder",
-    "Østergaard",
     "Δcov",
     "Δmean"
   ],

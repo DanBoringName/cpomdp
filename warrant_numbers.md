@@ -275,3 +275,30 @@ The conditioning of the H=7 walk clears the numerical-hygiene bars (recorded abo
 1e-9` (about 6.6 orders of margin); max `cond = 1003` (`Σ⁺` at the sharp-sensing step)
 against `COND_CEILING = 1e8`. An independent NumPy kernel (slogdet `ln det`, where the shipped
 kernel uses Cholesky) reproduces `G(walk_7)` and `G(reach_7)` within `atol = 1e-9`.
+
+### The oracle audit anchors (v0.4.5)
+
+That NumPy kernel keeps only `slogdet`'s log-magnitude. It therefore accepts a covariance
+block with an even number of negative eigenvalues, where the shipped kernel's Cholesky
+guard returns NaN. `tests/test_crossover_oracle_audit.py` records what the unguarded path
+returns at H=7, so that adding the guard can be shown not to move it.
+
+| number | value | what it is |
+| --- | --- | --- |
+| `ANCHOR_WALK` | 425.163110098734 | oracle `G(walk_7)`, measured on the unguarded path |
+| `ANCHOR_REACH` | 425.3151092512748 | oracle `G(reach_7)`, same |
+| `ANCHOR_MARGIN` | −0.15199915254078178 | their difference: `ΔG(7)` above, at full precision |
+
+**`ORACLE_RTOL = 1e-11`** (`tests/test_crossover_oracle_audit.py`). The guard is a
+precondition ahead of an unchanged `slogdet`, so on a positive-definite rollout the
+movement it should cause is zero and a ULP bar would hold. `1e-11` is `4.3e-9` absolute at
+`G ≈ 425`, the scale of the `atol = 1e-9` the demo already trusts for
+shipped-against-oracle agreement. It sits there rather than at the ULP so that BLAS
+variation across platforms cannot flake it. Any change to the epistemic term large enough
+to bear on the flip moves `ΔG` by `1e-3` or more, six orders above the bar.
+
+**`MARGIN_ATOL = 1e-8`**. The margin is a difference of two numbers near 425, so it
+inherits about `8.5e-9` of absolute slack from the pair above. Rounded up from that.
+
+An anchor is not a warrant. It records that a number did not move. Whether the number was
+right is what the negative-eigenvalue rejection decides.
