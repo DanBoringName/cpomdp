@@ -168,9 +168,17 @@ class TestCompletenessCertificate:
         assert "PROVED" in str(cert)
         assert "27" in str(cert)
 
-    def test_mismatched_certificate_reads_incomplete(self):
+    def test_a_proved_certificate_must_be_complete(self):
+        # `expected != visited` with a PROVED warrant is a certificate certifying its
+        # own failure. It used to construct and read `complete = False`, which put the
+        # contradiction one attribute access away from anyone who did not look.
+        with pytest.raises(ValueError, match="PROVED"):
+            CompletenessCertificate(expected=9, visited=8, warrant=SearchWarrant.PROVED)
+
+    def test_an_incomplete_enumeration_is_corroborated(self):
+        # The honest label for a partial enumeration: it sampled the set.
         cert = CompletenessCertificate(
-            expected=9, visited=8, warrant=SearchWarrant.PROVED
+            expected=9, visited=8, warrant=SearchWarrant.CORROBORATED
         )
         assert not cert.complete
 

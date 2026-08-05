@@ -118,11 +118,26 @@ class CompletenessCertificate:
     ``visited`` is the number of policies actually enumerated. Equal ⇒ the search
     decided its universal, so it carries ``PROVED``. Printed in the warrant's own
     vocabulary, never a bare ``PASS``.
+
+    A partial enumeration sampled its set, so its warrant is ``CORROBORATED``. Pairing
+    ``PROVED`` with a shortfall does not construct.
+
+    Raises:
+        ValueError: if the warrant is ``PROVED`` and ``visited != expected``.
     """
 
     expected: int
     visited: int
     warrant: SearchWarrant
+
+    def __post_init__(self) -> None:
+        """Reject a ``PROVED`` certificate that records its own shortfall."""
+        if self.warrant is Warrant.PROVED and not self.complete:
+            raise ValueError(
+                f"a PROVED certificate must be complete, got expected="
+                f"{self.expected} against visited={self.visited}. A partial "
+                "enumeration sampled its set, so its warrant is CORROBORATED."
+            )
 
     @property
     def complete(self) -> bool:

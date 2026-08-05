@@ -46,6 +46,11 @@ def _finite_set(actions):
     return FiniteActionSet([[a] for a in actions], version="test-v1")
 
 
+def _certificate():
+    """A complete certificate: the evidence a 3b `PROVED` claim carries."""
+    return CompletenessCertificate(expected=4, visited=4, warrant=Warrant.PROVED)
+
+
 class TestWarrantLevels:
     def test_the_three_prover_classes(self):
         assert Warrant.PROVED.value == "PROVED"
@@ -92,26 +97,27 @@ class TestCheckReport:
     def _report(
         self,
         *,
-        warrant=Warrant.PROVED,
+        warrant=Warrant.CORROBORATED,
         outcome=Outcome.PASS,
-        tier=Tier.A,
-        certificate=None,
+        tier=Tier.C,
+        evidence=None,
     ):
+        # Defaults to the report that needs no evidence: a sample, computed, green.
         return CheckReport(
             name="flip-decided",
             warrant=warrant,
             outcome=outcome,
             tier=tier,
             detail="exhaustive argmin over crossover-v1^7 is cue-ward",
-            certificate=certificate,
+            evidence=evidence,
         )
 
     def test_carries_all_four_labels(self):
         report = self._report()
         assert report.name == "flip-decided"
-        assert report.warrant is Warrant.PROVED
+        assert report.warrant is Warrant.CORROBORATED
         assert report.outcome is Outcome.PASS
-        assert report.tier is Tier.A
+        assert report.tier is Tier.C
 
     def test_detail_is_required(self):
         # A check that cannot say why it reports what it reports is a bare PASS with
@@ -119,9 +125,9 @@ class TestCheckReport:
         with pytest.raises(TypeError):
             CheckReport(  # ty: ignore[missing-argument]
                 name="flip-decided",
-                warrant=Warrant.PROVED,
+                warrant=Warrant.CORROBORATED,
                 outcome=Outcome.PASS,
-                tier=Tier.A,
+                tier=Tier.C,
             )
 
     def test_is_frozen(self):
@@ -130,24 +136,59 @@ class TestCheckReport:
         with pytest.raises(dataclasses.FrozenInstanceError):
             self._report().outcome = Outcome.FAIL
 
-    def test_certificate_is_absent_by_default(self):
-        assert self._report().certificate is None
+    def test_evidence_is_absent_by_default(self):
+        assert self._report().evidence is None
 
-    def test_carries_a_completeness_certificate(self):
-        cert = CompletenessCertificate(expected=4, visited=4, warrant=Warrant.PROVED)
-        assert self._report(certificate=cert).certificate is cert
+    def test_carries_the_evidence_it_was_given(self):
+        cert = _certificate()
+        report = self._report(warrant=Warrant.PROVED, tier=Tier.A, evidence=cert)
+        assert report.evidence is cert
 
     def test_warrant_and_outcome_are_independent(self):
         # The pairing this vocabulary exists for: a green run that decided nothing.
-        report = self._report(warrant=Warrant.CORROBORATED, tier=Tier.C)
+        report = self._report()
         assert report.outcome is Outcome.PASS
         assert report.warrant is Warrant.CORROBORATED
 
     def test_renders_one_line_naming_all_of_it(self):
         line = str(self._report())
         assert line.count("\n") == 0
-        for part in ("flip-decided", "PASS", "PROVED", "A", "cue-ward"):
+        for part in ("flip-decided", "PASS", "CORROBORATED", "C", "cue-ward"):
             assert part in line
+
+
+class TestProvedNeedsEvidence:
+    """`PROVED` with nothing behind it does not construct."""
+
+    def _report(self, *, warrant, evidence=None, outcome=Outcome.PASS):
+        return CheckReport(
+            name="flip-decided",
+            warrant=warrant,
+            outcome=outcome,
+            tier=Tier.A,
+            detail="exhaustive argmin over crossover-v1^7 is cue-ward",
+            evidence=evidence,
+        )
+
+    def test_proved_without_evidence_does_not_construct(self):
+        with pytest.raises(ValueError, match="PROVED"):
+            self._report(warrant=Warrant.PROVED)
+
+    def test_proved_with_a_certificate_constructs(self):
+        cert = _certificate()
+        assert self._report(warrant=Warrant.PROVED, evidence=cert).evidence is cert
+
+    def test_a_failing_proved_check_still_needs_evidence(self):
+        # The outcome does not exempt it. A refutation carrying PROVED claims the
+        # refutation was decided, which needs the same backing as a decided pass.
+        with pytest.raises(ValueError, match="PROVED"):
+            self._report(warrant=Warrant.PROVED, outcome=Outcome.FAIL)
+
+    @pytest.mark.parametrize("warrant", [Warrant.CERTIFIED, Warrant.CORROBORATED])
+    def test_the_weaker_levels_need_none(self, warrant):
+        # A bound and a sample carry their own story in `detail`. Only a claim to have
+        # decided a universal needs something enumerable behind it.
+        assert self._report(warrant=warrant).evidence is None
 
 
 class TestPublicSurface:

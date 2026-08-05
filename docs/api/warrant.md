@@ -24,6 +24,8 @@ Outcome is orthogonal to warrant. A check reports both, so a green run that is e
 
 `Tier` says what the check was measured against, and cuts across the other two rather than ranking them. A Tier A closed-form reference can be sampled, and an exhaustive enumeration can produce a Tier C number.
 
+A `PROVED` report needs evidence, enforced at construction. `CompletenessCertificate` is the only kind today, since exhaustive enumeration is the only decisive prover the suite runs. A theorem citation joins it when a Prover 1 check needs one. The weaker levels need none, because a bound and a sample carry their story in `detail`. Report `PROVED` with nothing behind it and the constructor raises.
+
 ::: cpomdp.Outcome
 
 ::: cpomdp.Tier

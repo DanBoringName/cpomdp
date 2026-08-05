@@ -18,8 +18,13 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     # Annotation-only. `enumeration` imports this module, so a runtime import here would
-    # close the cycle. Nothing below reads the certificate's fields.
+    # close the cycle. Nothing below reads the evidence's fields.
     from cpomdp.enumeration import CompletenessCertificate
+
+    # What backs a ``PROVED`` claim. A completeness certificate is the only kind today,
+    # because 3b is the only decisive prover the suite runs. A theorem citation joins it
+    # when a Prover 1 check needs one.
+    Evidence = CompletenessCertificate
 
 __all__ = ["CheckReport", "Outcome", "Tier", "Warrant"]
 
@@ -98,7 +103,11 @@ class CheckReport:
         tier: what the check was measured against.
         detail: why it reports what it reports, in one line. Required, so a report
             cannot be a bare outcome with extra fields.
-        certificate: the completeness certificate, where the check has one.
+        evidence: what backs the claim. Required when the warrant is ``PROVED`` and
+            unused otherwise.
+
+    Raises:
+        ValueError: if the warrant is ``PROVED`` and no evidence was given.
     """
 
     name: str
@@ -106,7 +115,18 @@ class CheckReport:
     outcome: Outcome
     tier: Tier
     detail: str
-    certificate: "CompletenessCertificate | None" = None
+    evidence: "Evidence | None" = None
+
+    def __post_init__(self) -> None:
+        """Reject ``PROVED`` with nothing behind it (ADR-030's rule, one level up)."""
+        if self.warrant is Warrant.PROVED and self.evidence is None:
+            raise ValueError(
+                f"check {self.name!r} reports PROVED with no evidence. A decided "
+                "universal needs something statable behind it: a completeness "
+                "certificate for an exhaustive enumeration (Prover 3b), a citation "
+                "for a theorem (1 or 2). Report CERTIFIED for a bound over a compact "
+                "domain, CORROBORATED for a sample."
+            )
 
     def __str__(self) -> str:
         """The report as one summary line, in the warrant's own vocabulary."""
