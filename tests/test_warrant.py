@@ -1,13 +1,19 @@
-"""The shared `Warrant` vocabulary.
+"""The shared `Warrant` vocabulary and the check report that carries it.
 
 `SearchWarrant` had two levels: `PROVED` (3b, exhaustive enumeration) and `CORROBORATED`
 (3a, a grid sample). `Warrant` adds `CERTIFIED` (3c, validated numerics over a compact
 domain) and moves to `cpomdp.warrant`, where checks can reach it too. `SearchWarrant`
 stays as an alias, so existing call sites keep their members and their return type.
 
+`CheckReport` is what a check emits: a warrant, an `Outcome`, a `Tier`, and a reason.
+Warrant and outcome are orthogonal, so a green run that is entirely corroborative reads
+as one instead of as a column of `PASS`.
+
 Imports `cpomdp.warrant`, so until it lands this module is collection-red — the
 `ModuleNotFoundError` naming it is the build cue.
 """
+
+import dataclasses
 
 import pytest
 
@@ -21,7 +27,7 @@ from cpomdp.enumeration import (
 )
 from cpomdp.selection import EFESelector, Preference
 from cpomdp.types import Belief, LinearGaussianModel
-from cpomdp.warrant import Warrant
+from cpomdp.warrant import CheckReport, Outcome, Tier, Warrant
 
 
 def _model():
@@ -54,6 +60,112 @@ class TestWarrantLevels:
         # Checks report by value, so a value read back must land on the same member.
         for level in Warrant:
             assert Warrant(level.value) is level
+
+
+class TestOutcome:
+    def test_the_three_outcomes(self):
+        assert Outcome.PASS.value == "PASS"
+        assert Outcome.FAIL.value == "FAIL"
+        assert Outcome.NOT_RESOLVED.value == "NOT_RESOLVED"
+
+    def test_no_fourth_outcome(self):
+        assert [o.name for o in Outcome] == ["PASS", "FAIL", "NOT_RESOLVED"]
+
+    def test_round_trips_through_its_value(self):
+        for outcome in Outcome:
+            assert Outcome(outcome.value) is outcome
+
+
+class TestTier:
+    def test_the_three_tiers(self):
+        # A: closed-form reference at machine precision. B: a stated bar or certified
+        # bracket. C: computed, with no statable bar.
+        assert Tier.A.value == "A"
+        assert Tier.B.value == "B"
+        assert Tier.C.value == "C"
+
+    def test_no_fourth_tier(self):
+        assert [t.name for t in Tier] == ["A", "B", "C"]
+
+
+class TestCheckReport:
+    def _report(
+        self,
+        *,
+        warrant=Warrant.PROVED,
+        outcome=Outcome.PASS,
+        tier=Tier.A,
+        certificate=None,
+    ):
+        return CheckReport(
+            name="flip-decided",
+            warrant=warrant,
+            outcome=outcome,
+            tier=tier,
+            detail="exhaustive argmin over crossover-v1^7 is cue-ward",
+            certificate=certificate,
+        )
+
+    def test_carries_all_four_labels(self):
+        report = self._report()
+        assert report.name == "flip-decided"
+        assert report.warrant is Warrant.PROVED
+        assert report.outcome is Outcome.PASS
+        assert report.tier is Tier.A
+
+    def test_detail_is_required(self):
+        # A check that cannot say why it reports what it reports is a bare PASS with
+        # extra fields. Omitting the reason must not construct.
+        with pytest.raises(TypeError):
+            CheckReport(  # ty: ignore[missing-argument]
+                name="flip-decided",
+                warrant=Warrant.PROVED,
+                outcome=Outcome.PASS,
+                tier=Tier.A,
+            )
+
+    def test_is_frozen(self):
+        # A report is a record of what a check found. Editing one after the fact is
+        # editing the finding.
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            self._report().outcome = Outcome.FAIL
+
+    def test_certificate_is_absent_by_default(self):
+        assert self._report().certificate is None
+
+    def test_carries_a_completeness_certificate(self):
+        cert = CompletenessCertificate(expected=4, visited=4, warrant=Warrant.PROVED)
+        assert self._report(certificate=cert).certificate is cert
+
+    def test_warrant_and_outcome_are_independent(self):
+        # The pairing this vocabulary exists for: a green run that decided nothing.
+        report = self._report(warrant=Warrant.CORROBORATED, tier=Tier.C)
+        assert report.outcome is Outcome.PASS
+        assert report.warrant is Warrant.CORROBORATED
+
+    def test_renders_one_line_naming_all_of_it(self):
+        line = str(self._report())
+        assert line.count("\n") == 0
+        for part in ("flip-decided", "PASS", "PROVED", "A", "cue-ward"):
+            assert part in line
+
+
+class TestPublicSurface:
+    def test_the_vocabulary_is_importable_from_the_package_root(self):
+        import cpomdp
+
+        assert (cpomdp.Warrant, cpomdp.Outcome, cpomdp.Tier, cpomdp.CheckReport) == (
+            Warrant,
+            Outcome,
+            Tier,
+            CheckReport,
+        )
+
+    def test_the_vocabulary_is_in_the_package_all(self):
+        import cpomdp
+
+        for name in ("Warrant", "Outcome", "Tier", "CheckReport"):
+            assert name in cpomdp.__all__
 
 
 class TestSearchWarrantAlias:
