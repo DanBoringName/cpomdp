@@ -79,5 +79,6 @@ nav:
       - Action selection & goals: api/selection.md
       - Expected free energy: api/efe.md
       - Diagnostics: api/diagnostics.md
+      - Warrant: api/warrant.md
       - Control (internal): api/control.md
   - Changelog: changelog.md

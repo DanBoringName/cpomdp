@@ -1,0 +1,19 @@
+# Warrant
+
+Warrant is a property of the check, not of the number. A grid sample over a continuous action range and an exhaustive enumeration over a declared finite set can both report that no policy flips. Only the second decided it.
+
+| Prover | What it does | Label |
+| --- | --- | --- |
+| 1 | pen-and-paper theorem, within stated hypotheses | `PROVED` |
+| 2 | symbolic computation: closed-form identities, algebraic non-existence | `PROVED` |
+| 3a | sampling a continuum | `CORROBORATED` |
+| 3b | exhaustive enumeration over a finite domain | `PROVED`, with a completeness certificate |
+| 3c | validated numerics over a compact domain | `CERTIFIED` |
+
+An action sweep over a continuous range is a finite grid over an infinite domain, so 3a. A policy enumeration over a declared finite set is 3b. `EFESelector` reports `CORROBORATED` and `EnumeratedEfeSearch` reports `PROVED` for that reason.
+
+`CERTIFIED` sits between the two. Validated numerics prove a universal over a compact domain, and the proof carries the bound it was computed with. Borrowing `PROVED` overclaims. Borrowing `CORROBORATED` throws the bound away.
+
+Outcome is orthogonal. A check reports both, so a green run that is entirely corroborative reads as one.
+
+::: cpomdp.Warrant
