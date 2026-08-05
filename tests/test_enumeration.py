@@ -11,8 +11,9 @@ grid's `CORROBORATED` (a sample of a continuum, 3a). A `CompletenessCertificate`
 The locks:
 
 - `TestFiniteActionSet`: the declared, versioned set validates its shape and version.
-- `TestCompletenessCertificate`: the enumeration covers the full cartesian product; the
-  certificate reports expected == visited, `PROVED`, and a mismatch reads as incomplete.
+- `TestCompletenessCertificate`: the enumeration covers the full cartesian product, and
+  the certificate reports expected == visited under `PROVED`. A shortfall under `PROVED`
+  does not construct; the honest label for a partial enumeration is `CORROBORATED`.
 - `TestEnumeratedSearch`: the `G` vector and argmin match a plain itertools + policy_efe
   reference loop. That is an orchestration check; the EFE arithmetic is validated in
   policy_efe tests. On the beacon model a **varying** sequence strictly beats every
@@ -168,9 +169,17 @@ class TestCompletenessCertificate:
         assert "PROVED" in str(cert)
         assert "27" in str(cert)
 
-    def test_mismatched_certificate_reads_incomplete(self):
+    def test_a_proved_certificate_must_be_complete(self):
+        # `expected != visited` with a PROVED warrant is a certificate certifying its
+        # own failure. It used to construct and read `complete = False`, which put the
+        # contradiction one attribute access away from anyone who did not look.
+        with pytest.raises(ValueError, match="PROVED"):
+            CompletenessCertificate(expected=9, visited=8, warrant=SearchWarrant.PROVED)
+
+    def test_an_incomplete_enumeration_is_corroborated(self):
+        # The honest label for a partial enumeration: it sampled the set.
         cert = CompletenessCertificate(
-            expected=9, visited=8, warrant=SearchWarrant.PROVED
+            expected=9, visited=8, warrant=SearchWarrant.CORROBORATED
         )
         assert not cert.complete
 

@@ -275,3 +275,93 @@ The conditioning of the H=7 walk clears the numerical-hygiene bars (recorded abo
 1e-9` (about 6.6 orders of margin); max `cond = 1003` (`Σ⁺` at the sharp-sensing step)
 against `COND_CEILING = 1e8`. An independent NumPy kernel (slogdet `ln det`, where the shipped
 kernel uses Cholesky) reproduces `G(walk_7)` and `G(reach_7)` within `atol = 1e-9`.
+
+### The oracle audit anchors (v0.4.5)
+
+That NumPy kernel kept only `slogdet`'s log-magnitude. It therefore accepted a covariance
+block with an even number of negative eigenvalues, where the shipped kernel's Cholesky
+guard returns NaN. `tests/test_crossover_oracle_audit.py` recorded what the unguarded path
+returned at H=7 before `diagnostics.logdet_pd` was wired in, so that the guard could be
+shown not to move it.
+
+The guard moved nothing. All three anchors below compare equal to the unguarded values
+under `==`, not merely within `ORACLE_RTOL`. A positive-definiteness precondition ahead of
+an unchanged `slogdet` is not a change of arithmetic. It also never fires on this rollout,
+where every block is positive definite by a wide margin, `min_eig(Σ_post) = 3.66e−3`
+against a `1e-9` floor. `H*` and `ΔG(7)` keep their quoted values. The oracle route is
+audited now rather than assumed.
+
+| number | value | what it is |
+| --- | --- | --- |
+| `ANCHOR_WALK` | 425.163110098734 | oracle `G(walk_7)`, measured on the unguarded path |
+| `ANCHOR_REACH` | 425.3151092512748 | oracle `G(reach_7)`, same |
+| `ANCHOR_MARGIN` | −0.15199915254078178 | their difference: `ΔG(7)` above, at full precision |
+
+**`ORACLE_RTOL = 1e-11`** (`tests/test_crossover_oracle_audit.py`). The guard is a
+precondition ahead of an unchanged `slogdet`, so on a positive-definite rollout the
+movement it should cause is zero and a ULP bar would hold. `1e-11` is `4.3e-9` absolute at
+`G ≈ 425`, the scale of the `atol = 1e-9` the demo already trusts for
+shipped-against-oracle agreement. It sits there rather than at the ULP so that BLAS
+variation across platforms cannot flake it. Any change to the epistemic term large enough
+to bear on the flip moves `ΔG` by `1e-3` or more, six orders above the bar.
+
+**`MARGIN_ATOL = 1e-8`**. The margin is a difference of two numbers near 425, so it
+inherits about `8.5e-9` of absolute slack from the pair above. Rounded up from that.
+
+An anchor is not a warrant. It records that a number did not move. Whether the number was
+right is what the negative-eigenvalue rejection decides.
+
+### The flip separation bar (v0.4.5)
+
+`H* = 7` rested on `G(walk) < G(reach)`, a bare inequality between two computed floats.
+Nothing said how far apart they had to be. The registered claim was decided by exhaustive
+enumeration and the delivered margin was measured against nothing, which is the mismatch
+this closes.
+
+No new bar was invented for it. `COND_CEILING = 1e8` is already declared above and already
+gated on every `Σ⁺`, `S` and `Σ_post` by `tests/test_rollout_hygiene.py`. A float64 solve at
+condition number `k` carries relative error near `k · eps`, so that ceiling states an error
+on each score and, doubled, on their difference:
+
+```text
+flip_margin_error(G₁, G₂) = 2 · max(|G₁|, |G₂|) · COND_CEILING · eps
+```
+
+At `G ≈ 425` that is `1.89e−5` nats. The measured `|ΔG(7)| = 0.1520` clears it by `8.0e3`,
+about 3.9 orders. A margin inside the bound is reported `NOT RESOLVED`, the honest label
+for an ordering that is genuinely undetermined. It is not an assertion failure, because a
+tie is a finding about the measurement and an exception would erase it.
+
+The bound is loose in the safe direction on purpose. It propagates the *declared* ceiling
+rather than the measured conditioning, and the H\* walk measures `max cond = 1003`, five
+orders under the ceiling. The true error is nearer `1.9e−10`. Deriving the bar from what
+was declared keeps it a bar rather than a description of this fixture.
+
+**Derived after the measurement, and why that is not an accommodation.** The bound was
+written once `ΔG(7)` was already known, which is the shape scoping rule 2 warns about. The
+contamination it guards against cannot occur here. A stricter guard can only fail a result
+that was passing; it has no route to rescue one that was failing. Tightening this bound
+moves rows toward `NOT RESOLVED`, never away from it, so choosing it with the answer in
+hand could not have manufactured the separation.
+
+**What the derivation is, stated honestly.** `cond · eps` is a forward-error rule of thumb
+for a single linear solve. This applies it to a seven-step accumulation of predicts,
+contractions and log-determinants, so it is an argument by analogy, not a proved bound.
+That makes it Tier B's *stated error bar*, not Prover 3c's certified bracket, and the demo
+labels it `B` rather than reaching for `CERTIFIED`. The five orders of headroom between
+the declared ceiling and the measured conditioning is what makes the analogy safe enough to
+report, and the gap is stated here rather than left for a reviewer to find.
+
+**Effect on the reported tiers.** Falsifiers 1 and 2 in that demo read `PROVED` on the
+prover axis, from the completeness certificate of the `|A|^H = 78125` enumeration, and
+`B` on the tier axis, from this bound. The two axes answer different questions and neither
+substitutes for the other: a claim can be decided with nothing stated behind its margin,
+or measured against a tight bar and only sampled. Falsifiers 3 and 4 stay Tier C and carry
+no warrant at all, since neither produced evidence here.
+
+**What this bound does not cover.** It certifies the float arithmetic, which was never the
+fragile part of `H* = 7`. The live exposure is falsifier 4: `H*` is an upper bound, because
+the declared set clips the reach at `−2` while the unconstrained optimum is `−3`, and a set
+containing `−3` flips at 6. A Tier B row reading `8.0e3x` clear invites a reader to take
+the number as firmer than it is, so the qualifier travels in both detail strings and not
+only here.

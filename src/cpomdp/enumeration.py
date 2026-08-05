@@ -21,7 +21,6 @@ Internal seam: imported from ``cpomdp.enumeration``, not re-exported at the top 
 import itertools
 from collections.abc import Sequence
 from dataclasses import dataclass
-from enum import Enum
 from typing import TYPE_CHECKING, NamedTuple, Protocol
 
 import jax
@@ -31,6 +30,7 @@ from jaxtyping import Array, Float64
 
 from cpomdp.efe import policy_efe, policy_efe_ffg
 from cpomdp.types import Belief, LinearGaussianModel
+from cpomdp.warrant import Warrant
 
 if TYPE_CHECKING:
     # Duck-typed at runtime (read for .goal/.precision via the efe kernels, and the
@@ -51,17 +51,11 @@ __all__ = [
 ]
 
 
-class SearchWarrant(Enum):
-    """How well a search's ``no policy flips`` claim is warranted (standing rule 6).
-
-    ``PROVED`` — a finite set enumerated in full **decides** its universal (Prover 3b).
-    ``CORROBORATED`` — a grid sample of a continuum only **corroborates** it (Prover
-    3a); the optimum could sit between the sampled points. The two must print in
-    different vocabulary, never both as a bare ``PASS``.
-    """
-
-    PROVED = "PROVED"
-    CORROBORATED = "CORROBORATED"
+# The search vocabulary predates the shared one, and named two of its three levels. It
+# is now that enum, so `SearchWarrant.PROVED` and `Warrant.PROVED` are one object and
+# `EnumeratedEfeSearch.warrant` keeps its return type. A search earns `PROVED` from a
+# full enumeration (Prover 3b) and `CORROBORATED` from a grid sample (3a).
+SearchWarrant = Warrant
 
 
 class IncompleteEnumerationError(Exception):
@@ -124,11 +118,26 @@ class CompletenessCertificate:
     ``visited`` is the number of policies actually enumerated. Equal ⇒ the search
     decided its universal, so it carries ``PROVED``. Printed in the warrant's own
     vocabulary, never a bare ``PASS``.
+
+    A partial enumeration sampled its set, so its warrant is ``CORROBORATED``. Pairing
+    ``PROVED`` with a shortfall does not construct.
+
+    Raises:
+        ValueError: if the warrant is ``PROVED`` and ``visited != expected``.
     """
 
     expected: int
     visited: int
     warrant: SearchWarrant
+
+    def __post_init__(self) -> None:
+        """Reject a ``PROVED`` certificate that records its own shortfall."""
+        if self.warrant is Warrant.PROVED and not self.complete:
+            raise ValueError(
+                f"a PROVED certificate must be complete, got expected="
+                f"{self.expected} against visited={self.visited}. A partial "
+                "enumeration sampled its set, so its warrant is CORROBORATED."
+            )
 
     @property
     def complete(self) -> bool:

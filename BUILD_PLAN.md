@@ -69,18 +69,38 @@ Warrant is a property of the check, not of the number.
 | **3b** exhaustive enumeration over a finite domain | *Decides* the universal, since ¬∃ ≡ ∀¬ | `PROVED`, only with a cardinality certificate |
 | **3c** validated numerics | Proves universals over a compact domain by construction | `CERTIFIED` |
 
-Outcome is orthogonal. Every check emits `warrant ∈ {PROVED, CERTIFIED, CORROBORATED}`
-and `outcome ∈ {PASS, FAIL, NOT_RESOLVED}`. Forcing a tie into `PASS` or `FAIL` is how
-ties become findings.
+Outcome is orthogonal. A registered falsifier emits `warrant ∈ {PROVED, CERTIFIED,
+CORROBORATED}` and one of five outcomes. `PASS` is not among them: a falsifier fires or it
+does not, and printing `PASS` beside a prover column that disambiguates it inverts the rule
+the prover column exists to satisfy (ADR-035).
+
+| Outcome | What it means |
+| --- | --- |
+| `NOT TRIGGERED` | It ran, the condition did not obtain, the claim survives it |
+| `FIRED` | The condition obtained. The claim is refuted, and that is the result |
+| `NOT RESOLVED` | It ran and the ordering is genuinely undetermined: the intervals overlap |
+| `NOT APPLICABLE` | Void by construction. Evidence for nothing, and not a survivor |
+| `NOT RUN HERE` | Measured elsewhere, or not yet. The detail says where |
+
+The last three are not interchangeable. Collapsing them loses the survivor accounting and
+burns the word a real tie needs. The last two never ran, so they carry **no warrant** —
+`CORROBORATED` asserts sampling-grade evidence was obtained, and they obtained none. That
+cell reads `—`, enforced by `CheckReport`.
+
+Ordinary two-valued assertions are outside this. "Does the shipped number match the NumPy
+oracle" passes or raises, and needs no vocabulary.
 
 Tiers cut across both. Tier A is a closed-form reference at machine precision. Tier B is
 a stated bar or a certified bracket. Tier C is computed with no statable bar, and the
-word there is *computed*, never *certified*.
+word there is *computed*, never *certified*. A bar can be derived from one already
+declared elsewhere in the suite rather than invented for the claim; `warrant_numbers.md`
+records the derivation and whether it is a proved bound or a stated error bar.
 
 **The error that recurs.** An action *sweep* over a continuous range is a finite grid
 over an infinite domain, so 3a. A *policy enumeration* over a declared finite set is 3b.
 v0.4.4 already encodes this: `EFESelector` prints `CORROBORATED`, `EnumeratedEfeSearch`
-prints `PROVED`. PR-1 extends the vocabulary to checks and adds the missing third level.
+prints `PROVED`. PR-1 extended the vocabulary to checks, added the missing third level,
+and shipped it as `cpomdp.warrant` (ADR-035). Import it; do not restate it.
 
 ---
 
@@ -127,35 +147,55 @@ can link to it.
 Do this first. Everything downstream self-labels off it, and a registered number depends
 on the audit half.
 
-- [ ] Promote `SearchWarrant` to a shared `Warrant` enum (proposed `cpomdp/warrant.py`)
-      and add **`CERTIFIED`** for Prover 3c. Keep `SearchWarrant` as an alias so
+- [x] Promote `SearchWarrant` to a shared `Warrant` enum (`cpomdp/warrant.py`) and add
+      **`CERTIFIED`** for Prover 3c. Keep `SearchWarrant` as an alias so
       `EFESelector.warrant` and `EnumeratedEfeSearch.warrant` keep their labels
       unchanged. Without `CERTIFIED`, every reference-filter number either borrows
       `PROVED`, which overclaims, or reads `CORROBORATED`, which throws away the bound
       GATE-D4 exists to buy.
-- [ ] Carry `(warrant, outcome, tier)` on **checks**, not only on selectors. Proposed
-      `CheckReport` NamedTuple in the same module.
-- [ ] Generalise ADR-029's three-valued outcome from `crossover.py --check` to the
-      suite. Do not rebuild it.
-- [ ] `PROVED` under 3b requires a `CompletenessCertificate`, enforced as a
+- [x] Carry `(warrant, outcome, tier)` on **checks**, not only on selectors.
+      `CheckReport` in the same module. Landed as a frozen dataclass, not a NamedTuple:
+      `_replace` routes through `_make` and would bypass a custom `__new__`, so the
+      precondition two items below would have held at construction and leaked on the
+      first edit.
+- [x] Generalise ADR-029's three-valued outcome from `crossover.py --check` to the
+      suite. Do not rebuild it. Kept its three and added two: `NOT RUN HERE` promoted
+      from a prose rule to a member, `NOT RESOLVED` for a genuine tie. The primer's
+      `{PASS, FAIL, NOT_RESOLVED}` was tried and rejected (ADR-035).
+- [x] `PROVED` under 3b requires a `CompletenessCertificate`, enforced as a
       **constructor precondition**. `PROVED` without a certificate becomes
-      unrepresentable rather than merely wrong.
-- [ ] Suite summary prints counts per `(warrant × outcome)`. A run that is green and
-      entirely corroborative is visibly that.
-- [ ] **The audit.** v0.4.3 fixed the kernel by routing `_efe_step` and
+      unrepresentable rather than merely wrong. Widened to *evidence*, since `PROVED`
+      also covers Provers 1 and 2, which have no enumeration to certify.
+- [x] Suite summary prints counts per `(warrant × outcome)`, under an `n registered,
+      m tested here, k fired` header. A run that survives everything and decides nothing
+      is visibly that.
+- [x] **The audit.** v0.4.3 fixed the kernel by routing `_efe_step` and
       `_state_info_gain` through one `_logdet_pd` helper, testing positive definiteness
       by Cholesky rather than by determinant sign. The changelog does not say the NumPy
       oracle path was fixed. `examples/ffg/crossover.py` runs an independent NumPy kernel
       on the headline number at **H = 7**, past the H = 3 regime where the
       range-dependent noise branch makes this bite. Confirm it, do not assume it.
-- [ ] Add a test that a matrix with an even number of negative eigenvalues
+      **Outcome: it was not fixed.** Both epistemic terms now route through
+      `diagnostics.logdet_pd`, and the H = 7 anchors are bit-identical across the change,
+      so the guard corrected an exposure rather than a number.
+- [x] Add a test that a matrix with an even number of negative eigenvalues
       (`diag(-1, -2)` is the canonical one) is rejected on **both** paths. Two paths that
       both discard the sign agree wrongly, which is the worst outcome available and is
       invisible to a two-route agreement check.
-- [ ] Until this merges, `H* = 7` is quoted at the warrant of an unaudited oracle.
+- [x] Until this merges, `H* = 7` is quoted at the warrant of an unaudited oracle.
+
+Two items the audit added, neither registered above:
+
+- [x] The flip rested on a bare inequality between two computed floats. It is now
+      measured against the error `COND_CEILING` allows on their difference, a bar derived
+      from one already declared rather than invented. A margin inside it reports
+      `NOT RESOLVED`, not an `AssertionError`.
+- [x] `H* = 7` is an upper bound, because the declared set clips the reach at `−2` while
+      the optimum is `−3`. That qualifier now travels in the detail of both Tier B rows,
+      not only in the write-up.
 
 **Merge gate:** the negative-eigenvalue rejection test passes on kernel and oracle. The
-suite summary renders. No existing check loses its label. **ADR-035.**
+suite summary renders. No existing check loses its label. **ADR-035.** — met.
 
 ## PR-2 — R10 hardening
 
