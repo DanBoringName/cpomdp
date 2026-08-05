@@ -16,11 +16,18 @@ not move, nothing about whether it was right to begin with.
 `crossover.check()` gates the same numbers but enumerates ~150k policies and is marked
 slow, so it is deselected on pull requests. Scoring two known policies costs a backend
 build and fourteen propagation steps, which keeps the headline gated on every run.
+
+`TestOracleRejectsNonPd` checks the route and not the guard: that the oracle reaches
+`diagnostics.logdet_pd` for both halves of its epistemic term, and that the kernel
+rejects the same matrix. `tests/test_diagnostics.py::TestLogdetPd` tests the guard.
 """
 
 import crossover
+import jax.numpy as jnp
 import numpy as np
 import pytest
+
+from cpomdp.efe import _logdet_pd as kernel_logdet_pd
 
 # Declared bars; full justification in warrant_numbers.md.
 # The guard under audit adds a positive-definiteness precondition ahead of an unchanged
@@ -75,3 +82,52 @@ class TestOracleAnchors:
     def test_horizon_under_audit_is_the_registered_one(self):
         # The anchors are H-specific. If FLIP_H moves, they are stale, not passing.
         assert crossover.FLIP_H == 7
+
+
+# diag(-1, -2): determinant +2, two negative eigenvalues. Every routine that reads a
+# determinant sign, or discards it, calls this matrix fine. It is the smallest witness
+# that separates a Cholesky guard from a sign shortcut.
+NOT_PD = np.array([[-1.0, 0.0], [0.0, -2.0]])
+
+
+class TestOracleRejectsNonPd:
+    """The oracle's log-det keeps the sign, and is wired into the score.
+
+    `tests/test_rollout_hygiene.py::TestSlogdetSignGuarded` makes the same demand of the
+    shipped kernel and of `diagnostics.epistemic_value`. The demo's oracle is the third
+    route and was never held to it. Two routes that both discard the sign agree with
+    each other and are both wrong, the one failure a two-route check cannot see.
+    """
+
+    def test_oracle_logdet_is_nan_on_non_pd(self):
+        # The name as the oracle binds it, so an import swapped back to a bare slogdet
+        # fails here. What the guard does on its own is `TestLogdetPd`'s subject.
+        assert np.isnan(crossover.logdet_pd(NOT_PD))
+
+    def test_kernel_logdet_is_nan_on_non_pd(self):
+        assert bool(jnp.isnan(kernel_logdet_pd(jnp.asarray(NOT_PD))))
+
+    def test_oracle_logdet_matches_the_kernel_on_pd(self):
+        # Two routines, one value. The host guard calls slogdet behind a Cholesky; the
+        # kernel reads its answer off a Cholesky factor under jit. Point the demo at
+        # `efe._logdet_pd` and this stops being a check.
+        matrix = np.array([[2.0, 0.5], [0.5, 1.5]])
+        oracle = crossover.logdet_pd(matrix)
+        kernel = float(kernel_logdet_pd(jnp.asarray(matrix)))
+        np.testing.assert_allclose(oracle, kernel, rtol=1e-12)
+
+    def test_score_routes_both_epistemic_terms_through_the_guard(self, monkeypatch):
+        # A guard the score does not call is decoration. The epistemic needs a log-det
+        # of the predicted block and one of the posterior block, so a scored H-step
+        # policy must reach it twice per step. One call per step means half the term is
+        # still bare.
+        calls = []
+        guarded = crossover.logdet_pd
+
+        def counting(matrix):
+            calls.append(matrix)
+            return guarded(matrix)
+
+        monkeypatch.setattr(crossover, "logdet_pd", counting)
+        crossover._numpy_score(crossover._walk(crossover.FLIP_H))
+        assert len(calls) == 2 * crossover.FLIP_H

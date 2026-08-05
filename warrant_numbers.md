@@ -278,10 +278,18 @@ kernel uses Cholesky) reproduces `G(walk_7)` and `G(reach_7)` within `atol = 1e-
 
 ### The oracle audit anchors (v0.4.5)
 
-That NumPy kernel keeps only `slogdet`'s log-magnitude. It therefore accepts a covariance
+That NumPy kernel kept only `slogdet`'s log-magnitude. It therefore accepted a covariance
 block with an even number of negative eigenvalues, where the shipped kernel's Cholesky
-guard returns NaN. `tests/test_crossover_oracle_audit.py` records what the unguarded path
-returns at H=7, so that adding the guard can be shown not to move it.
+guard returns NaN. `tests/test_crossover_oracle_audit.py` recorded what the unguarded path
+returned at H=7 before `diagnostics.logdet_pd` was wired in, so that the guard could be
+shown not to move it.
+
+The guard moved nothing. All three anchors below compare equal to the unguarded values
+under `==`, not merely within `ORACLE_RTOL`. A positive-definiteness precondition ahead of
+an unchanged `slogdet` is not a change of arithmetic. It also never fires on this rollout,
+where every block is positive definite by a wide margin, `min_eig(Σ_post) = 3.66e−3`
+against a `1e-9` floor. `H*` and `ΔG(7)` keep their quoted values. The oracle route is
+audited now rather than assumed.
 
 | number | value | what it is |
 | --- | --- | --- |

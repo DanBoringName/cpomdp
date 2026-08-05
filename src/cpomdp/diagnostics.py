@@ -85,6 +85,7 @@ __all__ = [
     "epistemic_value",
     "is_positive_definite",
     "loewner_order",
+    "logdet_pd",
     "probe_model",
     "rollout_conditioning",
 ]
@@ -109,6 +110,32 @@ def is_positive_definite(matrix: ArrayLike) -> bool:
     return True
 
 
+def logdet_pd(matrix: ArrayLike) -> float:
+    """``ln det`` of a symmetric positive-definite matrix, NaN otherwise.
+
+    ``slogdet`` splits its answer into a sign and a log-magnitude. Read the magnitude
+    alone and ``diag(-1, -2)`` comes back as ``ln 2``. That matrix has determinant +2
+    and two negative eigenvalues, so its log-determinant does not exist. Reading the
+    sign catches that case but not the general one: any even count of negative
+    eigenvalues leaves the sign positive. So the argument goes through
+    ``is_positive_definite``, a Cholesky, and the magnitude is read only if it succeeds.
+
+    Host counterpart to the objective's ``cpomdp.efe._logdet_pd``. The two are separate
+    implementations on purpose. The kernel reads its log-determinant off a Cholesky
+    factor under ``jit``. This one calls ``slogdet`` behind a Cholesky guard. Anything
+    checking one against the other needs them to stay distinct.
+
+    Args:
+        matrix: the matrix to take a log-determinant of.
+
+    Returns:
+        ``ln det matrix`` in nats, or NaN if it is not symmetric positive definite.
+    """
+    if not is_positive_definite(matrix):
+        return float("nan")
+    return float(np.linalg.slogdet(np.asarray(matrix, dtype=float))[1])
+
+
 def epistemic_value(
     predicted_cov: ArrayLike, sensor_model: ArrayLike, sensor_noise: ArrayLike
 ) -> float:
@@ -118,16 +145,14 @@ def epistemic_value(
     with ``S = C Σ⁻ Cᵀ + R`` the innovation covariance. Computed here on the host for
     reporting; the objective's own copy lives in ``cpomdp.efe``.
 
-    Returns NaN where ``R`` or ``S`` is not positive definite, so an undefined value
-    stays visibly undefined.
+    Both log-determinants go through ``logdet_pd``, so a non-positive-definite ``R`` or
+    ``S`` returns NaN and an undefined value stays visibly undefined.
     """
     cov = np.asarray(predicted_cov, dtype=float)
     c = np.asarray(sensor_model, dtype=float)
     r = np.asarray(sensor_noise, dtype=float)
     s = c @ cov @ c.T + r
-    if not (is_positive_definite(r) and is_positive_definite(s)):
-        return float("nan")
-    return 0.5 * float(np.linalg.slogdet(s)[1] - np.linalg.slogdet(r)[1])
+    return 0.5 * (logdet_pd(s) - logdet_pd(r))
 
 
 def loewner_order(a: ArrayLike, b: ArrayLike) -> str:

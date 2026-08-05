@@ -17,7 +17,12 @@ from cpomdp import (
     LinearGaussianModel,
     probe_model,
 )
-from cpomdp.diagnostics import epistemic_value, is_positive_definite, loewner_order
+from cpomdp.diagnostics import (
+    epistemic_value,
+    is_positive_definite,
+    loewner_order,
+    logdet_pd,
+)
 
 ACTIONS = [np.array([u]) for u in np.linspace(-3.0, 3.0, 13)]
 
@@ -63,6 +68,29 @@ class TestPositiveDefinite:
     )
     def test_classifies(self, matrix, expected):
         assert is_positive_definite(matrix) is expected
+
+
+class TestLogdetPd:
+    def test_matches_the_closed_form(self):
+        assert logdet_pd(2.0 * np.eye(2)) == pytest.approx(np.log(4.0), abs=1e-12)
+        assert logdet_pd(np.diag([3.0, 0.5])) == pytest.approx(np.log(1.5), abs=1e-12)
+
+    @pytest.mark.parametrize(
+        "matrix",
+        [
+            np.diag([-1.0, -2.0]),  # determinant +2: what a sign shortcut misses
+            np.diag([-1.0, 2.0]),
+            np.diag([0.0, 2.0]),  # singular, so the log-determinant is -inf, not a NaN
+            np.array([[1.0, 2.0], [0.0, 1.0]]),  # not symmetric
+        ],
+    )
+    def test_non_pd_gives_nan(self, matrix):
+        assert np.isnan(logdet_pd(matrix))
+
+    def test_the_sign_shortcut_it_replaces_is_fooled(self):
+        # The premise. Without it the rejection above shows only that some matrix
+        # returns NaN, not that the guard buys anything over reading slogdet directly.
+        assert np.isfinite(np.linalg.slogdet(np.diag([-1.0, -2.0]))[1])
 
 
 class TestEpistemicValue:

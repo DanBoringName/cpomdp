@@ -44,7 +44,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from cpomdp.crossover import crossover_statistic
-from cpomdp.diagnostics import rollout_conditioning
+from cpomdp.diagnostics import logdet_pd, rollout_conditioning
 from cpomdp.efe import policy_efe_ffg, policy_efe_ffg_trace
 from cpomdp.enumeration import EnumeratedEfeSearch, FiniteActionSet
 from cpomdp.selection import Preference
@@ -168,9 +168,14 @@ def _numpy_score(policy) -> float:
             np.linalg.inv(cov) + sensor_model.T @ np.linalg.inv(noise) @ sensor_model
         )
         cov_post_info = np.linalg.inv(post_info)  # info-form posterior, the epistemic
+        # `logdet_pd` is the host guard: slogdet behind a Cholesky, so a block with an
+        # even number of negative eigenvalues returns NaN rather than a plausible
+        # number. The kernel's `_logdet_pd` is a separate implementation that reads its
+        # answer off a Cholesky factor under `jit`. They stay distinct so the agreement
+        # assertion in `check()` compares two routines rather than one.
         epistemic = 0.5 * (
-            np.linalg.slogdet(cov[np.ix_(idx, idx)])[1]
-            - np.linalg.slogdet(cov_post_info[np.ix_(idx, idx)])[1]
+            logdet_pd(cov[np.ix_(idx, idx)])
+            - logdet_pd(cov_post_info[np.ix_(idx, idx)])
         )
         total += pragmatic - epistemic
         # Kalman-form contraction for the carry; the mean stays predict-only.
@@ -188,8 +193,9 @@ def conditioning(policy):
     -- ``cond(Σ⁺)``, ``cond(S)``, ``cond(Σ_post)``, ``min_eig(Σ_post)``, and the all-PD
     flag -- and their bars are exactly the ones ``tests/test_rollout_hygiene.py`` gates
     on. The headline margin is small in relative terms, so this is where it is shown
-    benign: ``min_eig(Σ_post)`` staying above the floor means the Cholesky guard in
-    ``_logdet_pd`` never fires and the epistemic never goes NaN.
+    benign. ``min_eig(Σ_post)`` staying above the floor means neither Cholesky guard
+    fires, the kernel's ``_logdet_pd`` or this module's ``logdet_pd``, and the epistemic
+    never goes NaN.
     """
     backend, belief, preference, target = _setup()
     trace = policy_efe_ffg_trace(
@@ -343,7 +349,7 @@ def _print_tables() -> None:
         f"(|ΔG|/|G| = {abs(walk_np - reach_np) / reach_np:.1e}); "
         f"|G_walk shipped-numpy| = {abs(walk_ship - walk_np):.1e} < atol 1e-9"
     )
-    print("   (kernel ln det: Cholesky; oracle ln det: slogdet -- routines differ)")
+    print("   (ln det differs: kernel Cholesky, oracle slogdet, both PD-guarded)")
 
     g_cue, prag_cue, finite = epistemic_counterfactual(FLIP_H)
     print(
@@ -392,8 +398,9 @@ def check() -> None:
     assert grad[1] > pulls[0]  # the gradient starts above the pull
     assert grad[FLIP_H] < pulls[-1]  # ... and has decayed below it by H*
 
-    # 3. The headline number matches an independent NumPy kernel at H* (atol 1e-9); the
-    #    oracle uses slogdet for ln det where the shipped kernel uses Cholesky.
+    # 3. The headline number matches an independent NumPy kernel at H* (atol 1e-9). The
+    #    oracle takes its ln det magnitude from slogdet, the shipped kernel off a
+    #    Cholesky factor. Both reject a non-PD argument (see the audit tests).
     backend, belief, preference, target = _setup()
     for policy in (_walk(FLIP_H), _reach(FLIP_H)):
         shipped = float(
