@@ -572,8 +572,12 @@ class ChunkedEfeSearch:
         self._scorer = scorer
         self._action_set = action_set
         self._horizon = int(horizon)
-        self._chunk = int(chunk)
         self._n_policies = action_set.size**self._horizon
+        # A block wider than the enumeration pads the difference and scores it, so an
+        # oversized default would charge real work for lanes it then masks away. At
+        # |A|^H = 6561 against a 65536 block that is ten times the arithmetic for the
+        # same answer. Clamping costs nothing and keeps the request an upper bound.
+        self._chunk = min(int(chunk), self._n_policies)
 
         ceiling = int(jnp.iinfo(jnp.arange(1).dtype).max)
         if self._n_policies > ceiling:
@@ -679,7 +683,11 @@ class ChunkedEfeSearch:
 
     @property
     def chunk(self) -> int:
-        """The block size. The answer does not depend on it; the residency does."""
+        """The block size actually used, clamped to ``|A|^H``.
+
+        The answer does not depend on it. The residency does, and so does the wasted
+        arithmetic in the padded tail.
+        """
         return self._chunk
 
     @property

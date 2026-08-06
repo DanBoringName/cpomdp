@@ -198,4 +198,16 @@ The anchor magnitudes (pull 1.72, gradient 4.49, ΔG +2.77 nats node-restricted;
 
 **A wording correction to the D3 prediction.** The registered phrase "the accumulated epistemic pull overtakes the pragmatic gradient" is literally false as measured. The pull `Δε` is flat (1.72 → 1.64, it does not accumulate); the gradient `Δc` decays (4.49 → 0.86) and crosses below the constant pull at H = 7. The mechanism is a decaying pragmatic gradient, driven by commit-channel ambiguity relief (~0.67 nats/step) that accumulates after sensing, not a growing epistemic. D3 should be restated in those terms.
 
+**The instrument changed, and the two paths agree bit for bit (2026-08-06, ADR-036).** Every number above was produced by the front-loaded enumerator, which holds all `|A|^H` policies and their scores at once. `ChunkedEfeSearch` runs the same enumeration in blocks and never holds either, which is what puts the `9⁸` and `17⁷` refinement cells within reach. A path that re-reports a published number has to be shown continuous with the path that produced it, so the comparison is registered here rather than left in the test suite. Measured at `9⁷` (H = 7, the step-0.5 refinement, 4,782,969 policies), the largest cell both paths can run:
+
+| path | block | argmin index | `G` | visited | peak | wall | rate |
+|---|---|---|---|---|---|---|---|
+| front-loaded | — | 3,191,926 | 425.163110098734 | 4,782,969 | 5.401 GiB | 365.4 s | 13.1k/s |
+| chunked | 32,768 | 3,191,926 | 425.163110098734 | 4,782,969 | 0.451 GiB | 190.2 s | 25.1k/s |
+| chunked | 8,192 | 3,191,926 | 425.163110098734 | 4,782,969 | 0.431 GiB | 122.7 s | 39.0k/s |
+
+Identical index, identical policy `[+1,−2,−2,0,0,0,0]`, and `G` equal under `==` rather than a tolerance. That value is `ANCHOR_WALK` at full precision, so the refined grid's H = 7 argmin is the coarse set's, which is the byte-identity falsifier 4 already claims. Residency falls 12.5×, and it is flat across `9⁴`, `9⁵`, `9⁶` and `9⁷` because what remains is the fixed XLA baseline rather than the enumeration. Throughput rises 3.0×, so the block loop costs nothing for the residency it buys. `tests/test_chunked_enumeration.py` gates the same comparison at `9⁶` on every pull request. The `9⁷` row is a one-off, its front-loaded half being six minutes and 5.4 GiB.
+
+The 13.1k/s figure confirms the 13.8k/s the earlier budget lines were derived from. Under the chunk loop those lines are superseded: at 39.0k/s, `9⁸` is 18 minutes and `17⁷` is 2.9 hours, against pre-calibration estimates of 52 minutes and 8.3 hours.
+
 **A methodological note, recorded because it will recur.** An earlier pass read this as a null: the exhaustive sweep was capped at H = 6, one horizon short, and a four-agent adversarial audit endorsed the null while inheriting the same H ≤ 6 budget. An audit that shares the target's assumptions does not test them. Diversity of method, not only of agent, is what an adversarial pass has to buy, and a bounded sweep must declare its bound as a compute budget rather than let a null stand in for a scoped result.

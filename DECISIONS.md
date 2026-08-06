@@ -2060,3 +2060,100 @@ the contradiction one attribute access from anyone who did not look.
   own labels, which is the drift ADR-031 exists to stop.
 
 ---
+
+## ADR-036 — the chunked enumerator: same decision, `O(chunk)` residency
+
+**Date:** 2026-08-06
+**Status:** Accepted
+**Phase:** v0.4.5 (certifiable active inference, Paper 2 groundwork)
+**Extends:** ADR-030 (the completeness certificate); ADR-031 (the search-family seam);
+ADR-034 (the injected scorer)
+
+### The question
+
+`EnumeratedEfeSearch` front-loads the whole `|A|^H` policy array at construction and
+`evaluate` returns the whole score vector. Both are `O(|A|^H)` resident. That ceiling is
+what makes two declared refinement cells unreachable: `9^8` needs a 14.11 GiB policy
+array and `17^7` needs 131 GiB, against a configured 23 GiB box. The score vector alone
+at `17^7` is 3.28 GB.
+
+An unreachable cell has to be reported. The honest label depends on why, and "the box is
+small" is an infrastructure fact rather than a statement about the model, so a write-up
+that prints it as a boundary is claiming something it did not establish.
+
+### The timing, which is the part that matters
+
+This lands **before** the D3 falsifier-4 registration exists and before any cell is
+declared void. The registration will pre-commit against adopting a chunked enumerator in
+response to a `VOID` outcome, because doing so would be choosing the instrument after
+seeing the result. Taking it now is not that, and the record has to be able to show it.
+No cell had been declared void on the date above.
+
+Two cells move as a consequence, from `VOID (memory)` to a budget the registration
+accepts or declines deliberately: `9^8` at 344,373,768 scored steps and `17^7` at
+2,872,370,711, against the ledger's declared 17.6M. Step-0.4 stays void whatever the
+enumerator does, because its lattice never lands on the cue, which is the whole reason
+those two stops carry different labels.
+
+### The decision
+
+**A second path, not a replacement.** `ChunkedEfeSearch` enumerates in blocks and
+reduces to running scalars. `EnumeratedEfeSearch` keeps its contract, including the full
+score vector, which Paper 3's G-D dual reporting reads. Two paths behind one validated
+seam, in the style of ADR-034's injected scorer.
+
+**Interchangeable, and asserted so.** The load-bearing test is not that the chunked path
+is self-consistent. It is that it agrees with the path that produced the published
+numbers, under `==` rather than a tolerance, at the largest cell where both exist. Same
+device, same dtype, same per-policy arithmetic, and every cross-policy operation the
+loop needs is order-invariant in exact arithmetic, so bit-identity is the right bar and
+a one-ULP disagreement would mean the policies differ rather than the rounding.
+
+**The combine carries the tie-break, and the assertion records it never mattered.**
+`jnp.argmin` resolves ties to the lowest index. Blocks are scanned in increasing index
+order and the running best updates on a strict `<`, so the first occurrence of a
+repeated minimum wins globally, which is that same rule reproduced block by block. A
+non-strict `<=` would silently return the last copy. The guarantee lives in the combine.
+A separate test on a fixture with a deliberate 32-way tie records that the two paths
+agree there too.
+
+**The certificate gains its set, and both preconditions.** `visited` stops being an
+array's length and becomes a loop-carried count of unpadded lanes, so domain and
+coverage come apart exactly where a padding bug lives. `CompletenessCertificate` now
+carries `action_set_size`, `horizon` and `action_set_version`, and a `PROVED` warrant
+requires both `expected == |A|^H` and `visited == expected`. Neither is a printed field.
+The set naming also fixes a latent defect that predates chunking: `expected` alone
+conflates the base with the exponent, since 81 is `9^2` and `3^4` alike, so rendered
+evidence could not tell two enumerations apart. That is standing prohibition 9 applied
+to evidence rather than to prose.
+
+**Padded lanes score policy 0 and are masked.** The tail block pads to a real index
+rather than a made-up one, so the kernel never sees an input the model does not define,
+then masks those lanes to `+inf` and out of `visited`. Tests run at an `N` deliberately
+indivisible by the block.
+
+**The block is clamped to `|A|^H`.** A block wider than the enumeration pads the
+difference and scores it. At `|A|^H = 6561` against a 65536 block that is ten times the
+arithmetic for the same answer, measured. The request is an upper bound.
+
+### Consequences
+
+- Measured on the crossover model at `9^6`: identical argmin index, `G` equal under
+  `==`, and the value is `364.642964185792`, which is the `364.6430` published at
+  `r10:190`. Peak resident memory is 0.454 GiB against the front-loaded path's 1.027,
+  and the chunked figure is flat across `9^4`, `9^5` and `9^6` because it is the fixed
+  XLA baseline rather than the enumeration.
+- Throughput improves rather than degrading: 25.3k policies/s against 15.4k at `9^6`.
+  The block loop was expected to cost something for the residency it buys, and does not.
+- The enumerator's memory model is now chunk-determined, so any budget line derived from
+  the old `|A|^H` figure is re-derived before it is declared.
+- A cost the chunked path cannot avoid: it has no score vector, so anything a caller
+  wants over all `|A|^H` policies has to be phrased as a fold. `_BlockReducer` is that
+  seam. A caller wanting the vector back uses the front-loaded path and accepts its
+  ceiling.
+- `VoidReason.MEMORY` may now describe no live cell. It stays in the type regardless: a
+  configured limit and a declared budget are different stops, and a distinction the type
+  drops is one the prose has to carry.
+- R10 hardening (issue #65) takes **ADR-037**, one past this.
+
+---

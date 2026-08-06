@@ -26,6 +26,10 @@ numbers, bit for bit.
 - `TestGuards`: the preconditions, including the index dtype's ceiling.
 """
 
+import subprocess
+import sys
+import textwrap
+
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -106,6 +110,41 @@ def _pref(goal=0.0):
 
 def _finite_set(values, version="v1"):
     return FiniteActionSet([[v] for v in values], version=version)
+
+
+def _probe_peak_gib(horizon):
+    """Peak resident memory of one chunked run, measured in a fresh interpreter.
+
+    `ru_maxrss` is a high-water mark for the whole process, so read in-process it
+    reports whatever an earlier fixture allocated. A subprocess makes the
+    number about this run.
+    """
+    probe = textwrap.dedent(
+        """
+        import resource, sys
+        import jax; jax.config.update("jax_enable_x64", True)
+        sys.path.insert(0, "tests")
+        from test_chunked_enumeration import (
+            TestAtScale, _beacon_model, _beacon_belief, _pref,
+        )
+        from cpomdp.enumeration import ChunkedEfeSearch
+
+        ChunkedEfeSearch(
+            _beacon_model(),
+            TestAtScale._refined(0.5),
+            horizon=int(sys.argv[1]),
+            chunk=8192,
+        ).reduce(_beacon_belief(), _pref())
+        print(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024**2)
+        """
+    )
+    finished = subprocess.run(
+        [sys.executable, "-c", probe, str(horizon)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return float(finished.stdout.split()[-1])
 
 
 def _front_loaded(model, action_set, horizon, belief, preference):
@@ -313,6 +352,70 @@ class TestGuards:
         # failure is silent and the certificate endorses it.
         with pytest.raises(ValueError, match="index dtype"):
             ChunkedEfeSearch(_model(), _finite_set([-1.0, 1.0]), horizon=64)
+
+
+class TestAtScale:
+    """The cheap fixtures above all fit, so none of them can show residency.
+
+    Slowest of these is 4.4s at 0.55 GiB,
+    so they belong on the pull-request path. The cross-path identity assert is what
+    licenses re-reporting a published number, and gating it on merge would leave that
+    licence unchecked.
+
+    The headline `9^7` comparison is a one-off recorded in the warrant ledger: its
+    front-loaded half costs 5.4 GiB and six minutes. What runs here is that comparison
+    one horizon down, on a cheaper model, sensitive to the same class of break.
+    """
+
+    @staticmethod
+    def _refined(step):
+        """The declared step-refined action set over ``[-2, 2]``."""
+        count = round(4 / step)
+        return FiniteActionSet(
+            [[round(-2.0 + k * step, 10)] for k in range(count + 1)],
+            version=f"refine-{step:g}",
+        )
+
+    def test_paths_agree_at_nine_to_the_sixth(self):
+        # 531,441 policies. The front-loaded half needs ~1 GiB, which is the point:
+        # this is the largest cell that runs both ways inside a merge budget.
+        model, action_set = _beacon_model(), self._refined(0.5)
+        belief, preference = _beacon_belief(), _pref()
+        g, best, best_policy = _front_loaded(model, action_set, 6, belief, preference)
+        assert g.shape[0] == 9**6
+
+        result = ChunkedEfeSearch(model, action_set, horizon=6, chunk=32768).reduce(
+            belief, preference
+        )
+
+        assert result.best_index == best
+        assert float(result.best_g) == g[best]
+        assert result.visited == 9**6
+        np.testing.assert_array_equal(np.asarray(result.best_policy), best_policy)
+
+    def test_the_step_quarter_set_runs_at_a_low_horizon(self):
+        # `17^7` is the declared step-0.25 cell and no check will ever reproduce it.
+        # `17^4` is 83,521 policies of the *same set*, so the decode, the block loop
+        # and the certificate are exercised on merge even though the headline is not.
+        # A cell nothing re-runs is unverified at that size; unverifiable is worse.
+        action_set = self._refined(0.25)
+        assert action_set.size == 17
+        result = ChunkedEfeSearch(
+            _beacon_model(), action_set, horizon=4, chunk=8192
+        ).reduce(_beacon_belief(), _pref())
+        assert result.visited == 17**4
+        assert result.certificate.complete
+        assert result.certificate.action_set_version == "refine-0.25"
+
+    def test_residency_tracks_the_block_rather_than_the_enumeration(self):
+        # Peak RSS is a high-water mark, so it has to be read in a fresh process or an
+        # earlier fixture's allocation is what gets measured. Two chunked runs 729x
+        # apart in N at one block size: were residency following the enumeration, the
+        # larger would show it.
+        peaks = [_probe_peak_gib(horizon) for horizon in (3, 6)]
+        small, large = peaks
+        # A generous 1.5x admits interpreter variation without admitting O(N).
+        assert large < 1.5 * small, f"peak grew with N, not with chunk: {peaks}"
 
 
 class TestCostAndWarrant:
