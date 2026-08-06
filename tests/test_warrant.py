@@ -49,7 +49,14 @@ def _finite_set(actions):
 
 def _certificate():
     """A complete certificate: the evidence a 3b `PROVED` claim carries."""
-    return CompletenessCertificate(expected=4, visited=4, warrant=Warrant.PROVED)
+    return CompletenessCertificate(
+        expected=4,
+        visited=4,
+        warrant=Warrant.PROVED,
+        action_set_size=2,
+        horizon=2,
+        action_set_version="test-v1",
+    )
 
 
 class TestWarrantLevels:
@@ -417,10 +424,21 @@ class TestExistingLabelsUnchanged:
         search = EnumeratedEfeSearch(_model(), _finite_set([-1.0, 1.0]), horizon=2)
         assert driver(search).warrant is Warrant.PROVED
 
-    def test_certificate_renders_the_same_string(self):
-        # This string reaches the write-up, so not a character of it may move.
-        cert = CompletenessCertificate(expected=4, visited=4, warrant=Warrant.PROVED)
-        assert str(cert) == "PROVED (finite set, |A|^H = 4, visited 4)"
+    def test_certificate_names_the_set_it_decided_over(self):
+        # This string reaches the write-up, so it is pinned character for character.
+        # It moved once, here: "finite set" became the set's own version, and the
+        # count gained the base and exponent that produced it. Without them the
+        # rendered evidence cannot tell two enumerations apart, since 81 is 9^2 and
+        # 3^4 alike. The warrant word and both counts are where they were.
+        cert = CompletenessCertificate(
+            expected=4,
+            visited=4,
+            warrant=Warrant.PROVED,
+            action_set_size=2,
+            horizon=2,
+            action_set_version="test-v1",
+        )
+        assert str(cert) == "PROVED (set test-v1, |A|^H = 2^2 = 4, visited 4)"
 
     def test_search_still_scores(self):
         # The label is a property, so a broken search would still report PROVED.

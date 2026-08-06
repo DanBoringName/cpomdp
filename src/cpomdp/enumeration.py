@@ -21,7 +21,7 @@ Internal seam: imported from ``cpomdp.enumeration``, not re-exported at the top 
 import itertools
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, NamedTuple, Protocol
+from typing import TYPE_CHECKING, Any, NamedTuple, Protocol
 
 import jax
 import jax.numpy as jnp
@@ -40,6 +40,9 @@ if TYPE_CHECKING:
     from cpomdp.selection import Preference
 
 __all__ = [
+    "DEFAULT_CHUNK",
+    "ChunkedEfeSearch",
+    "ChunkedSearchResult",
     "CompletenessCertificate",
     "EnumeratedEfeSearch",
     "EnumeratedSearchResult",
@@ -114,30 +117,65 @@ class FiniteActionSet:
 class CompletenessCertificate:
     """Evidence an enumeration was exhaustive: ``expected`` vs ``visited`` (ADR-030).
 
-    ``expected = |A|^H`` is computed independently from the set size and horizon;
-    ``visited`` is the number of policies actually enumerated. Equal ⇒ the search
-    decided its universal, so it carries ``PROVED``. Printed in the warrant's own
-    vocabulary, never a bare ``PASS``.
+    Two independent facts, and a ``PROVED`` warrant needs both. **Domain**:
+    ``expected == action_set_size ** horizon``, so the set quantified over is the
+    declared one. **Coverage**: ``visited == expected``, so it was enumerated in full.
+    They come apart wherever ``visited`` is a loop-carried counter rather than an
+    array's length, which is where a padding bug lives, and coverage alone is what
+    carries the Prover 3b licence.
+
+    The certificate names its set. ``expected`` on its own conflates the base with the
+    exponent — 81 is ``9**2`` and ``3**4`` — so a bare count is not self-describing and
+    two certificates over different sets cannot be told apart. Carrying the size, the
+    horizon and the version fixes that at the type rather than in the surrounding prose
+    (standing prohibition 9).
 
     A partial enumeration sampled its set, so its warrant is ``CORROBORATED``. Pairing
     ``PROVED`` with a shortfall does not construct.
 
+    Args:
+        expected: the policy count the search was obliged to visit — ``|A|^H``,
+            supplied rather than derived, so the domain check compares two routes.
+        visited: how many it actually visited.
+        warrant: the prover class the enumeration earns.
+        action_set_size: the declared action count — ``|A|``.
+        horizon: the sequence length — ``H``.
+        action_set_version: the declared set's version tag.
+
     Raises:
-        ValueError: if the warrant is ``PROVED`` and ``visited != expected``.
+        ValueError: if the warrant is ``PROVED`` and either precondition fails.
     """
 
     expected: int
     visited: int
     warrant: SearchWarrant
+    action_set_size: int
+    horizon: int
+    action_set_version: str
 
     def __post_init__(self) -> None:
-        """Reject a ``PROVED`` certificate that records its own shortfall."""
-        if self.warrant is Warrant.PROVED and not self.complete:
+        """Reject a ``PROVED`` certificate failing domain or coverage."""
+        if self.warrant is not Warrant.PROVED:
+            return
+        if not self.domain_declared:
+            raise ValueError(
+                f"a PROVED certificate must quantify over the declared set, got "
+                f"expected={self.expected} against |A|^H = "
+                f"{self.action_set_size}^{self.horizon} = "
+                f"{self.action_set_size**self.horizon} for set "
+                f"{self.action_set_version!r}. The count and the set have come apart."
+            )
+        if not self.complete:
             raise ValueError(
                 f"a PROVED certificate must be complete, got expected="
                 f"{self.expected} against visited={self.visited}. A partial "
                 "enumeration sampled its set, so its warrant is CORROBORATED."
             )
+
+    @property
+    def domain_declared(self) -> bool:
+        """Whether ``expected`` is the declared set's own ``|A|^H``."""
+        return self.expected == self.action_set_size**self.horizon
 
     @property
     def complete(self) -> bool:
@@ -147,9 +185,50 @@ class CompletenessCertificate:
     def __str__(self) -> str:
         """The certificate as a one-line warrant string in its own vocabulary."""
         return (
-            f"{self.warrant.value} (finite set, |A|^H = {self.expected}, "
+            f"{self.warrant.value} (set {self.action_set_version}, "
+            f"|A|^H = {self.action_set_size}^{self.horizon} = {self.expected}, "
             f"visited {self.visited})"
         )
+
+
+def _validate_spec(
+    scorer: "_PolicyScorer", action_set: FiniteActionSet, horizon: int
+) -> None:
+    """The preconditions both enumeration paths share."""
+    if action_set.action_dim != scorer.action_dim:
+        raise ValueError(
+            f"the action set is p={action_set.action_dim} but the control is "
+            f"p={scorer.action_dim}; the declared actions must match the action "
+            "dimension."
+        )
+    if horizon < 1:
+        raise ValueError(f"horizon must be >= 1, got {horizon}")
+
+
+def _certify(
+    action_set: FiniteActionSet, horizon: int, visited: int
+) -> CompletenessCertificate:
+    """The certificate for an enumeration that reported ``visited`` policies.
+
+    One guard for both enumeration paths. On the front-loaded path ``visited`` is an
+    array's length and cannot disagree; on the chunked path it is a loop-carried count
+    of unpadded lanes, where a masking bug shows up here and nowhere else.
+    """
+    expected = action_set.size**horizon
+    if visited != expected:  # ADR-030: the certificate is asserted, not assumed
+        raise IncompleteEnumerationError(
+            f"enumeration visited {visited} of an expected {expected} = |A|^H "
+            f"policies over set {action_set.version!r}; the search would be a sample, "
+            "not a decision."
+        )
+    return CompletenessCertificate(
+        expected=expected,
+        visited=visited,
+        warrant=SearchWarrant.PROVED,
+        action_set_size=action_set.size,
+        horizon=horizon,
+        action_set_version=action_set.version,
+    )
 
 
 class EnumeratedSearchResult(NamedTuple):
@@ -278,15 +357,7 @@ class EnumeratedEfeSearch:
         self, scorer: _PolicyScorer, action_set: FiniteActionSet, horizon: int
     ) -> None:
         """Shared construction: validate, front-load ``A^H``, assert the certificate."""
-        if action_set.action_dim != scorer.action_dim:
-            raise ValueError(
-                f"the action set is p={action_set.action_dim} but the control is "
-                f"p={scorer.action_dim}; the declared actions must match the action "
-                "dimension."
-            )
-        if horizon < 1:
-            raise ValueError(f"horizon must be >= 1, got {horizon}")
-
+        _validate_spec(scorer, action_set, horizon)
         self._scorer = scorer
         self._action_set = action_set
         self._horizon = int(horizon)
@@ -297,15 +368,8 @@ class EnumeratedEfeSearch:
         )  # (N, H)
         self._policies = action_set.actions[jnp.asarray(index_grid)]  # (N, H, p)
 
-        expected = action_set.size**self._horizon
-        visited = int(self._policies.shape[0])
-        if visited != expected:  # ADR-030: the certificate is asserted, not assumed
-            raise IncompleteEnumerationError(
-                f"enumeration visited {visited} of an expected {expected} = |A|^H "
-                "policies; the search would be a sample, not a decision."
-            )
-        self._certificate = CompletenessCertificate(
-            expected=expected, visited=visited, warrant=SearchWarrant.PROVED
+        self._certificate = _certify(
+            action_set, self._horizon, int(self._policies.shape[0])
         )
 
     def evaluate(
@@ -353,6 +417,285 @@ class EnumeratedEfeSearch:
     def certificate(self) -> CompletenessCertificate:
         """The front-loaded completeness certificate (ADR-030)."""
         return self._certificate
+
+
+# Provisional. The chunk trades compile-time amortisation against live residency, and
+# the peak is dominated by a fixed XLA overhead well above this size, so a wider block
+# costs little. The measured relation is calibrated per model before any budget line
+# is declared against it.
+DEFAULT_CHUNK = 1 << 16
+
+
+def _decode_policies(
+    indices: Array, action_set: FiniteActionSet, horizon: int
+) -> Float64[Array, "... H p"]:
+    """Policy sequences for global policy indices, without materialising the set.
+
+    Index ``i`` is read as a base-``|A|`` numeral, most significant digit first, which
+    is exactly the order ``itertools.product`` emits on the front-loaded path. The two
+    paths therefore agree on *which* policy each index names. Without that a cross-path
+    argmin comparison would be comparing labels rather than plans.
+    """
+    powers = jnp.asarray(
+        [action_set.size ** (horizon - 1 - step) for step in range(horizon)]
+    )
+    digits = (indices[..., None] // powers) % action_set.size
+    return action_set.actions[digits]
+
+
+class _ArgminCarry(NamedTuple):
+    """The running scalars the block loop carries: the argmin and the visited count."""
+
+    best_g: Float64[Array, ""]
+    best_index: Array
+    visited: Array
+
+
+class _BlockReducer(Protocol):
+    """An extra fold over each block — the seam for evidence beyond the argmin.
+
+    The search owns the enumeration, the certificate and the argmin (ADR-031). Anything
+    else a caller wants over all ``|A|^H`` policies folds here rather than reading a
+    materialised score vector, which is what keeps residency at ``O(chunk)``.
+
+    ``update`` receives scores already masked: NaN mapped to ``+inf``, so a NaN-scoring
+    policy cannot silently win, and padded lanes likewise. A reduction phrased as "how
+    many below this baseline" or "the best of these" therefore needs no masking of its
+    own, and ``valid`` is there for the ones that count rather than compare.
+    """
+
+    def init(self) -> Any: ...
+
+    def update(
+        self,
+        carry: Any,
+        g: Float64[Array, "chunk"],
+        index: Array,
+        valid: Array,
+    ) -> Any: ...
+
+
+class ChunkedSearchResult(NamedTuple):
+    """The outcome of one chunked exhaustive search.
+
+    No score vector, which is the point: at ``17^7`` one would cost 3.28 GB.
+
+    Attributes:
+        best_policy: the argmin sequence, shape ``(H, p)``.
+        best_g: its summed EFE — G.
+        best_index: its position in the enumeration, for comparison against the
+            front-loaded path's argmin.
+        visited: how many policies the loop actually scored, counted in the loop
+            rather than read off an array's length.
+        certificate: the completeness certificate (ADR-030). It arrives on the result
+            rather than at construction, because the count it certifies is what the
+            loop produces.
+        extra: the injected reducer's final carry, or ``None`` if none was given.
+            ``Any`` rather than a type variable: the carry is whatever the caller's
+            fold accumulates, and one seam with one shape of consumer does not repay
+            making the result, the protocol and ``reduce`` all generic.
+    """
+
+    best_policy: Float64[Array, "H p"]
+    best_g: Float64[Array, ""]
+    best_index: int
+    visited: int
+    certificate: CompletenessCertificate
+    extra: Any
+
+
+class ChunkedEfeSearch:
+    """Exhaustive EFE search over ``A^H`` in blocks, at ``O(chunk)`` residency.
+
+    The same enumeration as [`EnumeratedEfeSearch`][cpomdp.enumeration] and the same
+    warrant, run so that neither the policy set nor the score vector is ever
+    materialised. That is what puts sets past the front-loaded path's memory ceiling in
+    reach, and the reason to have it is a set declared too large to hold, never a
+    result that came out inconvenient.
+
+    Three things make the two paths interchangeable rather than merely similar. Blocks
+    are visited in increasing index order and the argmin updates on a strict ``<``, so
+    ties resolve to the globally lowest index exactly as ``jnp.argmin`` does over the
+    whole vector. Indices decode to the same policies ``itertools.product`` emits.
+    And the trailing block is padded, with its padded lanes masked out of the argmin
+    and out of ``visited``, so completeness is a count of real work rather than of
+    array slots.
+    """
+
+    def __init__(
+        self,
+        model: LinearGaussianModel,
+        action_set: FiniteActionSet,
+        *,
+        horizon: int,
+        chunk: int = DEFAULT_CHUNK,
+    ) -> None:
+        if model.control is None:
+            raise ValueError(
+                "ChunkedEfeSearch needs a model with a control matrix; an action has "
+                "no effect on a control-free (pure-tracking) model."
+            )
+        self._setup(_FlatScorer(model), action_set, horizon, chunk)
+
+    @classmethod
+    def over_backend(
+        cls,
+        backend: "EfeBackend",
+        action_set: FiniteActionSet,
+        *,
+        target: Sequence[int],
+        horizon: int,
+        chunk: int = DEFAULT_CHUNK,
+    ) -> "ChunkedEfeSearch":
+        """Chunked search that scores on an FFG ``backend`` via ``policy_efe_ffg``."""
+        if backend.model.control is None:
+            raise ValueError(
+                "ChunkedEfeSearch.over_backend needs a backend with a control "
+                "matrix; an action has no effect without one."
+            )
+        search = cls.__new__(cls)
+        search._setup(_FfgScorer(backend, tuple(target)), action_set, horizon, chunk)
+        return search
+
+    def _setup(
+        self,
+        scorer: _PolicyScorer,
+        action_set: FiniteActionSet,
+        horizon: int,
+        chunk: int,
+    ) -> None:
+        """Validate, and size the enumeration against the index dtype's ceiling."""
+        _validate_spec(scorer, action_set, horizon)
+        if chunk < 1:
+            raise ValueError(f"chunk must be >= 1, got {chunk}")
+
+        self._scorer = scorer
+        self._action_set = action_set
+        self._horizon = int(horizon)
+        self._chunk = int(chunk)
+        self._n_policies = action_set.size**self._horizon
+
+        ceiling = int(jnp.iinfo(jnp.arange(1).dtype).max)
+        if self._n_policies > ceiling:
+            raise ValueError(
+                f"|A|^H = {self._n_policies} exceeds the index dtype's ceiling "
+                f"{ceiling}. Enable x64, or declare a smaller set: an index that "
+                "wraps would enumerate the wrong policies and still certify."
+            )
+
+    def reduce(
+        self,
+        belief: Belief,
+        preference: "Preference",
+        *,
+        reducer: _BlockReducer | None = None,
+    ) -> ChunkedSearchResult:
+        """Score every policy in blocks; return the argmin and the loop's own count.
+
+        One ``lax.scan`` over ``ceil(|A|^H / chunk)`` blocks. Each block decodes its own
+        indices, scores them under one ``vmap``, and folds the result into running
+        scalars, so nothing of size ``|A|^H`` is ever alive.
+
+        Args:
+            belief: the belief to plan from.
+            preference: the goal and precision the EFE scores against.
+            reducer: an extra per-block fold, for evidence the argmin does not carry.
+
+        Returns:
+            The argmin, its index and score, the visited count, the certificate, and
+            the reducer's final carry.
+        """
+        chunk, total = self._chunk, self._n_policies
+        n_blocks = -(-total // chunk)  # ceil
+        offsets = jnp.arange(chunk)
+        score = lambda pol: self._scorer.score(belief, pol, preference)  # noqa: E731
+
+        def run_block(carry, block_index):
+            argmin, extra = carry
+            index = block_index * chunk + offsets
+            valid = index < total
+            # Padded lanes score a real policy (index 0) rather than a made-up one, so
+            # the kernel never sees an input the model does not define; the mask below
+            # is what keeps them out of the answer.
+            policies = _decode_policies(
+                jnp.where(valid, index, 0), self._action_set, self._horizon
+            )
+            g = jax.vmap(score)(policies)
+            g = jnp.where(jnp.isnan(g) | ~valid, jnp.inf, g)
+
+            local = jnp.argmin(g)  # ties -> lowest local index
+            # Strict `<`, and blocks arrive in increasing order, so the first
+            # occurrence of a repeated minimum wins globally. That is the tie-break
+            # `jnp.argmin` gives over the whole vector, reproduced block by block.
+            better = g[local] < argmin.best_g
+            argmin = _ArgminCarry(
+                best_g=jnp.where(better, g[local], argmin.best_g),
+                best_index=jnp.where(better, index[local], argmin.best_index),
+                visited=argmin.visited + jnp.sum(valid),
+            )
+            if reducer is not None:
+                extra = reducer.update(extra, g, index, valid)
+            return (argmin, extra), None
+
+        start = (
+            _ArgminCarry(
+                best_g=jnp.asarray(jnp.inf),
+                best_index=jnp.asarray(0),
+                visited=jnp.asarray(0),
+            ),
+            None if reducer is None else reducer.init(),
+        )
+        (argmin, extra), _ = jax.lax.scan(run_block, start, jnp.arange(n_blocks))
+
+        return ChunkedSearchResult(
+            best_policy=_decode_policies(
+                argmin.best_index, self._action_set, self._horizon
+            ),
+            best_g=argmin.best_g,
+            best_index=int(argmin.best_index),
+            visited=int(argmin.visited),
+            certificate=_certify(self._action_set, self._horizon, int(argmin.visited)),
+            extra=extra,
+        )
+
+    def policies_at(self, indices: Array) -> Float64[Array, "... H p"]:
+        """The policies named by ``indices``, decoded rather than looked up.
+
+        The counterpart of ``best_index``: a chunked run reports where its winner sat
+        in the enumeration, and this turns that back into a plan. Also how a caller
+        checks that an index means the same policy here as on the front-loaded path.
+        """
+        return _decode_policies(jnp.asarray(indices), self._action_set, self._horizon)
+
+    @property
+    def n_policies(self) -> int:
+        """The policy count ``|A|^H`` — attributable work (RFC-001)."""
+        return self._n_policies
+
+    @property
+    def horizon(self) -> int:
+        """The sequence length H."""
+        return self._horizon
+
+    @property
+    def chunk(self) -> int:
+        """The block size. The answer does not depend on it; the residency does."""
+        return self._chunk
+
+    @property
+    def n_blocks(self) -> int:
+        """How many blocks the enumeration takes, the last one padded."""
+        return -(-self._n_policies // self._chunk)
+
+    @property
+    def cost_per_cycle(self) -> int:
+        """Per-cycle step-evals = ``|A|^H * H`` — the honest exponential cost."""
+        return self._n_policies * self._horizon
+
+    @property
+    def warrant(self) -> SearchWarrant:
+        """``PROVED`` — a finite set enumerated in full decides its universal."""
+        return SearchWarrant.PROVED
 
 
 class RecedingHorizonSelector:
