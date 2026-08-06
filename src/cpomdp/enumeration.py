@@ -419,11 +419,14 @@ class EnumeratedEfeSearch:
         return self._certificate
 
 
-# Provisional. The chunk trades compile-time amortisation against live residency, and
-# the peak is dominated by a fixed XLA overhead well above this size, so a wider block
-# costs little. The measured relation is calibrated per model before any budget line
-# is declared against it.
-DEFAULT_CHUNK = 1 << 16
+# Measured on the crossover model at |A|^H = 9^6, sweeping 64 to 65536. Throughput has
+# a broad plateau from 512 to 4096 and falls away on both sides: below it per-block
+# overhead dominates, above it 65536 runs 3.4x slower than the plateau and carries a
+# higher peak. Peak resident memory is flat at 0.42-0.43 GiB from 64 to 8192, so within
+# the plateau the block size buys nothing back in residency and the choice is about
+# rate alone. 4096 rather than the slightly faster 2048 because its spread across
+# repeats is 2% against 20%, and PR-2 declares compute budgets off this rate.
+DEFAULT_CHUNK = 1 << 12
 
 
 def _decode_policies(

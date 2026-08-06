@@ -2136,6 +2136,14 @@ indivisible by the block.
 difference and scores it. At `|A|^H = 6561` against a 65536 block that is ten times the
 arithmetic for the same answer, measured. The request is an upper bound.
 
+**The default block is measured, not guessed.** Swept 64 to 65536 at `9^6`. Throughput
+has a broad plateau from 512 to 4096 and falls away on both sides, with 65536 running
+3.4× slower than the plateau. Peak is flat at 0.42–0.43 GiB from 64 to 8192, so inside
+the plateau the block size buys nothing back in residency and the choice is about rate
+alone. `DEFAULT_CHUNK = 4096` rather than the slightly faster 2048, because its spread
+across repeats is 2% against 20% and PR-2 declares compute budgets off this rate. A
+number that occasionally drops a quarter is a poor basis for a declared budget.
+
 ### Consequences
 
 - Measured on the crossover model at `9^6`: identical argmin index, `G` equal under
