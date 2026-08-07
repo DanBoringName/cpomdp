@@ -296,8 +296,8 @@ one more thing a replacement family would have to re-establish.
 The gate is stated as an **absolute threshold**, not as a factor:
 
 ```text
-window edges (spread axis):  lower √(k·δ_ref / curvature),  upper √(c₂/|c₄|)
-at exactly D decades:        k·δ_ref = f·(c₂/|c₄|)·curvature·10^(−2D)  ≡  T
+window edges (spread axis):  lower √(k·δ_ref / c₂),  upper √(f·c₂/|c₄|)
+at exactly D decades:        k·δ_ref = f·c₂²/|c₄|·10^(−2D)  ≡  T      (see the audit)
 
 GATE-D4 passes iff:          gap > T
 D1/D2 are tests iff:         δ_ref ≤ T / k_min
@@ -377,6 +377,168 @@ Approaching 2 as `κ → 0` off-ridge, against exactly 1 on it. The leg therefor
 `κ`, roughly `κ ≤ 0.1`, to resolve cleanly. This converts an analytic refutation into a
 measured one and costs one extra sweep on an existing axis.
 
+### AMENDMENT 2026-08-07: corrections to the sensitivity, and what actually sets `D`
+
+**The `μ`-rule factor was understated, and understated exactly where the new leg lives.**
+The ratio is `c₂(μ*)/c₂(μ=1) = (R₀+κ)²/(4R₀κ)`, which by AM-GM is `≥ 1` everywhere and
+equals 1 only at `κ = R₀`, where `μ* = 1` and the rule coincides with the pin. It diverges
+as `κ → 0`.
+
+| `κ` | 0.05 | 0.10 | 0.25 | 1.00 | 4.00 |
+| --- | --- | --- | --- | --- | --- |
+| factor | 5.51× | 3.03× | 1.56× | 1.00× | 1.56× |
+
+The previous amendment computed 1.56× over `κ ∈ {0.25, 1, 4}`. The D2 leg registered in the
+same sitting needs `κ ≲ 0.1`, where the factor is 3.03× to 5.51×. **The joint span is
+therefore nearer 5 × 10⁴, not 1 × 10⁴.** The conclusion is unchanged, `D` still carrying
+essentially all of it. Worth recording is the mechanism: two amendments written in one
+sitting, and one silently invalidated the other's inputs by moving the `κ` range it was
+computed over.
+
+**`T` is a single number and `c₂` is not.** Both `c₂` and `c₄` vary along the `κ` sweep, so
+`σ_max` varies and the decades between the edges vary with it. `T` is not well-defined until
+the `κ` is named. **Registered rule: `T` is evaluated at the `κ` minimising the window
+width**, the binding cell, rather than at a reference `κ` or the sweep's midpoint. That
+makes `T` the most demanding admissible value and puts the choice beyond argument. It is
+derivable once `c₄` lands, so the rule is declared now and evaluated after.
+
+### `D` is a bias argument, not a statistics argument
+
+This is why `D` read as freely choosable. For an OLS log-log fit over `D` decades with `N`
+points and relative error `ε`, the standard error on the exponent is about `ε√12/(D√N)`. The
+quadrature gap converges to twelve digits, so `ε ~ 10⁻¹⁰` and the random error is nowhere
+near binding. **A statistical argument gives no lower bound on `D` at all.**
+
+What binds is systematic. The gap is not a power law: with `a = |c₄|/c₂`,
+
+```text
+gap = c₂σ²(1 − aσ²)
+local log-log slope = 2 − 2aσ²/(1 − aσ²)
+at the top of the window (aσ_max² = f):  2 − 2f/(1−f)
+```
+
+At `f = 0.1` the local exponent at the top is 1.778, not 2. The fitted exponent is biased
+low, and `D` has to buy that bias down rather than buy down noise.
+
+**The exact bias, from the OLS geometry.** With `v = ln σ` uniform over `L = D·ln10`, the
+first-order-in-`f` result is `b = −3f/(D·ln10)²`. That envelope has the right shape and the
+wrong size:
+
+| | `D=1` | `D=2` | `D=3` |
+| --- | --- | --- | --- |
+| `f = 0.02` | 1.71× | 1.27× | 1.16× |
+| `f = 0.10` | 1.67× | 1.24× | 1.14× |
+
+overstating the true bias by 14% to 71%, worst at small `D`. **The exact OLS integral is
+what gets registered**, not the closed form, which stands only as a scaling guide.
+
+**`D`, `f` and D2's interval are one declaration, not three.** Declare the bias budget `β`,
+how far the fitted exponent may sit from 2 through truncation alone. Then `D` follows from
+`f` through the bias relation, and `f` follows from maximising `T` subject to it. Since
+`T ∝ f·10^(−2D)`, the smallest `D` the budget allows is the severity-maximising choice, which
+is the same shape as every other rule here.
+
+Carrying that through gives a closed form, verified numerically at `β ∈ {0.01, 0.02, 0.05}`:
+
+```text
+f* = β/3        D* = 1/ln10 = 0.4343 decades        independent of β
+```
+
+A window of exactly `e ≈ 2.718` in spread. **This shrinks the 10⁴ span**, which assumed the
+three knobs move independently when they cannot.
+
+**An open decision, to be taken before any of the three is declared.** The optimum above
+*dilutes* the truncation bias by widening the window. Since `c₄` will be known, the bias can
+instead be **subtracted analytically**, which removes it rather than diluting it and
+decouples `D` from `f` entirely. The two constructions give different `D`, so choosing
+between them after seeing either would be choosing with the consequences in view. There is
+also a tension the optimisation does not see: 0.43 decades is statistically ample given
+`ε ~ 10⁻¹⁰`, and is a short range to present as a power-law fit. That is a judgement about
+what a reader accepts rather than a fact the algebra supplies, and it belongs in the
+declaration rather than in a footnote.
+
+**D2's interval inherits this.** Whatever bias survives, the registered interval must
+accommodate it, or the leg fires on truncation rather than on the world. Same coupling,
+arriving at the registration rather than at the derivation.
+
+### AMENDMENT 2026-08-07: `T` carries `c₂` squared, and "curvature" was the refuted mechanism's name
+
+The lower edge is where the gap clears the error: `gap = c₂σ² = k·δ_ref`, so
+`σ_min = √(k·δ_ref/c₂)`. `warrant_ledger.md` section 5 writes it as `√(k·δ_ref/curvature)`,
+which is the same thing *only if* "curvature" means `c₂`. Working `T` through both edges:
+
+```text
+σ_min² = k·δ_ref/c₂        σ_max² = f·c₂/|c₄|        ratio = 10^(2D)
+
+T  =  k·δ_ref  =  f · c₂² / |c₄| · 10^(−2D)
+```
+
+**`c₂` squared**, because it appears in both edges: once setting where the signal clears the
+error, once setting where the expansion breaks. Verified numerically, `c₂·σ_min² = T` exactly.
+
+The earlier form in section 4 carried `curvature` as a separate factor beside `c₂/|c₄|`,
+inherited from the ledger. That is wrong either way. If "curvature" means `c₂` the formula
+was right and misnamed after the very mechanism refuted above. If it means something
+`R''`-flavoured, the lower edge inherited the falsified mechanism and is simply wrong. The
+ledger's wording is audited before `T` is declared.
+
+**This is the third instance of the tracked pattern** of mechanism wording outliving its
+falsified rationale, after the epistemic-pull phrasing and the "optimal reach" row. The
+first two were presentational. This one is load-bearing.
+
+**Sensitivity, again revised.** The `μ`-rule now enters `T` squared: `5.51² = 30.4×` at
+`κ = 0.05`, `9.2×` at `κ = 0.1`. Joint span `1000 × 10 × 30 ≈ 3 × 10⁵`. The line that `D`
+carries the severity almost by itself needs re-checking rather than re-quoting: `D` still
+dominates, and `30×` is no longer a rounding error.
+
+### AMENDMENT 2026-08-07: the fitting argument used the wrong `ε`
+
+`ε ~ 10⁻¹⁰` is the *quadrature's* precision. D2 measures against the reference filter, and
+the lower edge is *defined* as where the gap is exactly `k` times `δ_ref`. So the relative
+error on the gap at the bottom of the window is `1/k` by construction, and 10% at `k = 10`.
+It improves as `σ²` across the window, reaching `1/(k·10^(2D))` at the top.
+
+Propagating that through OLS with heteroscedastic weights, at the bias-only optimum
+`D = 0.4343`:
+
+| `k` | 5 | 10 | 30 |
+| --- | --- | --- | --- |
+| `σ_p` | 0.089 | 0.045 | 0.015 |
+
+`σ_p = 0.045` at `k = 10` exceeds every `β` tested (0.01, 0.02, 0.05). **The statistical term
+does not merely bind, it dominates the bias it was dismissed in favour of.** `D* = 0.4343`
+answered a bias-only optimisation the measurement will not be operating under.
+
+Re-optimising `T` subject to `√(bias² + σ_p²) ≤ β`:
+
+| `β` | `k = 10` | `k = 30` |
+| --- | --- | --- |
+| 0.02 | `D* = 0.97`, `f* = 0.031` | `D* = 0.47`, `f* = 0.019` |
+| 0.05 | `D* = 0.51`, `f* = 0.045` | `D* = 0.26`, `f* = 0.035` |
+
+Both terms fall with `D`, the bias as `1/D²` and the noise as `1/D`, so the corrected optimum
+is generally larger, `T` is smaller, and the construction is less severe and more honest. The
+presentational worry about a 0.43-decade window largely dissolves at the values that matter,
+which is why that argument is not spent here.
+
+**A consequence to accept.** `σ_p` depends on `k`, hence on `δ_ref`, hence on the reference
+filter. So `D` is registered as an **expression in `k`, evaluated conservatively at `k_min`**,
+since smaller `k` means more noise and demands more decades. That is the
+register-expressions-not-constants discipline arriving where a number was hoped for.
+
+### AMENDMENT 2026-08-07: dilute-versus-subtract becomes a rule
+
+The decision was flagged rather than taken. It converts to a criterion.
+
+Subtraction uses `c₄` to correct the fit, so the residual bias after subtracting is `c₄`'s own
+relative error times the bias. At `c₄`'s current 35% that buys a factor of about 3, not
+removal. Dilution buys `1/D²` with no dependence on `c₄`'s accuracy at all.
+
+**Registered rule: subtract if and only if `c₄`'s relative error is below `X`, dilute
+otherwise.** `X` is declared now, before the refit reveals which side the result lands on.
+Same move as `f*` and `μ*`: a choice that would otherwise be made with its consequences in
+view becomes a rule fixed before they are visible.
+
 ## 5. D1's resolution threshold (OUTSTANDING): an expression, not a value
 
 Registered as a **propagated expression**, not a constant. A formula fixed before the
@@ -426,7 +588,9 @@ it exists to close.
 | 2026-08-07 (opened) | the family and its version, the curvature ceiling being vacuous, the three stop branches, and the gate's form as `gap > T` | `c₂`, `c₄`, `D`, `k_min`, `T`, R6's signal, `δ_ref` |
 | 2026-08-07 (amended) | the quadrature method replacing one that computed zero, and `c₂ = (R'(μ)/2R(μ))²` | `c₄`, `D`, `k_min`, `T`, R6's signal, `δ_ref` |
 | 2026-08-07 (amended again) | `σ_max = √(f·c₂/\|c₄\|)` replacing an edge that sat past the gap's turnover, `μ` by the argmax rule `μ* = √(R₀/κ)` rather than by value, and `c₄`'s seven-term dimensional basis | `c₄`, `f`, `D`, `k_min`, `T`, R6's signal, `δ_ref` |
-| 2026-08-07 (fourth) | `μ` reclassified as *derived*, `R'(μ) ≠ 0` as a fixture precondition, `T`'s three declared parameters and their 10⁴ joint span, and D2's second leg off the ridge | `c₄`, `f`, `D`, `k_min`, `T`, R6's signal, `δ_ref` |
+| 2026-08-07 (fourth) | `μ` reclassified as *derived*, `R'(μ) ≠ 0` as a fixture precondition, `T`'s three declared parameters, and D2's second leg off the ridge | `c₄`, `f`, `D`, `k_min`, `T`, R6's signal, `δ_ref` |
+| 2026-08-07 (fifth) | the `μ`-factor correction, `T` evaluated at the binding `κ`, and `D` as a bias argument | `c₄`, `β`, `f`, `D`, `k_min`, `T`, R6's signal, `δ_ref` |
+| 2026-08-07 (sixth) | `T = f·c₂²/\|c₄\|·10^(−2D)` with the "curvature" naming audited, the noise term set by `k` rather than by quadrature, `D` as an expression in `k`, and the dilute-versus-subtract rule | `c₄`, `X`, `β`, `f`, `D`, `k_min`, `T`, R6's signal, `δ_ref` |
 
 Every number GATE-D4 turns on was unknown on the date the family was declared, and `T`,
 R6's signal and `δ_ref` are unknown still. That is the claim this document exists to make
