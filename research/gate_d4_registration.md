@@ -33,6 +33,7 @@ scalar chain, 1-D latent:   A = B = C = 1,  Q = 1
 sensor noise:               R(x) = R₀ + κ·x²          (R₀ = 1)
 swept axis 1 (spread):      prior variance σ²
 swept axis 2 (curvature):   κ,  where R''(x) = 2κ
+derived (not swept):        μ = μ*(κ) = √(R₀/κ)      -- see the amendments
 ```
 
 **Selection reason, prior to and independent of D4.** This is the family Paper 1's `R(x)`
@@ -77,6 +78,28 @@ structural and checkable without any measurement, since `R'(μ) ≠ 0` is a prop
 declared `R` and nothing else. And `δ_ref`, R6's signal and the threshold `T` did not exist
 on this date and still do not, so no choice here could be aimed at the gate's outcome. What
 it does affect is whether D2 is a test at all, which is the thing a reader should weigh.
+
+### AMENDMENT 2026-08-07: `μ` is *derived*, which E2's dichotomy has no slot for
+
+Once `μ = μ*(κ)`, `μ` stops being an independent swept axis: the spec named two, and one is
+now a function of the other. The family block above is corrected to say so.
+
+E2 requires every parameter "declared **fixed or free in the model specification**, never at
+analysis time". `μ` is neither. It is **derived**, and that is a third category with its own
+contamination profile: it cannot be tuned directly, which is stronger than *free*, but it
+inherits whatever freedom sits in the rule that derives it, which is weaker than *fixed*.
+The freedom here is the choice to maximise `c₂`, declared above and dated.
+
+### AMENDMENT 2026-08-07: `R'(μ) ≠ 0` is a precondition on any fixture without a mean-moving action
+
+Paper 1's worked example is safe at `mean = 0.0` because its *actions* displace the
+predicted mean, so `R(μ⁻)` takes 1 and 5 and `R'(μ⁻) ≠ 0` where it matters. That
+generalises: the degeneracy arises exactly where nothing displaces the mean.
+
+**So any fixture without a mean-moving action asserts `R'(μ) ≠ 0` rather than assuming it.**
+Checkable from the declared `R` alone, at no cost, and it joins the span-positivity
+precondition already recorded from the linear family. Both were found the same way in one
+sitting, which suggests the class is worth checking for rather than waiting to trip over.
 
 ## 2. The Taylor coefficients `c₂` and `c₄` (OUTSTANDING)
 
@@ -228,7 +251,10 @@ when `R` is constant, which is R1 again. That gives seven terms:
 ℓ'⁴,  ℓ'²ℓ'',  ℓ''²,  ℓ'ℓ''',  ℓ'''',  ℓ'²/R(μ),  ℓ''/R(μ)
 ```
 
-A bare `1/R²` is excluded because it survives constant `R`. This also explains the
+A bare `1/R²` is excluded because it survives constant `R`. A parity check confirms the
+enumeration is complete rather than merely sufficient: for symmetric `R`, counting `ℓ'` and
+`ℓ'''` as odd, all seven terms are even under `x → −x`, nothing of odd parity can appear,
+and nothing of even parity at that dimension is missing. This also explains the
 `R(μ)` dependence found empirically rather than leaving it a curiosity, and it recasts `c₂`
 as `ℓ'²/4`.
 
@@ -299,6 +325,58 @@ moves the edge that `D` is counted across.
 Stated explicitly, because the move available on seeing a disappointing `δ_ref` is to lower
 `D`, or to loosen `f` so that `D` survives.
 
+### AMENDMENT 2026-08-07: `T` rests on three declared parameters, and the span is 10⁴
+
+The opening framing had `T` fixed by the family's analytic properties and `D`. That is no
+longer true. `T = f·(c₂/|c₄|)·curvature·10^(−2D)` and `c₂` depends on the `μ`-rule, so three
+things are declared: **`D`, `f`, and the `μ`-rule**. Each is individually defensible and all
+three precede `δ_ref`, so the construction holds. Presenting one while carrying three would
+not.
+
+Joint sensitivity of the known factors `f·c₂·10^(−2D)`, with `|c₄|` still pending, over
+defensible ranges `D ∈ [1.5, 3.0]`, `f ∈ [0.02, 0.2]`, and the `μ`-rule against a pinned
+`μ = 1`:
+
+| knob | range | factor on `T` |
+| --- | --- | --- |
+| `D` | 1.5 to 3.0 decades | **1000×** |
+| `f` | 0.02 to 0.2 | 10× |
+| `μ`-rule vs pinned `μ = 1` | at `κ ∈ {0.25, 1, 4}` | 1.56× at most, and exactly 1× at `κ = 1` |
+| **joint** | | **≈ 1.0 × 10⁴** |
+
+The answer to "is the construction robust" is no, and it is worth having before the
+reference filter rather than after. Essentially the whole span is `D`: it moves `T` by 100×
+per decade while `f` and the `μ`-rule together contribute about 16×. **`D`'s justification
+carries the severity almost by itself**, and the fitting argument behind it has to be made
+to that standard. `f` and the `μ`-rule are second-order by comparison.
+
+### AMENDMENT 2026-08-07: D2 would pass for the wrong reason, and gets a second leg
+
+Along the ridge `μ = μ*(κ)`, `c₂ = κ/(4R₀)` is linear in `κ`, so the measured behaviour is
+`gap ∝ κ·σ²`. That is the battery's registered D2 prediction *verbatim*. D2 would report
+`NOT TRIGGERED` on a mechanism already refuted analytically above, which is a severity
+failure rather than a pass: a falsifier that cannot fire on a true refutation is not testing
+anything.
+
+**Two corrections, both registered now.**
+
+D2's prediction is restated to cover the **σ-exponent only**, with the κ-dependence
+explicitly out of scope on the ridge, since linearity there is a property of the ridge
+rather than of the mechanism.
+
+And a **second leg is added: a κ-sweep at pinned `μ`**, off the ridge. There
+`c₂ = κ²μ²/(R₀+κμ²)²`, which is quadratic in `κ` at small `κ`, so the two mechanisms
+separate on an axis already being swept. Measured local exponent `d log c₂ / d log κ` at
+`μ = 1`:
+
+| `κ` | 0.05 | 0.10 | 0.20 | 0.40 | 0.80 |
+| --- | --- | --- | --- | --- | --- |
+| exponent | 1.87 | 1.75 | 1.56 | 1.28 | 0.94 |
+
+Approaching 2 as `κ → 0` off-ridge, against exactly 1 on it. The leg therefore needs small
+`κ`, roughly `κ ≤ 0.1`, to resolve cleanly. This converts an analytic refutation into a
+measured one and costs one extra sweep on an existing axis.
+
 ## 5. D1's resolution threshold (OUTSTANDING): an expression, not a value
 
 Registered as a **propagated expression**, not a constant. A formula fixed before the
@@ -348,6 +426,7 @@ it exists to close.
 | 2026-08-07 (opened) | the family and its version, the curvature ceiling being vacuous, the three stop branches, and the gate's form as `gap > T` | `c₂`, `c₄`, `D`, `k_min`, `T`, R6's signal, `δ_ref` |
 | 2026-08-07 (amended) | the quadrature method replacing one that computed zero, and `c₂ = (R'(μ)/2R(μ))²` | `c₄`, `D`, `k_min`, `T`, R6's signal, `δ_ref` |
 | 2026-08-07 (amended again) | `σ_max = √(f·c₂/\|c₄\|)` replacing an edge that sat past the gap's turnover, `μ` by the argmax rule `μ* = √(R₀/κ)` rather than by value, and `c₄`'s seven-term dimensional basis | `c₄`, `f`, `D`, `k_min`, `T`, R6's signal, `δ_ref` |
+| 2026-08-07 (fourth) | `μ` reclassified as *derived*, `R'(μ) ≠ 0` as a fixture precondition, `T`'s three declared parameters and their 10⁴ joint span, and D2's second leg off the ridge | `c₄`, `f`, `D`, `k_min`, `T`, R6's signal, `δ_ref` |
 
 Every number GATE-D4 turns on was unknown on the date the family was declared, and `T`,
 R6's signal and `δ_ref` are unknown still. That is the claim this document exists to make
