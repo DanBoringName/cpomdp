@@ -606,6 +606,36 @@ window**:
 range is reported afterwards as an outcome, never used to choose the range, so `f` cannot
 leak into how `c₄` is measured while `c₄` sets the window `f` parameterises.
 
+### DISCLOSURE 2026-08-07, before the refit: the declared convergence is not met at the bottom
+
+The derivation range was registered with "quadrature converged to ≥ 10 digits throughout".
+Measured, by refining the `x`-grid from 16001 to 32001 points at span 9σ:
+
+| `σ` | 0.06 | 0.12 | 0.20 | 0.30 |
+| --- | --- | --- | --- | --- |
+| relative change | 1.8e−9 | 4.6e−10 | 1.0e−10 | 6.8e−11 |
+
+So roughly **8.7 digits at the bottom** of the range against the 10 declared, reaching 10.2
+at the top. The `y`-grid is the reverse, 8.6e−15 at `σ = 0.06` and 4.0e−10 at `σ = 0.30`, so
+the binding axis swaps across the range. Recorded before the refit runs rather than after,
+because a precondition disclosed once the result is visible is not a precondition.
+
+**What it propagates to.** At `σ = 0.06` the quartic residual after subtracting `c₂σ²` is
+`2.58e−6`, which is 0.288% of the gap. A relative gap error of 1.8e−9 is `1.62e−12`
+absolute, so the error carried onto `c₄` is
+
+```text
+1.62e−12 / 2.58e−6  =  6.3e−7  relative
+```
+
+Seven orders below the 0.1 the dilute-versus-subtract rule turns on, and five below the 1%
+that would matter for `T`. The shortfall is real and inconsequential, and both halves of
+that are stated rather than the convenient one.
+
+The declaration is **not** amended to match the measurement. It stands at 10 digits with the
+shortfall recorded against it, since rewriting a precondition to fit what was achieved is
+the move the document exists to prevent.
+
 ### RESULT 2026-08-07: `c₂ > 0` is an analytic positivity statement at leading order
 
 `c₂ = (ℓ'(μ)/2)² ≥ 0`, with equality only at a stationary point of `R`. C6 already claims
