@@ -458,6 +458,7 @@ The letters can survive as aliases/internal attributes and definitely in the doc
 
 ## ADR-007 — v0.3 Phase 4–5: typed Agent objectives + greedy EFESelector
 
+**Date:** 2026-06-19 (recovered from commit `c465c01`)
 **Status:** accepted. Resolves ADR-005 open tension #1 (the `Preference` domain split).
 
 ### What acts on the EFE kernel
@@ -547,6 +548,7 @@ observation-space is primary and `StateGoal` is the privileged special case.
 
 ## ADR-008 — R(x) in perception: state-dependent sensor noise in the filter
 
+**Date:** 2026-06-19 (recovered from commit `a8849d8`)
 **Status:** accepted. Closes the "R(x) in perception" deferred seam named in ADR-007.
 
 ### The gap

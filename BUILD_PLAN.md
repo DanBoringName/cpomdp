@@ -134,6 +134,11 @@ three tracks run independently: the Paper 2 scoring track (PR-4 → PR-5), the
 reference-filter track (PR-7 → PR-8), and the Paper 3 track (PR-6). Only PR-9 and PR-10
 wait on the gate.
 
+**ADR numbers are not pre-allocated.** A PR takes the next free number when it lands, and
+the heading carries its decision date. Reserving numbers against unwritten work collides
+the moment one PR needs two, and it sorts the file against the commit record, which is
+what an audit reads. Landed work keeps the number it took: PR-1 is ADR-035, PR-1b ADR-036.
+
 **Every PR.** `uv run --no-sync pytest -m "not rxinfer and not slow"` green,
 `uv run --no-sync ruff check src/cpomdp tests examples mkdocs_hooks.py` clean,
 `uv run --no-sync ty check` clean, `mkdocs build --strict` green whenever a docstring or
@@ -233,7 +238,7 @@ tracks the block rather than the enumeration. **ADR-036.** — met.
 ## PR-2 — R10 hardening
 
 `serves: 2, 3` · `blocked by: PR-1` · `alias: P2-9` · `size: M` · `tag: v0.4.5` ·
-`ADR-037`
+`ADR: on landing`
 
 Gate-independent. Paper 3's G9 inherits the qualifier this produces.
 
@@ -278,12 +283,12 @@ Gate-independent. Paper 3's G9 inherits the qualifier this produces.
       model, a different backend, whole-state epistemic, no search.
 
 **Merge gate:** both axes report an outcome, `PASS`, `FAIL` or `VOID`, against their
-registered prediction. **ADR-037.**
+registered prediction. **ADR on landing.**
 
 ## PR-3 — World/Agent seam, exogenous action, constructors
 
 `serves: 2, 3` · `blocked by: PR-1` · `alias: P2-1a (B)` · `size: L` · `tag: v0.4.5` ·
-`ADR-038`
+`ADR: on landing`
 
 The foundation, and the fan-out point. Paper 3 reuses the seam, the exogenous action mode
 and the constructors without modification, which is why the module boundary below is a
@@ -306,12 +311,12 @@ test rather than a convention.
       does not import it. Assert it with an import test. A test outlives a PR boundary.
 
 **Merge gate:** the no-read-path test passes. The import test holds. The constructor set
-round-trips through the model spec and shows up in a diff when extended. **ADR-038.**
+round-trips through the model spec and shows up in a diff when extended. **ADR on landing.**
 
 ## PR-4 — Paper 2 scoring: evaluator, separation cells, error bars
 
 `serves: 2, and F5 serves 3` · `blocked by: PR-3` · `alias: P2-1b (B), F1, F2, F3, F5` ·
-`size: L` · `tag: v0.4.5` · `ADR-039`
+`size: L` · `tag: v0.4.5` · `ADR: on landing`
 
 - [ ] `ThreeTermEvaluator` returns `Decomposition(misspecification, inference_gap)`, two
       divergences directly computed. The type carries no entropy field and no entropy
@@ -347,7 +352,7 @@ round-trips through the model spec and shows up in a diff when extended. **ADR-0
 **Merge gate:** the cross enumerates completely. R2 and R3 print at `PROVED`. No cell
 asserts a separation without printing its ratio and conditioning. The four-term bound is
 asserted. A difference and a sum-of-bars are shown to differ on a worked case.
-**ADR-039.**
+**ADR on landing.**
 
 **Warrant:** R1 Tier A / Prover 1 with a 3a witness. R2 and R3 Tier A–B / **3b**. R4
 Tier B / 3a.
@@ -392,7 +397,7 @@ forms. That is the strongest thing the tier table licenses without a bound.
 ## PR-6 — Paper 3 toolbox and Part 1 results
 
 `serves: 3` · `blocked by: PR-1, PR-3` · `alias: G-A, G-C, G-D, G1–G5` · `size: L` ·
-`tag: v0.4.5` · `ADR-040`
+`tag: v0.4.5` · `ADR: on landing`
 
 G-A and G-D were the original Phase 0 hedge, scheduled at v0.4.3 and never shipped. They
 are gate-independent and cheap. They are what stands between "a gate failure stalls the
@@ -423,7 +428,7 @@ after it.
 
 **Merge gate:** G1's constant offset prints and is flat across policies at H = 1. The G2
 certificate holds at the stated horizon and action set. An undeclared λ or γ is a
-construction error, not a runtime warning. **ADR-040.**
+construction error, not a runtime warning. **ADR on landing.**
 
 **Warrant:** G2 is **3b**, decided rather than surveyed. G4 is 3a existence, settled by
 one construction.
@@ -461,7 +466,7 @@ enumerates completely.
 ## PR-8 — Certified discretisation bound · GATE-D4 · tag v0.4.5
 
 `serves: 2, 3` · `blocked by: PR-7` · `alias: P2-6 (C′)` · `size: L` · `tag: v0.4.5` ·
-`ADR-041`
+`ADR: on landing`
 
 - [ ] Write down the **pre-agreed factor** before this PR is opened. A factor agreed after
       seeing the bound is not a gate.
@@ -477,7 +482,7 @@ enumerates completely.
       entry, `CITATION.cff` and `__init__.__version__` on the release commit, matching
       v0.4.4's discipline.
 
-**Merge gate — hard, existential.** See "GATE-D4" below. **ADR-041.**
+**Merge gate — hard, existential.** See "GATE-D4" below. **ADR on landing.**
 
 ## PR-9 ⛔ — Window harness and Paper 2 Part 2 results
 
