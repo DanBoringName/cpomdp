@@ -539,6 +539,87 @@ otherwise.** `X` is declared now, before the refit reveals which side the result
 Same move as `f*` and `μ*`: a choice that would otherwise be made with its consequences in
 view becomes a rule fixed before they are visible.
 
+### AMENDMENT 2026-08-07: the closed form does not survive the exact bias, and `D` is set by noise
+
+The convergence check proposed for the re-optimisation was that switching the noise off
+should recover the bias-only closed form `D* = 1/ln10 = 0.4343`. **It fails.**
+
+| `k` | 10 | 30 | 100 | 1000 | 10⁶ |
+| --- | --- | --- | --- | --- | --- |
+| `D*` at `β = 0.02` | 0.960 | 0.436 | 0.204 | 0.150 | 0.150 |
+
+As `k → ∞` the optimum runs to the search boundary, not to 0.4343. The agreement at `k = 30`
+is a coincidence of where the noise constraint happens to bind.
+
+**The cause.** `D* = 1/ln10` was derived from the *first-order-in-`f`* bias `3f/(D·ln10)²`,
+already recorded above as overstating the true bias by 14% to 71%. At small `D` it is far
+worse: at `D = 0.15` the exact integral admits `f = 0.0138` where the analytic permits
+`0.0008`. Taking the largest feasible `f` at each `D` and forming `T ∝ f·10^(−2D)`:
+
+| `D` | 0.15 | 0.434 | 1.0 | 2.0 | 3.0 |
+| --- | --- | --- | --- | --- | --- |
+| `T`, exact bias | 6.9e−3 | 3.3e−3 | 6.0e−4 | 1.7e−5 | 3.4e−7 |
+| `T`, first-order bias | 4.0e−4 | 9.0e−4 | 3.5e−4 | 1.4e−5 | 3.2e−7 |
+
+The first-order column has an interior peak at 0.4343. The exact column is **monotone
+decreasing**, so the bias-only problem has no interior optimum at all: `T` is maximised by
+shrinking the window to nothing.
+
+**Two things follow, and the second inverts an earlier conclusion.**
+
+`f* = β/3` and `D* = 1/ln10` are **withdrawn as results**. They stand only as a first-order
+illustration, and the exact OLS integral governs.
+
+And the bias-only problem is **ill-posed**, since a zero-width window fits no exponent.
+What makes it well-posed is the noise term, which diverges as `D → 0`. So *noise*, not bias,
+is what sets `D` from below. The earlier amendment concluded the opposite, and did so
+resting on the same first-order approximation this one retires.
+
+### AMENDMENT 2026-08-07: the numbers, committed before the refit
+
+Anything the `c₄` refit could inform is fixed here, as figures rather than intents. A rule
+whose deciding quantity is already on screen is not a rule.
+
+| symbol | value | derivation |
+| --- | --- | --- |
+| `k_min` | **10** | the gap clears the certified error by one order of magnitude. At `k = 1` the claim is a bare inequality between two computed numbers, which is the defect the flip-margin bar was introduced to fix. One order is the smallest round separation that makes "separated from zero" mean anything |
+| `β` | **0.05**, and it is a **total** budget | D2's interval must separate an exponent of 2 from the nearest alternative. The degenerate `μ = 0` case gives 4 and a cubic gap would give 3, so the half-width is 0.5. `β` is the instrument's share of it, declared at one tenth. Total, not bias-only, matching the `√(bias² + σ_p²) ≤ β` constraint the re-optimisation actually used |
+| D2's interval | **2 ± 0.5** | the separation above. The instrument consumes at most 10% of it, so the leg fires on the world rather than on truncation or noise |
+| `X` | **0.1** | subtraction must buy at least an order of magnitude on the bias, since its residual is `X ×` the bias. Below that, dilution's `1/D²` is competitive and carries no dependence on `c₄`'s accuracy |
+
+At `k_min = 10` and `β = 0.05` the constraint is feasible: `D* = 0.520`, `f* = 0.0488`,
+`σ_p = 0.0359`. `D` is registered as an expression in `k` evaluated at `k_min`, so this is
+the conservative corner rather than a typical one.
+
+### AMENDMENT 2026-08-07: the range the `c₄` refit fits over
+
+"Just under `σ_max`" is circular: `σ_max = √(f·c₂/|c₄|)` needs `c₄`. Registered instead is a
+**derivation range chosen purely on conditioning grounds, declared not to be the registered
+window**:
+
+```text
+σ ∈ [0.06, 0.30]        quadrature converged to ≥ 10 digits throughout,
+                        spanning a factor of 5 in σ and 25 in σ²
+```
+
+`f` does not enter it. What the quartic's share of the total turns out to be across that
+range is reported afterwards as an outcome, never used to choose the range, so `f` cannot
+leak into how `c₄` is measured while `c₄` sets the window `f` parameterises.
+
+### RESULT 2026-08-07: `c₂ > 0` is an analytic positivity statement at leading order
+
+`c₂ = (ℓ'(μ)/2)² ≥ 0`, with equality only at a stationary point of `R`. C6 already claims
+positivity "by theorem" and needs the reference filter to *certify the separation* rather
+than to observe a sign, so this does not move C6 off the filter. It is more than the
+existing claim in one respect: it supplies the leading coefficient analytically, where
+before there was a sign and a numerical magnitude.
+
+The caveat is load-bearing and keeps it from reaching further. `c₄ < 0` means the truncated
+expansion turns over, so what is established is positivity in a **neighbourhood of zero
+spread**, not globally, and C6 measures at finite spread where exactly that validity is in
+question. Recorded because a Tier-A-flavoured statement sitting inside an afternoon's
+algebra is better found now than in draft.
+
 ## 5. D1's resolution threshold (OUTSTANDING): an expression, not a value
 
 Registered as a **propagated expression**, not a constant. A formula fixed before the
@@ -563,11 +644,16 @@ from the agreement criterion in advance.
 
 ## Stop conditions (DECLARED 2026-08-07)
 
-Three branches, disjoint, split by which half of the instrument failed.
+Two branches, disjoint, split by which half of the instrument failed.
+
+**A third branch was retired rather than left standing.** `c₂ ≤ 0` was registered when
+`c₂`'s sign was open. `c₂ = (ℓ'/2)²` is a perfect square, so it is non-negative identically
+and vanishes only at `ℓ'(μ) = 0`, which the `R'(μ) ≠ 0` precondition now catches upstream at
+declaration. The branch did not fail. It collapsed into the precondition, and a row that can
+never fire reads as a check when it is not one.
 
 | branch | evaluable | report |
 | --- | --- | --- |
-| `c₂ = 0`, equivalently `R'(μ) = 0` | analytically, from the declared `R` alone | the sweep sits on a stationary point of `R` and the spread exponent is 4, not 2. Structural, so it is caught at declaration rather than measured. **Closed for `d4-family-v1` by the section 1 amendment** |
 | the curvature ceiling binds inside the swept range | analytically | the belief-smoothed rung drops off the ladder, and D1 reports on three rungs or `VOID`. **Closed for `d4-family-v1` by section 3** |
 | `δ_ref > T / k_min` | after the reference filter | the filter is not accurate enough for D1 and D2 to be tests at `D` decades. `VOID` on unmeasurability, **not** a gate `FAIL` |
 
