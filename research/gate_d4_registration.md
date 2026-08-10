@@ -650,6 +650,70 @@ spread**, not globally, and C6 measures at finite spread where exactly that vali
 question. Recorded because a Tier-A-flavoured statement sitting inside an afternoon's
 algebra is better found now than in draft.
 
+### RESULT 2026-08-10: the `c₄` refit, and the rule fires for subtraction
+
+Run over the declared range `σ ∈ [0.06, 0.30]`, extracting by exact `c₂σ²` subtraction, on
+28 cases across four `R` families (quadratic, exponential, `tanh`, `sin`) with `μ` and the
+shape parameters varied. Log-derivatives taken by autodiff rather than by hand.
+
+**The seven-term dimensional basis holds.** Median relative residual **0.60%**, max 5.59%,
+full rank, condition 109. The `(a, b)`-only basis it replaced left 24%, so the dimensional
+argument is what fixed it.
+
+| term | coefficient |
+| --- | --- |
+| `ℓ'⁴` | +0.43231 |
+| `ℓ'²ℓ''` | −0.25874 |
+| `ℓ''²` | +0.12985 |
+| `ℓ'ℓ'''` | +0.24935 |
+| `ℓ''''` | **−0.00068** |
+| `ℓ'²/R` | −0.74537 |
+| `ℓ''/R` | **+0.00192** |
+
+**Two coefficients came out at zero.** `ℓ''''` and `ℓ''/R` sit at 0.1% and 0.3% of the
+largest, so the operative basis is five terms rather than seven. Dropping them costs little
+in the median (0.60% → 0.70%) and more in the worst case (5.59% → 15.48%), so they are
+reported as consistent with zero rather than deleted.
+
+**The coefficients look like simple fractions, and that is not established.** Against
+`{7/16, −1/4, 1/8, 1/4, −3/4}` the fitted ratios are 0.991, 1.011, 1.056, 1.009, 0.995.
+Pinning them improves the median to 0.15% and degrades the max to 32.7%, which is the
+signature of a hypothesis that is close but not exact at this precision. `ℓ'ℓ''' = 1/4` and
+`ℓ'²/R = −3/4` are the strongest. Settling them needs an analytic derivation rather than a
+finer fit, and nothing downstream depends on it.
+
+**At the declared operating point** (`κ = 1`, `μ* = 1`): `c₂ = 0.250000`, `c₄ = −0.18980`,
+so `a = |c₄|/c₂ = 0.759`. The gap turns over at `σ = 0.812`, and `σ_max = 0.254` at the
+`f* = 0.0488` that `β = 0.05, k_min = 10` implies — inside the derivation range, so the
+extraction did not have to extrapolate into the window it parameterises.
+
+**The 35% spread is resolved.** Jackknifing the range gives an extraction spread of 0.36%
+at that point, against 35% before. The earlier diagnosis was right: the loss was extraction,
+not quadrature, and exact `c₂` subtraction plus a range chosen for conditioning fixed it.
+
+### DECISION 2026-08-07: the rule fires for **subtract**
+
+`c₄`'s relative error at the operating point is 0.36% by extraction and 1.03% by the basis
+fit. Both are far below the registered `X = 0.1`, so **the truncation bias is subtracted
+analytically rather than diluted**. The rule was declared and committed before the refit
+ran, and it decided the branch without a judgement being made with the answer visible.
+
+**Two consequences, one of them an open question the decision creates.**
+
+Subtraction removes the bias term from the `D` optimisation, so `D` is set by the noise
+constraint `σ_p(k, D) ≤ β` alone. That is consistent with the finding above that noise is
+what makes the problem well-posed, and it simplifies `D` to a single-term condition.
+
+And it moves the upper edge. `σ_max` was defined as where the *quartic* reaches a fraction
+`f` of the quadratic. With the quartic subtracted, the window extends to wherever `c₆`
+starts to bite, which is **unmeasured**. So `f` no longer parameterises the binding
+truncation, and either `σ_max` is redefined against `c₆` or `f` is retained as a
+conservative bound that subtraction makes slack. That is registered as open rather than
+resolved, since choosing now would be choosing with the refit's outcome in view.
+
+`T` is still pending: the registered rule evaluates it at the `κ` minimising the window
+width, which needs `c₄` scanned along the ridge rather than at the single point above.
+
 ## 5. D1's resolution threshold (OUTSTANDING): an expression, not a value
 
 Registered as a **propagated expression**, not a constant. A formula fixed before the
