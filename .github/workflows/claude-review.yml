@@ -2,7 +2,8 @@ name: claude review
 
 on:
   pull_request:
-    types: [opened]
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
 
 # Cancel superseded runs on the same ref to save CI minutes.
 concurrency:
@@ -13,7 +14,9 @@ jobs:
   review:
     name: claude review
     # Forks don't get the secret, so the action would fail auth validation.
-    if: github.event.pull_request.head.repo.fork == false
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || github.event.pull_request.head.repo.fork == false
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -25,6 +28,9 @@ jobs:
         with:
           fetch-depth: 1
       - uses: anthropics/claude-code-action@v1
+        # Advisory, never a merge gate. A turn-budget overrun or an API hiccup
+        # must not red-check an otherwise good PR.
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -36,6 +42,8 @@ jobs:
             reflect the checklist in any present `BUILD_PLAN.md` file.
 
             Post the review with `gh pr comment`.
+          # Read/Grep/Glob let the review read surrounding code, not just the
+          # diff hunks. That costs turns, hence the raised budget.
           claude_args: >-
-            --max-turns 10 --allowed-tools "Bash(gh pr diff:*),Bash(gh pr
-            view:*),Bash(gh pr comment:*)"
+            --max-turns 40 --allowed-tools "Read,Grep,Glob,Bash(gh pr
+            diff:*),Bash(gh pr view:*),Bash(gh pr comment:*)"
