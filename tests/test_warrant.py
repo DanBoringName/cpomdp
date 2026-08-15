@@ -28,7 +28,14 @@ from cpomdp.enumeration import (
 )
 from cpomdp.selection import EFESelector, Preference
 from cpomdp.types import Belief, LinearGaussianModel
-from cpomdp.warrant import CheckReport, Outcome, Tier, Warrant, check_summary
+from cpomdp.warrant import (
+    CheckReport,
+    Outcome,
+    SymbolicReduction,
+    Tier,
+    Warrant,
+    check_summary,
+)
 
 
 def _model():
@@ -56,6 +63,15 @@ def _certificate():
         action_set_size=2,
         horizon=2,
         action_set_version="test-v1",
+    )
+
+
+def _reduction():
+    """A filled-in reduction: the evidence a Prover 2 claim carries."""
+    return SymbolicReduction(
+        claim="the σ² coefficient of the inference gap is ℓ'(μ)²/4",
+        correspondence="research/gate_d4_registration.md, RESULT 2026-08-07",
+        assumptions=("R smooth and positive at μ", "formal in σ, no convergence claim"),
     )
 
 
@@ -227,6 +243,70 @@ class TestChecksThatNeverRanCarryNoWarrant:
         assert report.warrant is Warrant.CORROBORATED
 
 
+class TestSymbolicReduction:
+    """What backs a Prover 2 claim: the correspondence a CAS cannot supply.
+
+    A CAS checks that one expression equals another. Whether those expressions are the
+    ones the analytic claim is about is a human obligation (`research/warrant_ledger.md`
+    section 1), so the type exists to make an unrecorded obligation unrepresentable
+    rather than merely discouraged.
+    """
+
+    def test_carries_the_claim_and_where_a_human_checked_it(self):
+        reduction = _reduction()
+        assert reduction.claim.startswith("the σ² coefficient")
+        assert "RESULT 2026-08-07" in reduction.correspondence
+        assert len(reduction.assumptions) == 2
+
+    def test_is_frozen(self):
+        # Evidence edited after the check ran is not the evidence the check had.
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            _reduction().claim = "something else"
+
+    def test_assumptions_are_absent_by_default(self):
+        bare = SymbolicReduction(claim="c₂ = ℓ₁²/4", correspondence="RESULT")
+        assert bare.assumptions == ()
+
+    def test_assumptions_must_be_a_tuple(self):
+        # A bare string is a sequence, so it would record one assumption per character
+        # and the scope of the identity would read as gibberish rather than as wrong.
+        with pytest.raises(ValueError, match="tuple"):
+            SymbolicReduction(
+                claim="c₂ = ℓ₁²/4",
+                correspondence="registration RESULT 2026-08-07",
+                assumptions="R smooth at μ",  # ty: ignore[invalid-argument-type]
+            )
+
+    def test_a_claim_nobody_stated_does_not_construct(self):
+        # An empty field makes the type evidence-shaped with nothing in it, which is
+        # the failure `CheckReport` rejects one level up. Catching it here stops
+        # "PROVED needs evidence" from being satisfiable by a blank.
+        with pytest.raises(ValueError, match="claim"):
+            SymbolicReduction(claim="   ", correspondence="registration RESULT")
+
+    def test_a_correspondence_nobody_established_does_not_construct(self):
+        with pytest.raises(ValueError, match="correspondence"):
+            SymbolicReduction(claim="c₂ = ℓ₁²/4", correspondence="")
+
+    def test_renders_one_line_naming_the_claim_and_the_correspondence(self):
+        line = str(_reduction())
+        assert line.count("\n") == 0
+        assert "ℓ'(μ)²/4" in line
+        assert "RESULT 2026-08-07" in line
+
+    def test_renders_the_assumptions_it_carries(self):
+        # The scope travels with the evidence, so a reader sees it without reading the
+        # algebra.
+        line = str(_reduction())
+        assert "R smooth and positive at μ" in line
+        assert "no convergence claim" in line
+
+    def test_an_unscoped_reduction_says_so(self):
+        # Silence would read as an unconditional identity.
+        line = str(SymbolicReduction(claim="c₂ = ℓ₁²/4", correspondence="RESULT"))
+        assert "no assumptions recorded" in line
+
+
 class TestProvedNeedsEvidence:
     """`PROVED` with nothing behind it does not construct."""
 
@@ -266,6 +346,19 @@ class TestProvedNeedsEvidence:
         # A check quantified over two horizons carries both.
         pair = (_certificate(), _certificate())
         assert self._report(warrant=Warrant.PROVED, evidence=pair).evidence == pair
+
+    def test_proved_with_a_symbolic_reduction_constructs(self):
+        # Prover 2 decides its claim without enumerating anything, so a certificate is
+        # the wrong evidence for it and its absence is not a missing backing.
+        reduction = _reduction()
+        report = self._report(warrant=Warrant.PROVED, evidence=(reduction,))
+        assert report.evidence == (reduction,)
+
+    def test_a_claim_resting_on_both_kinds_carries_both(self):
+        # A symbolic identity asserted over an enumerated set of families rests on the
+        # reduction and on the certificate, and one of them understates it.
+        both = (_reduction(), _certificate())
+        assert self._report(warrant=Warrant.PROVED, evidence=both).evidence == both
 
     @pytest.mark.parametrize("warrant", [Warrant.CERTIFIED, Warrant.CORROBORATED])
     def test_the_weaker_levels_need_none(self, warrant):
@@ -393,10 +486,15 @@ class TestPublicSurface:
             CheckReport,
         )
 
+    def test_the_evidence_types_are_importable_too(self):
+        import cpomdp
+
+        assert cpomdp.SymbolicReduction is SymbolicReduction
+
     def test_the_vocabulary_is_in_the_package_all(self):
         import cpomdp
 
-        for name in ("Warrant", "Outcome", "Tier", "CheckReport"):
+        for name in ("Warrant", "Outcome", "Tier", "CheckReport", "SymbolicReduction"):
             assert name in cpomdp.__all__
 
 

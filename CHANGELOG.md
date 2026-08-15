@@ -21,6 +21,13 @@ an exposure rather than a result.
   reason. `CERTIFIED` is new: validated numerics prove a universal over a compact domain,
   which is stronger than a sample and weaker than a decision, and forcing it into either
   neighbour overclaims or throws away the bound (ADR-035).
+- `cpomdp.SymbolicReduction` — evidence for a `PROVED` claim decided by argument rather
+  than by enumeration (Provers 1 and 2). A CAS establishes that one expression equals
+  another and has nothing to say about whether those are the expressions the analytic
+  claim is about, which the warrant ledger records as a human obligation. The type carries
+  the claim, where the setup was hand derived against the problem, and the assumptions the
+  identity is contingent on. Blank fields do not construct, so a `correspondence` nobody
+  can fill honestly routes a check to `CORROBORATED` instead of passing silently.
 - `check_summary` prints `n registered, m tested here, k fired`, then counts per
   `(warrant × outcome)`. Registering four falsifiers and testing two is a different claim
   from testing four, and one number cannot carry both.
@@ -57,10 +64,11 @@ an exposure rather than a result.
 - `SearchWarrant` is an alias of `Warrant`. Every call site keeps its members and its
   return type, so `EFESelector.warrant` still reads `CORROBORATED` and
   `EnumeratedEfeSearch.warrant` still reads `PROVED`.
-- `PROVED` without evidence does not construct, enforced in `CheckReport`. A completeness
-  certificate is the only evidence today. A theorem citation joins it when a Prover 1
-  check needs one. Evidence is a tuple, so a claim quantified over several enumerations carries
-  all their certificates rather than one of them.
+- `PROVED` without evidence does not construct, enforced in `CheckReport`. Two kinds
+  qualify, one per decisive prover: a completeness certificate for an exhaustive
+  enumeration (3b), a `SymbolicReduction` for a theorem or a symbolic identity (1 and 2).
+  Evidence is a tuple, so a claim quantified over several enumerations carries all their
+  certificates rather than one of them.
 - A check that never ran carries no warrant. `CORROBORATED` asserts sampling-grade evidence
   was obtained, so attributing it to a falsifier void by construction claims evidence that
   does not exist. That cell reads `—`, enforced at construction.

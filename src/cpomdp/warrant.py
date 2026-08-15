@@ -20,15 +20,18 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     # Annotation-only. `enumeration` imports this module, so a runtime import here would
-    # close the cycle. Nothing below reads the evidence's fields.
+    # close the cycle. Nothing below reads the evidence's fields. The alias this feeds
+    # is declared under `SymbolicReduction`, which is its other arm.
     from cpomdp.enumeration import CompletenessCertificate
 
-    # What backs a ``PROVED`` claim. A completeness certificate is the only kind today,
-    # because 3b is the only decisive prover the suite runs. A theorem citation joins it
-    # when a Prover 1 check needs one.
-    Evidence = CompletenessCertificate
-
-__all__ = ["CheckReport", "Outcome", "Tier", "Warrant", "check_summary"]
+__all__ = [
+    "CheckReport",
+    "Outcome",
+    "SymbolicReduction",
+    "Tier",
+    "Warrant",
+    "check_summary",
+]
 
 
 class Warrant(Enum):
@@ -105,6 +108,75 @@ class Tier(Enum):
 
 
 @dataclass(frozen=True)
+class SymbolicReduction:
+    """What backs a Prover 2 claim: the correspondence a CAS cannot supply.
+
+    A CAS checks that one expression equals another. It does not check that those
+    expressions are the ones the analytic claim is about. That step is a human
+    obligation, named as such in the warrant ledger, and this is where it is recorded
+    instead of assumed. A reduction is evidence for
+    [`CheckReport`][cpomdp.CheckReport] on the same terms as a completeness
+    certificate, and the two are interchangeable there.
+
+    Args:
+        claim: the analytic statement, in words, that the symbolic identity stands for.
+        correspondence: where the symbolic setup was analytically checked against the
+            problem it stands for. A hand derivation by file and line, or a dated
+            registration result.
+        assumptions: what the reduction assumed, one condition per entry. The scope
+            travels with the evidence, so the contingency is visible without reading
+            the algebra.
+
+    Raises:
+        ValueError: if the assumptions are not a tuple, or if either of the other two
+            fields is blank.
+    """
+
+    claim: str
+    correspondence: str
+    assumptions: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        """Reject a reduction that records no obligation to have discharged."""
+        if not isinstance(self.assumptions, tuple):
+            raise ValueError(
+                "symbolic reduction passed assumptions as "
+                f"{type(self.assumptions).__name__}. Assumptions are a tuple, so a "
+                "bare string records one condition per character and the identity's "
+                "scope reads as gibberish. Wrap a single one: (assumption,)."
+            )
+        for name, value in (
+            ("claim", self.claim),
+            ("correspondence", self.correspondence),
+        ):
+            if not value.strip():
+                raise ValueError(
+                    f"symbolic reduction has a blank {name}. Prover 2 is theorem-grade "
+                    "only where the symbolic setup was hand derived against the "
+                    "analytic problem, so a reduction naming neither the statement nor "
+                    "where it was checked backs nothing. Fill both, or report "
+                    "CORROBORATED and say why in the check's detail."
+                )
+
+    def __str__(self) -> str:
+        """The reduction as one line: the claim, where it was checked, its scope."""
+        scope = (
+            f"assuming {'; '.join(self.assumptions)}"
+            if self.assumptions
+            else "no assumptions recorded"
+        )
+        return f"symbolic: {self.claim} (per {self.correspondence}, {scope})"
+
+
+if TYPE_CHECKING:
+    # What backs a ``PROVED`` claim, one member per decisive prover the suite runs. A
+    # completeness certificate decides by exhausting a finite domain (3b). A symbolic
+    # reduction decides by identity (Provers 1 and 2) and enumerates nothing, so a
+    # certificate is the wrong evidence for it rather than a missing one.
+    Evidence = CompletenessCertificate | SymbolicReduction
+
+
+@dataclass(frozen=True)
 class CheckReport:
     """One check's result: what it found, how well, and against what.
 
@@ -150,9 +222,10 @@ class CheckReport:
             raise ValueError(
                 f"check {self.name!r} reports PROVED with no evidence. A decided "
                 "universal needs something statable behind it: a completeness "
-                "certificate for an exhaustive enumeration (Prover 3b), a citation "
-                "for a theorem (1 or 2). Report CERTIFIED for a bound over a compact "
-                "domain, CORROBORATED for a sample."
+                "certificate for an exhaustive enumeration (Prover 3b), a "
+                "SymbolicReduction for a theorem or a symbolic identity (Provers 1 "
+                "and 2). Report CERTIFIED for a bound over a compact domain, "
+                "CORROBORATED for a sample."
             )
         if self.outcome not in _TESTED_HERE and self.warrant is not None:
             raise ValueError(

@@ -139,6 +139,27 @@ the heading carries its decision date. Reserving numbers against unwritten work 
 the moment one PR needs two, and it sorts the file against the commit record, which is
 what an audit reads. Landed work keeps the number it took: PR-1 is ADR-035, PR-1b ADR-036.
 
+**Work outside the ladder.** Issue #65's continuation runs beside this numbering rather
+than in it, since a `PR-N` label would collide with the plan's own. Three branches, in
+order, all serving PR-8's registration:
+
+| branch | the question it settles |
+| --- | --- |
+| `65-warrant-symbolic-evidence` | does the programme accept a Prover 2 evidence type, and what must it carry |
+| `65-gap-series-c2-gate` | the symbolic kernel, the warrant wiring, and `c₂` |
+| `65-gap-series-c4` | σ⁴ and `c₄` |
+
+The first is `src/cpomdp/warrant.py` and its docs page and nothing else. Its review
+question is distinct from any derivation and gets waved through if buried in one. Landed
+there: `SymbolicReduction`, carrying the claim, where the setup was hand derived against
+the problem, and the assumptions the identity is contingent on. `Evidence` becomes a union
+of it and `CompletenessCertificate`, so `PROVED` is reachable by argument as well as by
+enumeration. Blank fields do not construct, which is what keeps the correspondence from
+being a formality.
+
+Results from the other two land in `research/gate_d4_registration.md` and the modules under
+`research/checks/`, not here.
+
 **Every PR.** `uv run --no-sync pytest -m "not rxinfer and not slow"` green,
 `uv run --no-sync ruff check src/cpomdp tests examples mkdocs_hooks.py` clean,
 `uv run --no-sync ty check` clean, `mkdocs build --strict` green whenever a docstring or

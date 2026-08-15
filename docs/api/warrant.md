@@ -26,13 +26,23 @@ A registered falsifier does not pass. It fires or it does not, and `PASS` is abs
 
 A check that never ran carries no warrant. `CORROBORATED` means sampling-grade evidence was obtained, so attributing it to a falsifier that sampled nothing claims evidence that does not exist. The warrant is `None` there and prints as `—`, enforced at construction.
 
-A `PROVED` report needs evidence, enforced at construction. `CompletenessCertificate` is the only kind today, since exhaustive enumeration is the only decisive prover the suite runs. A theorem citation joins it when a Prover 1 check needs one. The weaker levels need none, because a bound and a sample carry their story in `detail`. Report `PROVED` with nothing behind it and the constructor raises.
+A `PROVED` report needs evidence, enforced at construction. There are two kinds, one per decisive prover. `CompletenessCertificate` backs an exhaustive enumeration over a finite domain (3b). `SymbolicReduction` backs a theorem or a symbolic identity (Provers 1 and 2), which decide by argument and enumerate nothing, so a certificate is the wrong evidence for them rather than a missing one. The weaker levels need none, because a bound and a sample carry their story in `detail`. Report `PROVED` with nothing behind it and the constructor raises.
 
 ::: cpomdp.Outcome
 
 ::: cpomdp.Tier
 
 ::: cpomdp.CheckReport
+
+## Evidence a symbolic claim carries
+
+A CAS is a checker, not a witness. It establishes that one expression equals another, and it has nothing to say about whether those expressions are the ones the analytic claim is about. The warrant ledger records that step as a human obligation, which is the condition on Prover 2 being theorem-grade at all.
+
+`SymbolicReduction` is where the obligation is discharged rather than assumed. `correspondence` names where the setup was analytically checked against the problem: a hand derivation by file and line, or a dated registration result. A field that cannot be filled honestly is the signal to report `CORROBORATED` and say why, so the type is not a formality. Blank fields do not construct.
+
+`assumptions` carries the scope. An identity contingent on smoothness, on positivity, or on an expansion being formal rather than convergent is a different claim from one that is not, and the difference belongs beside the evidence instead of in the algebra a reader would have to redo.
+
+::: cpomdp.SymbolicReduction
 
 ## Reading a run
 

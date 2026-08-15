@@ -194,7 +194,15 @@ def test_crossover_falsifiers_are_reports():
     assert len(proved) == 2
     for report in proved:
         assert report.evidence
-        assert all(c.complete for c in report.evidence)
+        # Evidence widened to two kinds when `SymbolicReduction` landed. These rows are
+        # decided by enumeration, so which kind they carry is part of the assertion.
+        certificates = [
+            item
+            for item in report.evidence
+            if isinstance(item, CompletenessCertificate)
+        ]
+        assert len(certificates) == len(report.evidence)
+        assert all(certificate.complete for certificate in certificates)
         # The other axis: decided by enumeration, and measured against a stated bar.
         # A Tier B row has to name the bar, or the tier is a label with nothing under
         # it. `bound` is what the margin was read against.
