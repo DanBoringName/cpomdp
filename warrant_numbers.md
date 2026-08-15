@@ -265,7 +265,7 @@ the statistic, not a tuned parameter.
 | number | value | what it is |
 | --- | --- | --- |
 | `H*` (registered set) | 7 | first horizon whose exhaustive argmin over `crossover-v1^H` is cue-ward — a two-phase walk `[+1,−2,−2,0,0,0,0]`. Cue-ward at H = 7, 8, 9 |
-| `H*` (with optimal reach) | 6 | on `{−3,…,2}`, which contains the unconstrained optimal reach `−3`. So the registered 7 is an upper bound (the grid clips the reach at `−2`) |
+| `H*` (with the one-step reach) | 6 | on `{−3,…,2}`, which contains `−3`, the action reaching the goal in one step from the start. So the registered 7 is an upper bound (the grid clips the reach at `−2`). Wider sets are not measured: `−3` is not established as optimal, since the walk arrives at the cue at `x = +1`, from where the goal is a displacement of `−4` |
 | `ΔG(7)` | −0.1520 | `G(walk) − G(reach)` at H=7; the flip margin. Relative size 3.6e−4 against `G ≈ 425`, so the margin is small and must be shown well-conditioned |
 | pragmatic-only crossing | H ≈ 10 | with the epistemic term zeroed, the argmin is prior-ward through H = 9 and crosses near 10 — so the ~1.7-nat epistemic pull is what advances the flip to 7 |
 | `H_max` | 9 | declared feasibility bound; enumeration cost `5⁹·9 = 17,578,125` scored steps, measured. Larger H_max is a declared budget increase |
@@ -361,7 +361,7 @@ no warrant at all, since neither produced evidence here.
 
 **What this bound does not cover.** It certifies the float arithmetic, which was never the
 fragile part of `H* = 7`. The live exposure is falsifier 4: `H*` is an upper bound, because
-the declared set clips the reach at `−2` while the unconstrained optimum is `−3`, and a set
+the declared set clips the reach at `−2` while `−3` reaches the goal in one step, and a set
 containing `−3` flips at 6. A Tier B row reading `8.0e3x` clear invites a reader to take
 the number as firmer than it is, so the qualifier travels in both detail strings and not
 only here.

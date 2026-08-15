@@ -75,7 +75,7 @@ an exposure rather than a result.
 - `examples/ffg/crossover.py --check` reports its falsifiers on two axes. Rows 1 and 2 read
   `PROVED` from the enumeration certificates and Tier B from the error bound. The `H* = 7`
   upper-bound qualifier now travels in both detail strings, not only in the write-up. The
-  declared set clips the reach at `-2` while the optimum is `-3`. A margin inside its
+  declared set clips the reach at `-2` while `-3` reaches the goal in one step. A margin inside its
   bound reports `NOT RESOLVED` rather than raising, since a tie is a finding about the
   measurement and an exception erases it.
 - ADR-029 said the check vocabulary must never ship in `cpomdp`. ADR-035 reverses that on

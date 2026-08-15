@@ -220,7 +220,7 @@ Two items the audit added, neither registered above:
       from one already declared rather than invented. A margin inside it reports
       `NOT RESOLVED`, not an `AssertionError`.
 - [x] `H* = 7` is an upper bound, because the declared set clips the reach at `−2` while
-      the optimum is `−3`. That qualifier now travels in the detail of both Tier B rows,
+      `−3` reaches the goal in one step. That qualifier now travels in both Tier B rows,
       not only in the write-up.
 
 **Merge gate:** the negative-eigenvalue rejection test passes on kernel and oracle. The
