@@ -37,6 +37,10 @@ Without a candidate, G4 reports ``NOT_RUN_HERE`` and says what it is waiting for
     uv run --no-sync python -m research.checks.gap_expansion
 
 Outcome mapping and the ``CORROBORATED`` warrant follow ``predictive_truncation``.
+
+``log_ratio_series`` is the symbolic counterpart. It proves the gap carries nothing at
+`σ⁰` or `σ¹`, which is *why* G4a finds a quartic residual after `c₂σ²` comes off. That
+module supplies the reason and this one the measurement. Neither produces a coefficient.
 """
 
 from __future__ import annotations
