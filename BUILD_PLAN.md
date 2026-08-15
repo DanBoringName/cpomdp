@@ -534,15 +534,19 @@ prose survived them, which is a failure mode worth not repeating.
       coefficient. The module reports and does not fix. The production grid rule stays where
       it is and the red cells are the output.
 - [x] `gap_expansion.py`. Structure of the small-spread expansion **without** its
-      coefficients. It certifies the gap on three axes, checks `c₂` against its closed form,
-      and tests the residual's *exponent* after each known term comes off. It never fits a
-      `c₄`, because a number produced here would become the thing the derivation is checked
-      against, and the ledger would carry a Tier C fit under a Prover 1 label. Pass a
-      derived candidate in with `--c4` and G4b tries to refute it.
+      coefficients. It certifies the gap on three axes, checks `c₂` against its closed form
+      to `5.8e−7` relative or better on all four families, and tests the residual's
+      *exponent* after each known term comes off: `σ^3.965` to `σ^4.038` against a predicted
+      `σ⁴`. Seven of 38 cells fire, all G3 quadrature certification on the two bounded
+      families below `σ = 0.04`, where the `x`-extent and refinement tolerances sit up to
+      21× over a `1e-10` bar. It never fits a `c₄`, because a number produced here would
+      become the thing the derivation is checked against and the ledger would carry a Tier C
+      fit under a Prover 1 label. Pass a derived candidate in with `--c4` and G4b tries to
+      refute it.
 - [x] `log_ratio_series.py`. Symbolic pins for the log-ratio series `W`, 28 of them, all
       holding. It stops at first order in `σ` and its expectation, which is where the
-      structure lives and the arithmetic does not. Adds `sympy` as a dev dependency;
-      nothing under `src/cpomdp` imports it.
+      structure lives and the arithmetic does not. Adds `sympy` as a dev dependency.
+      Nothing under `src/cpomdp` imports it.
 
 - [ ] Write down the **pre-agreed factor** before this PR is opened. A factor agreed after
       seeing the bound is not a gate. The registration is where it goes, and `T` is an
