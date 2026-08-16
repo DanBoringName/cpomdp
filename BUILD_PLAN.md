@@ -141,7 +141,8 @@ wait on the gate.
 **ADR numbers are not pre-allocated.** A PR takes the next free number when it lands, and
 the heading carries its decision date. Reserving numbers against unwritten work collides
 the moment one PR needs two, and it sorts the file against the commit record, which is
-what an audit reads. Landed work keeps the number it took: PR-1 is ADR-035, PR-1b ADR-036.
+what an audit reads. Landed work keeps the number it took: PR-1 is ADR-035, PR-1b ADR-036,
+issue #65's symbolic track ADR-037.
 
 **Work outside the ladder.** Issue #65's continuation runs beside this numbering rather
 than in it, since a `PR-N` label would collide with the plan's own. Three branches, in
@@ -203,12 +204,42 @@ now reports them as `CheckReport`. `gap_series.py` derives `c₂` and stops.
 - [x] Deleting the Kalman shift from `h` fires **five checks**: T4's `σ²` coefficient
       and its Kalman-shift report, and K4 at `σ²`, `σ³` and `σ⁴`. T4 is the only one
       that names the shift. K4 reports only that two paths disagree. `gap_series` stays
-      blind
-      to it, because at `σ²` the gap reads only the first-order term of `W`. That was
-      measured rather than assumed, and it is what the quartic work inherits.
-- [ ] `c₄`. Not started, and nothing in these modules fits or guesses one. A number
-      produced before the derivation lands becomes the thing the derivation is checked
-      against. `gap_expansion --c4` is the refutation route and produces no candidate.
+      blind to it, because at `σ²` the gap reads only the first-order term of `W`. That
+      was measured rather than assumed, and it is what the quartic work inherits.
+
+Landed on the third, in the same three modules. `series_kernel.py` gained the exponential
+series and the exact predictive average. `gap_series.py` runs to `σ⁴` and derives `c₄`.
+**ADR-037** carries the three decisions: what a Prover 2 claim is backed by, how the
+expansion and the predictive are computed, and what happens to a result produced out of
+order.
+
+- [x] `c₄ = 7ℓ₁⁴/16 − ℓ₁²ℓ₂/4 + ℓ₂²/8 + ℓ₁ℓ₃/4 − 3ℓ₁²/(4R̄)`, on free `ℓ₁..ℓ₄` and a
+      symbolic `R̄`. Every registered prediction holds. The five conjectured fractions are
+      the derived ones, the two coefficients reported consistent with zero are identically
+      zero, the seven-term basis spans it with no remainder, and the exponential family
+      keeps the two terms section 2 of the registration said it could. At the declared
+      operating point it is `−3/16`, 1.2% off the Tier C fit it supersedes.
+- [x] The innovation is averaged under the exact predictive `ν = σz₁ + √R̄·e^{δ/2}·z₂`.
+      Collapsing it to `N(0, R̄)` leaves `c₂` untouched and gives a `c₄` 5.7 times the
+      exact one, so the nesting decides the coefficient rather than refining it. C9
+      measures the difference symbolically. `predictive_truncation` had already recorded
+      why: `p*` is a scale mixture with exponential tails.
+- [x] 69 identities now, up from 52: 22 in `series_kernel`, 18 in `log_ratio_series`, 29
+      in `gap_series`. All `PROVED` at Tier A on a `SymbolicReduction`.
+- [x] The derivation ran before anything registered it, and that is disclosed at the head
+      of the registration's section 7 rather than repaired. Rerunning after registering
+      would be a rerun by someone who knows the answer.
+- [x] The three families not yet run were registered before their runs, with the bar and
+      the VOID escape declared. `exp(x)` carries `c₄` of the opposite sign to the quadratic
+      family, so a formula fitted to the quadratic could not produce it.
+- [x] Those runs: `exp(x)` at σ^5.984, `sin` at σ^6.004, `tanh` **fired** at σ^6.302
+      against a 0.25 bar. `sin` did not need the escape it was granted. The fire stands as
+      fired. It sits on the over-cancellation side of 6 and the registration set
+      refutation at 5 or below, so the closed form is neither refuted nor passed by that
+      cell.
+- [ ] G4c, leave-one-out exponent stability in `gap_expansion.py`, written against a
+      pre-registration that declares its three readings for the `tanh` fire. It cannot
+      convert the fired cell into a pass. The four family runs are not recorded yet.
 
 Results from the third land in `research/gate_d4_registration.md`, not here.
 
@@ -577,8 +608,16 @@ what makes the timing checkable.
       registered `X = 0.1`. The branch was decided without the answer visible.
 - [x] The convergence shortfall at the bottom of the range disclosed before the refit, not
       after it.
-- [ ] `T`, `D` and `k_min` are still outstanding. `T` needs `c₄` scanned along the ridge
-      rather than at the single operating point.
+- [x] `c₄` in closed form, which supersedes that refit:
+      `7ℓ₁⁴/16 − ℓ₁²ℓ₂/4 + ℓ₂²/8 + ℓ₁ℓ₃/4 − 3ℓ₁²/(4R̄)`. Derived symbolically on the
+      branch above, against predictions the registration carried at earlier dates. The
+      fit's residual error is explained rather than absorbed: it was a Tier C extraction
+      of a small rational. Section 7 of the registration holds it, the disclosure that the
+      run preceded its registration, and the out-of-sample runs on the other families,
+      where `tanh` fires.
+- [ ] `T`, `D` and `k_min` are still outstanding. `T` needs `c₄` along the ridge rather
+      than at the single operating point, which the closed form makes an evaluation rather
+      than a refit.
 - [ ] Subtraction moved the upper edge, and this is an open question the decision created.
       `σ_max` was defined as where the quartic reaches a fraction `f` of the quadratic. With
       the quartic subtracted the binding truncation is `c₆`, which is unmeasured. Either
@@ -615,11 +654,21 @@ prose survived them, which is a failure mode worth not repeating.
       21× over a `1e-10` bar. It never fits a `c₄`, because a number produced here would
       become the thing the derivation is checked against and the ledger would carry a `COMPUTED`
       fit under a Prover 1 label. Pass a derived candidate in with `--c4` and G4b tries to
-      refute it.
-- [x] `log_ratio_series.py`. Symbolic pins for the log-ratio series `W`, 28 of them, all
+      refute it. G4c refits G4b's exponent once per omitted `σ` cell and reports the
+      spread, which classifies a fired G4b as grid instability or as a real deviation. It
+      is a diagnostic and revises no outcome.
+- [x] `series_kernel.py`. The construction of `W`, its truncated expansion, the moment
+      operator, and the exact predictive average. 22 pins. Explicit polynomial truncation
+      rather than `sympy.series`, which does not terminate on the assembled `W`. `series`
+      survives as the independent arm that licenses the swap through `σ³`.
+- [x] `log_ratio_series.py`. Symbolic pins for the log-ratio series `W`, 18 of them, all
       holding. It stops at first order in `σ` and its expectation, which is where the
       structure lives and the arithmetic does not. Adds `sympy` as a dev dependency.
       Nothing under `src/cpomdp` imports it.
+- [x] `gap_series.py`. `c₂` and `c₄` from the kernel, 29 identities. No floats, no family,
+      no value for `R̄`, so there is no quantity a measured number could be substituted
+      into. That is what makes the agreement with the earlier fit evidence rather than
+      circularity, and it is checkable by reading the module.
 
 - [ ] Write down the **pre-agreed factor** before this PR is opened. A factor agreed after
       seeing the bound is not a gate. The registration is where it goes, and `T` is an
@@ -697,8 +746,8 @@ merge block on **PR-9 and PR-10**.
 - [~] Write down the pre-agreed factor before PR-8 is opened.
       `research/gate_d4_registration.md` carries it. The family, the stop branches and the
       gate's form as `gap > T` are all dated 2026-08-07, before any coefficient existed.
-      `c₂` and `c₄` have since landed. `T` is still an expression, so the item closes when
-      `T` takes a value, and that has to happen before PR-7 merges.
+      `c₂` and `c₄` have since landed, both in closed form. `T` is still an expression, so
+      the item closes when `T` takes a value, and that has to happen before PR-7 merges.
 - [ ] Mark PR-9 and PR-10 blocked in the tracker, not by convention. A gate honoured by
       memory is not honoured.
 - [ ] Tag v0.4.5 at PR-8's merge regardless of outcome.
