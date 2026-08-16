@@ -2168,6 +2168,108 @@ number that occasionally drops a quarter is a poor basis for a declared budget.
 
 ---
 
+## ADR-037 — symbolic evidence, and a result that ran before its registration
+
+**Date:** 2026-08-16
+**Status:** Accepted
+**Phase:** v0.4.5 (certifiable active inference, GATE-D4 groundwork)
+**Extends:** ADR-035 (the warrant vocabulary and the evidence precondition)
+
+### The question
+
+Issue #65's symbolic track needed three things decided. What backs a Prover 2 claim, since
+`CheckReport` refuses `PROVED` without evidence and a completeness certificate is the wrong
+object for a claim decided by argument. How the expansion is computed, since the obvious
+route does not terminate. And what the programme does when a registered-track result is
+produced before anything registers it, which is the one that happened rather than the one
+that was planned.
+
+### Decision 1 — `SymbolicReduction` is what a Prover 2 claim carries
+
+The warrant ledger puts symbolic computation at theorem-grade *"provided the symbolic
+reduction is faithful to the analytic claim, which is a human obligation the CAS does not
+discharge."* A CAS establishes that one expression equals another. Whether those are the
+expressions the claim is about is not a thing it can be asked.
+
+`SymbolicReduction` records that obligation: the claim in words, where the setup was hand
+derived against the problem, and the assumptions the identity is contingent on. `Evidence`
+becomes a union of it and `CompletenessCertificate`, one member per decisive prover.
+
+Blank fields do not construct. Without that the type is a formality and the rule it
+encodes has nothing enforcing it. That rule: a correspondence nobody can fill honestly
+means the check reports `CORROBORATED` and says why in its detail.
+
+### Decision 2 — the expansion is built by truncation, and the predictive is exact
+
+`sympy.series` on the assembled log-ratio does not terminate in fifteen minutes. Every
+primitive is therefore an explicit polynomial in `σ`, geometric for the gain, binomial for
+the posterior width and the exponential series for `e^{−δ}`, with truncation applied inside
+each product rather than at the end. `series` survives only in the checks, on small rational
+functions, where it is the independent arm that licenses the swap. The load-bearing check is
+that the truncation path reproduces `series` on the assembled `W` term for term through
+`σ³`, which is as far as `series` can be afforded.
+
+The two order conventions differ and the difference is real: `series(expr, x, 0, n)` keeps
+powers *below* `n`, `truncate(expr, order)` keeps powers *up to and including* `order`.
+Reading one as the other silently drops the top term. It was misread once, during this work.
+
+At `σ⁴` the innovation is averaged under the exact `ν = σz₁ + √R̄·e^{δ/2}·z₂`, not under a
+Gaussian with a corrected variance. This is not a refinement. The leading-order predictive
+gives a `c₄` that is 5.7 times the exact one at the declared operating point and matches no
+measurement, so the choice decides the coefficient rather than polishing it.
+`predictive_truncation` had already recorded why: `p*` is a scale mixture with exponential
+tails, and no Gaussian stands in for it at any variance.
+
+### Decision 3 — a result produced out of order is disclosed, not discarded
+
+The `c₄` derivation was run before any amendment registered what it would produce or what
+would count as a failure. Three responses were available.
+
+**Discard and redo after registering.** Rejected. The result cannot be unseen, so a rerun
+would be a rerun by someone who knows the answer, and presenting it as fresh would be a
+worse misrepresentation than the original slip.
+
+**Argue that no harm was done.** Rejected as insufficient on its own. "We did not tune it"
+is not a claim a reviewer can test, and a defence that rests on our own account of our
+intentions is exactly the kind the falsification battery exists to refuse.
+
+**Disclose the sequence, separate content from schedule, and repair what is still
+repairable.** Adopted. `research/gate_d4_registration.md` section 7 carries the numbered
+sequence at its head, before the result. The predictions the derivation did satisfy are
+cited by their earlier dates in the same file, so their standing is checkable from the git
+history rather than from assertion. The independence argument is made structural rather than
+biographical: the symbolic modules contain no floats, no family and no value for `R̄`, so
+there is no quantity a fitted number could have been substituted into, and a reader can
+confirm that by reading them. The derivation also disagrees with the fit by 1.2%, which is
+not what steering toward it produces.
+
+What that does not repair is the ordering, and the section says so in those words. The
+repair is applied where it still can be: the three families not yet run are pre-registered
+with their predicted coefficients, their pass bar and their VOID condition, before the runs.
+
+**The standing rule this sets.** A registered-track result computed before its registration
+is recorded with its sequence, at the head of the section that reports it, and the remaining
+untested cases are pre-registered before they are run. The disclosure is not a penalty and
+does not weaken the result's content. It changes what may be claimed about the result's
+*schedule*, which is a separate axis, and one a reader is entitled to judge separately.
+
+### Consequences
+
+- `SymbolicReduction` is public API and carries a `docs/api` page. A `PROVED` report is now
+  reachable by argument as well as by enumeration.
+- 52 identities across `series_kernel`, `log_ratio_series` and `gap_series` report `PROVED`
+  at Tier A, each carrying a reduction. Mutation probes confirm the suite discriminates
+  rather than merely agreeing.
+- `c₄` moves from a Tier C fit with a 0.36% extraction spread to a closed form. The fit's
+  residual error is explained rather than absorbed, and the registration's simple-fraction
+  hypothesis is settled instead of left open.
+- Section 7 of the registration is the one place in that file where the ordering has to be
+  argued rather than read off the commit record. It is marked as such in the "What was known
+  when" table so a reader finds it without looking for it.
+- The quadratic family's cell is post-hoc in its scheduling. The other four are
+  out-of-sample. Any write-up quoting `c₄` carries that split rather than averaging over it.
+
+---
 ## ADR-038 — the warrant vocabulary drops its letters
 
 **Date:** 2026-08-17
@@ -2261,3 +2363,5 @@ ADR-030 and ADR-035 for that reason, and the map above is what translates them.
 - `research/` is covered by neither `ty` nor `pytest`, so the check modules under
   `research/checks/` were smoke-run by hand rather than caught by CI. That gap is real
   and this decision does not close it.
+
+---

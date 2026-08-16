@@ -736,6 +736,147 @@ it. `D` then does double duty.
 Also registered here: the two failure modes the battery already calls *boring* and excludes
 from the agreement criterion in advance.
 
+## 7. `c₄` in closed form (RESULT 2026-08-16), and the disclosure that it ran first
+
+### DISCLOSURE 2026-08-16: the derivation ran before this entry existed
+
+Recorded first, because it is the part a reader has to be able to audit and because the
+sequence cannot be repaired by describing it well.
+
+The symbolic pipeline (`research/checks/series_kernel.py`, `research/checks/gap_series.py`)
+was extended to `σ⁴` and run **before** any amendment registered what the run would
+produce or what would count as a failure. In order, on 2026-08-16:
+
+1. The exact predictive nesting was added to the kernel.
+2. `c₄` was computed symbolically at `σ⁴`, on free `ℓ₁..ℓ₄` and a symbolic `R̄`.
+3. It was evaluated at the declared operating point, giving `−3/16`.
+4. It was compared against the `−0.18980` of RESULT 2026-08-10.
+5. `gap_expansion --check --families quadratic --c4 -0.1875` was run, and did not refute.
+
+Steps 2 to 5 have no prior registration naming them. Everything below in this section that
+is labelled a *result* is therefore post-hoc in its scheduling, whatever its content, and
+should be read as such.
+
+### What was registered before it, and is therefore predicted rather than fitted
+
+Four statements were in this file with earlier dates, and the derivation was in a position
+to contradict every one of them:
+
+- **The seven-term dimensional basis** (section 2, 2026-08-07), with its parity argument
+  for completeness. The derivation had to land inside that span or refute it.
+- **The two coefficients consistent with zero** (RESULT 2026-08-10): `ℓ''''` at 0.1% and
+  `ℓ''/R` at 0.3% of the largest term, reported as consistent with zero rather than
+  deleted.
+- **The simple-fraction hypothesis** (RESULT 2026-08-10): `{7/16, −1/4, 1/8, 1/4, −3/4}`,
+  against which the fitted ratios were 0.991, 1.011, 1.056, 1.009 and 0.995. That entry
+  says in terms that the fractions are "close but not exact at this precision" and "not
+  established".
+- **The exponential-family reduction** (section 2): for `R = A·e^{bx}`, exactly two of the
+  seven terms may survive, `c₄ = α·b⁴ + ζ·b²/R(μ)`.
+
+### RESULT 2026-08-16: the closed form
+
+```text
+c₄  =  7ℓ₁⁴/16  −  ℓ₁²ℓ₂/4  +  ℓ₂²/8  +  ℓ₁ℓ₃/4  −  3ℓ₁²/(4R̄)
+```
+
+Against the seven-term basis and the fit of RESULT 2026-08-10:
+
+| term | fitted 2026-08-10 | derived 2026-08-16 | registered hypothesis |
+| --- | --- | --- | --- |
+| `ℓ'⁴` | +0.43231 | **7/16** = +0.4375 | 7/16 |
+| `ℓ'²ℓ''` | −0.25874 | **−1/4** | −1/4 |
+| `ℓ''²` | +0.12985 | **1/8** | 1/8 |
+| `ℓ'ℓ'''` | +0.24935 | **1/4** | 1/4 |
+| `ℓ''''` | −0.00068 | **0** | consistent with zero |
+| `ℓ'²/R` | −0.74537 | **−3/4** | −3/4 |
+| `ℓ''/R` | +0.00192 | **0** | consistent with zero |
+
+Every registered prediction holds. The five fractions are the hypothesised ones, the two
+zeros are identically zero, the span is the declared basis with nothing left over, and the
+exponential family keeps exactly the two terms section 2 said it could, with `α = 7/16` and
+`ζ = −3/4`.
+
+**At the declared operating point** (`κ = 1`, `μ* = 1`, so `R̄ = 2`, `ℓ₁ = 1`, `ℓ₂ = 0`,
+`ℓ₃ = −1`): `c₄ = −3/16 = −0.1875` exactly, against the fitted `−0.18980`. **They disagree
+by 1.2%**, which is 3.4 times the 0.36% jackknifed extraction spread and above the 1.03%
+basis-fit error. The derivation supersedes the fit, and the fit's residual error is now
+explained rather than absorbed: it was a Tier C extraction of a quantity whose true value
+is a small rational.
+
+**The exact predictive is what makes it work, and this is the sharpest thing in the
+section.** Averaging over a leading-order `N(0, R̄)` predictive instead of the exact
+`ν = σz₁ + √R̄·e^{δ/2}·z₂` gives
+
+```text
+c₄(leading order)  =  −3ℓ₁⁴/16  −  ℓ₁²ℓ₂/2  +  ℓ₂²/8  +  ℓ₁ℓ₃/4  −  5ℓ₁²/(4R̄)
+```
+
+which is `−1.0625` at the operating point, 5.7 times the derived value and of no
+resemblance to the fit. `predictive_truncation` had already recorded that `p*` is a scale
+mixture with exponential tails and that no Gaussian stands in for it at any variance. This
+is that finding biting a coefficient.
+
+**The refutation attempt that has been run.** `gap_expansion`'s G4b subtracts a candidate
+and reads the residual's exponent: a candidate wrong by any amount leaves the `σ⁴` term
+surviving and the exponent near 4. On the quadratic family it returned **σ^5.982** against
+a predicted `σ⁶`, bar 0.25, and did not fire. Without a candidate the same cells return
+σ^4.038.
+
+### Why a tuned derivation is not available as an explanation
+
+The claim a reviewer should test is not that we avoided looking at the fit. It is that the
+derivation could not have been aimed at it:
+
+- **The symbolic path contains no numbers.** `series_kernel.py` and `gap_series.py` carry
+  no floats, no family, and no value for `R̄`. `ℓ₁..ℓ₄` are free symbols throughout. There
+  is no quantity in either module that a fitted `−0.18980` could have been substituted
+  into. This is checkable by reading the two files, and by the checks that fail if `R̄` is
+  ever set to one.
+- **It disagrees with the fit.** A derivation steered toward `−0.18980` would arrive at
+  `−0.18980`. It arrives at `−3/16`, outside the fit's own tightest declared bar.
+- **It was refutable and was put at risk.** The two zeros, the basis span and the
+  exponential-family reduction were all registered earlier and could each have come out
+  wrong.
+- **The falsifier is independent of the derivation.** G4b reads a residual *exponent* from
+  quadrature and never sees the symbolic path.
+
+What none of that repairs is the scheduling in the disclosure above. The correct reading is
+that the content is strong and the ordering is weak, and the ordering is fixed for the
+remaining families below rather than argued away.
+
+### PRE-REGISTRATION 2026-08-16: the three families not yet run
+
+Registered **before** the runs, so what follows is a genuine out-of-sample test. The
+derived formula is evaluated on the other declared families of
+`research/checks/gap_kernel.py`, all at `μ = 1`. Only the quadratic row has been measured.
+
+| family | `ℓ₁` | `ℓ₂` | `ℓ₃` | `R̄` | predicted `c₂` | predicted `c₄` | status |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `1 + x²` | 1.000000 | 0.000000 | −1.000000 | 2.00000 | +0.2500000 | **−0.1875000** | run, not refuted |
+| `exp(x)` | 1.000000 | 0.000000 | 0.000000 | 2.71828 | +0.2500000 | **+0.1615904** | not run |
+| `1.5 + 0.5 tanh(x)` | 0.111648 | −0.182526 | 0.225000 | 1.88080 | +0.0031163 | **+0.0061107** | not run |
+| `1.5 + 0.5 sin(x)` | 0.140650 | −0.238832 | −0.042657 | 1.92074 | +0.0049456 | **−0.0007420** | not run |
+| `2 (fixed)` | 0 | 0 | 0 | 2.00000 | 0 | **0** | not run |
+
+**The prediction has teeth.** `c₄` changes sign between `1 + x²` and `exp(x)`, so a formula
+that merely fitted the quadratic family cannot survive the exponential one. `tanh` and
+`sin` sit three orders lower and also differ in sign from each other.
+
+**What counts as a pass, declared now.** G4b's residual exponent within 0.25 of 6, the bar
+already in `gap_expansion`. Anything at or below 5 on a family whose quartic is resolvable
+refutes the closed form.
+
+**What counts as VOID rather than a pass, also declared now.** For `1.5 + 0.5 sin(x)` the
+predicted `c₄` is 0.15% of `c₂`, so on the declared `σ` grid the quartic term sits near the
+quadrature floor and `c₆` may dominate the residual before the quartic does. If the
+measured residual is at or under the floor, that cell is **VOID on resolving power**, not a
+pass and not a refutation. The same escape is *not* available to `1 + x²` or `exp(x)`,
+where the quartic is percent-level.
+
+**The fixed-`R` row is a falsifier of the instrument, not of the formula.** The gap is
+identically zero there, so a non-zero `c₄` would be a bug in the pipeline.
+
 ## Stop conditions (DECLARED 2026-08-07)
 
 Two branches, disjoint, split by which half of the instrument failed.
@@ -772,6 +913,9 @@ it exists to close.
 | 2026-08-07 (fifth) | the `μ`-factor correction, `T` evaluated at the binding `κ`, and `D` as a bias argument | `c₄`, `β`, `f`, `D`, `k_min`, `T`, R6's signal, `δ_ref` |
 | 2026-08-07 (sixth) | `T = f·c₂²/\|c₄\|·10^(−2D)` with the "curvature" naming audited, the noise term set by `k` rather than by quadrature, `D` as an expression in `k`, and the dilute-versus-subtract rule | `c₄`, `X`, `β`, `f`, `D`, `k_min`, `T`, R6's signal, `δ_ref` |
 
+| 2026-08-15 | `c₂ = ℓ₁²/4` as a **symbolic identity** rather than a verified closed form, Prover 2 with a `SymbolicReduction` | `c₄`, `X`, `β`, `f`, `D`, `k_min`, `T`, R6's signal, `δ_ref` |
+| 2026-08-16 | `c₄` in closed form, all seven basis coefficients, and the quadratic family's refutation attempt. Recorded in section 7 **after** the run, which section 7 discloses | `X`, `β`, `f`, `D`, `k_min`, `T`, R6's signal, `δ_ref`, and the three unrun families |
+
 Every number GATE-D4 turns on was unknown on the date the family was declared, and `T`,
 R6's signal and `δ_ref` are unknown still. That is the claim this document exists to make
 checkable, and this file's git history is the evidence.
@@ -780,3 +924,11 @@ Amendments are appended and dated rather than folded into the text they correct,
 reader can see what was believed when. Two stand so far: the prior mean was missing from
 the family, and the registered method for `c₂` and `c₄` computed a quantity that is zero by
 construction.
+
+**One entry is out of order, and it is marked.** Section 7's `c₄` was derived and tested on
+one family before anything registered it. The disclosure sits at the head of that section
+rather than in a footnote, the predictions it did satisfy are dated earlier in this file,
+and the families it has not been tested on are pre-registered with their expected values
+before those runs. A reader who wants to know whether this file was written to fit its
+results should start there, since it is the one place where the ordering has to be argued
+rather than read off the git history.
