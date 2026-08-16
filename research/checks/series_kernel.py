@@ -443,6 +443,7 @@ def predictive_expectation(expression: sympy.Expr, order: int) -> sympy.Expr:
     return truncate(gaussian_expectation(standardised, Z2), order)
 
 
+@cache
 def innovation_series(order: int) -> sympy.Expr:
     """`ν` under the true predictive, expanded in `σ`.
 
@@ -457,8 +458,8 @@ def innovation_series(order: int) -> sympy.Expr:
     inference happens.
 
     This is what replaces treating `p*` as a Gaussian with a corrected variance.
-    ``predictive_truncation`` measures what that treatment costs: `p*` is a scale mixture
-    with exponential tails, so no Gaussian stands in for it at any variance.
+    ``predictive_truncation`` measures what that treatment costs: `p*` is a scale
+    mixture with exponential tails, so no Gaussian stands in for it at any variance.
 
     Args:
         order: the highest power of `σ` to keep, inclusive.
@@ -475,9 +476,11 @@ def innovation_series(order: int) -> sympy.Expr:
 def exact_predictive_expectation(expression: sympy.Expr, order: int) -> sympy.Expr:
     """`E_{p*}[·]` over the innovation, by nesting the two Gaussian draws.
 
-    The innovation carries both draws, so the average is two nested integrals rather than
+    The innovation carries both draws, so the average is two nested integrals rather
+    than
     one: `z₂` over the sensor noise and `z₁` over the prior. They are independent, so
-    neither integral needs the other's result and the order between them does not matter.
+    neither integral needs the other's result and the order between them does not
+    matter.
 
     Args:
         expression: a polynomial in `ν`, with coefficients free of it.
