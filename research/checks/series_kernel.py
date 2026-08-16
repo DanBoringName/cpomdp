@@ -424,8 +424,8 @@ def cumulants(
     """
     if upto < 1:
         raise ValueError(f"cumulants asked for κ up to {upto}, which is not a cumulant")
-    moments = {0: sympy.Integer(1)}
-    power = sympy.Integer(1)
+    moments: dict[int, sympy.Expr] = {0: sympy.Integer(1)}
+    power: sympy.Expr = sympy.Integer(1)
     for index in range(1, upto + 1):
         power = truncate(power * expression, order)
         moments[index] = truncate(gaussian_expectation(power, symbol), order)

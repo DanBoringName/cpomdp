@@ -170,6 +170,12 @@ def check_displacement_series() -> list[CheckReport]:
     posterior mean. A derivation that measures `h` from the wrong centre loses exactly
     this term, so asserting it is non-zero is asserting the two are not interchangeable.
 
+    **This is the only check that catches a lost shift, which was measured rather than
+    assumed.** Deleting the `σ²` term from `h` and re-running the three suites fires T4
+    and nothing else: every other pin here survives it, and ``gap_series`` is entirely
+    blind to it, because at `σ²` the gap reads only the first-order term of `W`. The
+    shift is wrong at `σ⁴`, so this pin is what the quartic work inherits.
+
     Returns:
         One report per coefficient, plus the shift report.
     """

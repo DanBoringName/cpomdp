@@ -176,8 +176,36 @@ behind it. The review question is unchanged: does the programme accept a Prover 
 evidence type, and what must it carry. Read that first. The rename is mechanical and sits
 in its own commits, so it skims.
 
-Results from the other two land in `research/gate_d4_registration.md` and the modules under
-`research/checks/`, not here.
+Landed on the second, as three modules. `series_kernel.py` owns the construction of `W`,
+its expansion and the moment operator. `log_ratio_series.py` keeps its structural pins and
+now reports them as `CheckReport`. `gap_series.py` derives `c₂` and stops.
+
+- [x] The expansion is built by explicit polynomial truncation rather than by
+      `sympy.series`, which does not terminate in fifteen minutes on the assembled `W`.
+      Every primitive is a geometric, binomial or exponential sum, and truncation happens
+      inside each product. The swap is licensed by a check, not by inspection: the
+      truncation path equals `series(W)` term for term through `σ³`, which is as far as
+      `series` can be afforded.
+- [x] `c₂ = ℓ₁²/4` symbolically, against the registration's `(R'(μ)/2R(μ))²` derived
+      before this series existed. Two independently computed closed forms agreeing is the
+      Tier A licence, not a tolerance being met.
+- [x] The gap is derived twice and the two are checked against each other: once from
+      `log E_q[e^W] − E_q[W]` directly, once as `κ₂/2` from the cumulant recursion.
+      Reverse and forward KL agree at `σ²`, and the agreement is **not** asserted beyond
+      it, since `κ₃` separates them and that separation is why the pinned conventions
+      matter at `σ⁴`.
+- [x] 52 identities across the three modules, every one `PROVED` at Tier A carrying a
+      `SymbolicReduction`. Mutation probes confirm the suite discriminates: an off-by-one
+      truncation fires four kernel checks, a wrong fourth moment fires its own, and a
+      wrong `c₂` claim fires rather than being absorbed.
+- [x] Deleting the Kalman shift from `h` fires **T4 and nothing else**. `gap_series` is
+      blind to it, because at `σ²` the gap reads only the first-order term of `W`. That
+      was measured rather than assumed, and it is what the quartic work inherits.
+- [ ] `c₄`. Not started, and nothing in these modules fits or guesses one. A number
+      produced before the derivation lands becomes the thing the derivation is checked
+      against. `gap_expansion --c4` is the refutation route and produces no candidate.
+
+Results from the third land in `research/gate_d4_registration.md`, not here.
 
 **Every PR.** `uv run --no-sync pytest -m "not rxinfer and not slow"` green,
 `uv run --no-sync ruff check src/cpomdp tests examples mkdocs_hooks.py` clean,
