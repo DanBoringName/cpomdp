@@ -593,7 +593,75 @@ def _check_residual_exponent(
             subtracted=subtracted,
         )
     )
+    reports.append(
+        _stability_report(
+            name=f"G4c exponent stability [{family.name}]",
+            sigmas=sigmas,
+            residual=residual,
+            tolerance=tolerance,
+        )
+    )
     return reports
+
+
+def _stability_report(
+    *,
+    name: str,
+    sigmas: np.ndarray,
+    residual: np.ndarray,
+    tolerance: float,
+) -> CheckReport:
+    """G4c: how far G4b's exponent moves when one `σ` cell is dropped.
+
+    A diagnostic, not a falsifier of the candidate. It asks whether the exponent G4b
+    read is a property of the residual or of the grid it was read on, by refitting once
+    per omitted cell and reporting the spread. Every refit uses the whole declared grid
+    minus one point, so no window is selected and nothing here revises G4b's outcome.
+
+    The rule and its readings were registered in `research/gate_d4_registration.md`
+    before this function existed. A spread above the same bar G4b uses means the
+    exponent is not stable on this grid for this family, and a fired G4b there is a
+    statement about the measurement rather than about the coefficient.
+
+    Args:
+        name: the check's name.
+        sigmas: the spreads measured at.
+        residual: what is left after the subtraction.
+        tolerance: the spread bar, shared with G4b so the two are commensurable.
+
+    Returns:
+        The diagnostic's report.
+    """
+    magnitudes = np.abs(residual)
+    if len(sigmas) < 4 or float(np.min(magnitudes)) < QUADRATURE_FLOOR:
+        return CheckReport(
+            name=name,
+            warrant=None,
+            outcome=Outcome.NOT_APPLICABLE,
+            tier=Tier.B,
+            detail=(
+                f"VOID — a leave-one-out spread needs four cells above the floor; "
+                f"{len(sigmas)} declared, minimum residual "
+                f"{float(np.min(magnitudes)):.1e}"
+            ),
+        )
+    slopes = [
+        _log_log_slope(np.delete(sigmas, index), np.delete(magnitudes, index))
+        for index in range(len(sigmas))
+    ]
+    spread = float(max(slopes) - min(slopes))
+    unstable = spread > tolerance
+    return CheckReport(
+        name=name,
+        warrant=Warrant.CORROBORATED,
+        outcome=Outcome.FIRED if unstable else Outcome.NOT_TRIGGERED,
+        tier=Tier.B,
+        detail=(
+            f"{'FAIL' if unstable else 'PASS'} — leaving out one σ cell moves the "
+            f"exponent over a spread of {spread:.3f} (bar {tolerance:.2f}), "
+            f"range σ^{min(slopes):.3f} to σ^{max(slopes):.3f}"
+        ),
+    )
 
 
 def _exponent_report(

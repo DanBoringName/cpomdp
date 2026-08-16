@@ -877,6 +877,118 @@ where the quartic is percent-level.
 **The fixed-`R` row is a falsifier of the instrument, not of the formula.** The gap is
 identically zero there, so a non-zero `c₄` would be a bug in the pipeline.
 
+### RESULT 2026-08-16: the out-of-sample runs, three passing and one firing
+
+Run against the table registered above, with no value changed after it was written.
+
+| family | predicted `c₄` | G4a, no candidate | G4b, candidate subtracted | outcome |
+| --- | --- | --- | --- | --- |
+| `1 + x²` | −0.1875000 | σ^4.038 | **σ^5.982** | not refuted |
+| `exp(x)` | +0.1615904 | σ^3.976 | **σ^5.984** | not refuted |
+| `1.5 + 0.5 tanh(x)` | +0.0061107 | σ^4.000 | **σ^6.302** | **FIRED**, 0.302 against a 0.25 bar |
+| `1.5 + 0.5 sin(x)` | −0.0007420 | σ^3.965 | **σ^6.004** | not refuted |
+| `2 (fixed)` | 0 | — | — | gap identically zero, nothing to test |
+
+**The exponential is the load-bearing pass.** Its `c₄` has the opposite sign to the
+quadratic's, so a coefficient reverse-engineered from the quadratic family could not have
+produced it. It lands 0.016 from the predicted exponent.
+
+**`sin` did not need the escape it was granted.** The pre-registration allowed it to come
+back VOID on resolving power, its quartic being 1.4% of the quadratic at the top of the
+grid. It returned σ^6.004, the closest of the four, so the escape went unused.
+
+**`tanh` fires, and the registered outcome is that it fires.** The bar was declared at
+±0.25 and the cell returned 0.302. No VOID escape was declared for this family, and
+inventing one now is the move this section exists to prevent.
+
+Two things are true about it and neither is a defence. The deviation is in the
+**over-cancellation** direction: a wrong `ĉ₄` leaves the quartic surviving and pulls the
+exponent toward 4, and 6.302 is on the far side of 6, not the near side. And the
+pre-registration defined refutation as an exponent at or below 5, which this is not. So the
+closed form is not refuted by this cell, and the cell is also not a pass. It is a fired
+falsifier with an unexplained direction.
+
+### PRE-REGISTRATION 2026-08-16: the diagnostic for the `tanh` fire
+
+Declared before the diagnostic is written or run.
+
+**What this cannot do.** It cannot convert the fired cell into a pass. The tanh outcome
+above is fixed and stays fired whatever follows. A diagnostic that could revise its own
+target would be the window-shopping this whole section exists to refuse. What it can do is
+classify the fire as attributable or unexplained, which is a different claim and is recorded
+as one.
+
+**Why not the obvious test.** The natural move is to refit on the `σ` cells whose G3
+quadrature certification did not fire. On `tanh` that leaves two of six cells, and a
+two-point log-log slope has no residual and no power to say anything. Choosing the window
+after seeing the result is also the failure mode being guarded against. So the window is not
+touched.
+
+**The diagnostic: leave-one-out exponent stability (G4c).** Refit G4b's exponent six times,
+each time dropping one `σ` cell from the declared grid `(0.02, 0.025, 0.03, 0.035, 0.04,
+0.05)`. Report the spread, `max − min`, across the six refits. The full grid is used every
+time except for the single omission, so no window is selected.
+
+**Declared in advance, before the diagnostic exists:**
+
+- **Spread above 0.25 on `tanh`** — the exponent is not stable on this grid for this family,
+  and the fire is **attributed to grid instability**. The cell stays fired, and it is
+  recorded as a statement about the measurement rather than about the closed form.
+- **Spread at or below 0.25 on `tanh`** — the exponent is stable and the deviation is real.
+  The fire stands as an **unexplained discrepancy** against the closed form, and it is
+  carried as such into anything that quotes `c₄`, until a further registered test resolves
+  it.
+- **The control.** The same diagnostic runs on `1 + x²`, `exp(x)` and `1.5 + 0.5 sin(x)`. If
+  their spreads are also above 0.25, the diagnostic is measuring the grid rather than the
+  family and is **uninformative on all four**, including `tanh`. That outcome is registered
+  here as a real possibility rather than treated as a failure of the test.
+
+**One weakness in the record, stated rather than hidden.** This pre-registration and the
+result below land in the same commit, so a reader cannot confirm the ordering from the git
+history the way they can for the entries above. The ordering rests on this document's own
+account. Splitting the commit would fix that and was offered.
+
+### RESULT 2026-08-16: the diagnostic does not rescue the `tanh` cell
+
+`G4c` implements the rule above in `research/checks/gap_expansion.py`. It runs only when a
+candidate is supplied, so the no-candidate baseline is unchanged.
+
+| family | G4b exponent | G4c leave-one-out spread | range |
+| --- | --- | --- | --- |
+| `1 + x²` | σ^5.982 | 0.008 | σ^5.979 to σ^5.986 |
+| `exp(x)` | σ^5.984 | 0.007 | σ^5.981 to σ^5.988 |
+| `1.5 + 0.5 tanh(x)` | **σ^6.302** | **0.018** | σ^6.290 to σ^6.307 |
+| `1.5 + 0.5 sin(x)` | σ^6.004 | 0.005 | σ^6.001 to σ^6.007 |
+
+**The control holds, so the diagnostic is informative.** All four spreads sit far below the
+0.25 bar, so the exponent is a property of the residual rather than of the grid, and the
+registered "uninformative on all four" branch does not fire.
+
+**The registered reading, applied.** `tanh`'s spread is 0.018. That is the branch declared
+as *spread at or below 0.25*, so by the rule written before the diagnostic existed:
+
+> the exponent is stable and the deviation is real. The fire stands as an **unexplained
+> discrepancy** against the closed form, and it is carried as such into anything that
+> quotes `c₄`, until a further registered test resolves it.
+
+Dropping any single `σ` cell moves `tanh`'s exponent by at most 0.018 and never brings it
+within 0.25 of 6. The deviation is not an artefact of one cell, and it is not attributable
+to the four cells whose G3 certification fires on this family.
+
+**What `c₄` may now be claimed to be.** Derived in closed form, agreeing with the registered
+basis and both predicted zeros, and surviving three of four out-of-sample refutation
+attempts. On `1.5 + 0.5 tanh(x)` the residual after subtraction does not scale as the
+structure predicts, stably, and that is unexplained. Any write-up quoting `c₄` carries the
+three passes and this failure together, not a summary of them.
+
+**A hypothesis, registered as a hypothesis and not as an explanation.** An exponent above 6
+is over-cancellation, so `c₄` surviving at 4 is not the candidate. The residual after
+`c₂σ² + c₄σ⁴` is governed by `c₆`, and a `c₆` anomalously small for this family would let
+`c₈` compete inside the grid and lift the local slope. This is testable: `gap_expansion`
+already takes `--c6` and shifts the predicted exponent to 8 when given one, so deriving
+`c₆` at `σ⁶` and re-running would decide it. That derivation does not exist, this paragraph
+is not evidence, and the `tanh` cell stays fired until such a test is registered and run.
+
 ## Stop conditions (DECLARED 2026-08-07)
 
 Two branches, disjoint, split by which half of the instrument failed.
@@ -915,6 +1027,7 @@ it exists to close.
 
 | 2026-08-15 | `c₂ = ℓ₁²/4` as a **symbolic identity** rather than a verified closed form, Prover 2 with a `SymbolicReduction` | `c₄`, `X`, `β`, `f`, `D`, `k_min`, `T`, R6's signal, `δ_ref` |
 | 2026-08-16 | `c₄` in closed form, all seven basis coefficients, and the quadratic family's refutation attempt. Recorded in section 7 **after** the run, which section 7 discloses | `X`, `β`, `f`, `D`, `k_min`, `T`, R6's signal, `δ_ref`, and the three unrun families |
+| 2026-08-16 (later) | the three out-of-sample families: `exp(x)` and `sin` do not refute, **`tanh` fires** at σ^6.302 against a 0.25 bar and the leave-one-out diagnostic shows the deviation is stable rather than a grid artefact | why `tanh` deviates. `c₆` is the registered hypothesis and is underived, so the cell stands unexplained |
 
 Every number GATE-D4 turns on was unknown on the date the family was declared, and `T`,
 R6's signal and `δ_ref` are unknown still. That is the claim this document exists to make
