@@ -72,11 +72,13 @@ from cpomdp.warrant import (
 __all__ = [
     "cumulants",
     "displacement_series",
+    "exact_predictive_expectation",
     "exp_series",
     "gain_series",
     "gaussian_expectation",
     "gaussian_moment",
     "increment_series",
+    "innovation_series",
     "kalman_gain",
     "log_noise_increment",
     "log_ratio",
@@ -342,8 +344,8 @@ def exp_series(exponent: sympy.Expr, order: int) -> sympy.Expr:
     Returns:
         The exponential's expansion.
     """
-    term = sympy.Integer(1)
-    total = sympy.Integer(1)
+    term: sympy.Expr = sympy.Integer(1)
+    total: sympy.Expr = sympy.Integer(1)
     for step in range(1, order + 1):
         term = truncate(term * exponent, order) / step
         total += term
@@ -426,10 +428,9 @@ def gaussian_expectation(
 def predictive_expectation(expression: sympy.Expr, order: int) -> sympy.Expr:
     """`E_{p*}[·]` over the innovation, at leading order in `σ`.
 
-    At leading order the exact predictive `ν = σz₁ + √R̄·e^{δ/2}·z₂` collapses to
-    `N(0, R̄)`, so the average is one Gaussian integral in `ν/√R̄`. Correct at `σ²` and
-    wrong at `σ⁴`, where the neglected terms enter, which is why the exact nesting is
-    left to the work that needs it.
+    At leading order the exact innovation collapses to `N(0, R̄)`, so the average is one
+    Gaussian integral in `ν/√R̄`. Correct at `σ²` and wrong at `σ⁴`, where the neglected
+    terms enter. Use :func:`exact_predictive_expectation` at or above `σ⁴`.
 
     Args:
         expression: a polynomial in `ν`, with coefficients free of it.
@@ -440,6 +441,54 @@ def predictive_expectation(expression: sympy.Expr, order: int) -> sympy.Expr:
     """
     standardised = expression.subs(NU, sympy.sqrt(RBAR) * Z2)
     return truncate(gaussian_expectation(standardised, Z2), order)
+
+
+def innovation_series(order: int) -> sympy.Expr:
+    """`ν` under the true predictive, expanded in `σ`.
+
+    Not a model of `p*`, but the generative process written out. The latent is
+    `x = μ + σz₁` and the sensor is `y = x + √R(x)·ε`, so with `R(x) = R̄·e^δ` and
+    `ε = z₂`::
+
+        ν  =  y − μ  =  σz₁ + √R̄·e^{δ(σz₁)/2}·z₂
+
+    exact at every order. `δ` is evaluated at the **prior** displacement `σz₁`, the true
+    latent, and never at the posterior one: the observation is generated before any
+    inference happens.
+
+    This is what replaces treating `p*` as a Gaussian with a corrected variance.
+    ``predictive_truncation`` measures what that treatment costs: `p*` is a scale mixture
+    with exponential tails, so no Gaussian stands in for it at any variance.
+
+    Args:
+        order: the highest power of `σ` to keep, inclusive.
+
+    Returns:
+        The innovation as a polynomial in `σ`, carrying `z₁` and `z₂`.
+    """
+    latent = SIGMA * Z1
+    increment = truncate(log_noise_increment().subs(H, latent), order)
+    scale = exp_series(increment / 2, order)
+    return truncate(latent + sympy.sqrt(RBAR) * truncate(scale * Z2, order), order)
+
+
+def exact_predictive_expectation(expression: sympy.Expr, order: int) -> sympy.Expr:
+    """`E_{p*}[·]` over the innovation, by nesting the two Gaussian draws.
+
+    The innovation carries both draws, so the average is two nested integrals rather than
+    one: `z₂` over the sensor noise and `z₁` over the prior. They are independent, so
+    neither integral needs the other's result and the order between them does not matter.
+
+    Args:
+        expression: a polynomial in `ν`, with coefficients free of it.
+        order: the highest power of `σ` to keep in the result.
+
+    Returns:
+        The expectation, truncated.
+    """
+    substituted = truncate(expression.subs(NU, innovation_series(order)), order)
+    over_sensor = truncate(gaussian_expectation(substituted, Z2), order)
+    return truncate(gaussian_expectation(over_sensor, Z1), order)
 
 
 def cumulants(
