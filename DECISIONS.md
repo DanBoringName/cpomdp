@@ -2270,6 +2270,7 @@ does not weaken the result's content. It changes what may be claimed about the r
   out-of-sample. Any write-up quoting `c₄` carries that split rather than averaging over it.
 
 ---
+
 ## ADR-038 — the warrant vocabulary drops its letters
 
 **Date:** 2026-08-17
@@ -2338,7 +2339,7 @@ the older of two current spellings.
 ### The boundary, for anyone auditing across it
 
 The rename landed on `65-warrant-symbolic-evidence` at
-**`9c70c08b8168e3afbf8ed4e10ef8f97703ade93c`** (code and call sites), with the prose
+**`9c70c08`** (code and call sites), with the prose
 following in `3280d72` and the documents after that. Anything at or before `ffc53f7`
 speaks the old vocabulary. The two tables above are the translation, in both directions.
 
