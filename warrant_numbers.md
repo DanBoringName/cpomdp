@@ -25,10 +25,10 @@ the `Warrant` label each earns, and the evidence `CheckReport` requires before i
 `PROVED` are tabulated at the head of `research/warrant_ledger.md`. The two that gate most
 of the numbers below:
 
-- **3a** corroborates. A sample of a continuum, or a local optimum. It can refute a
-  universal by counterexample but never decide one.
-- **3b** decides. An exhaustive enumeration over a finite set. "No member does X" is a
-  proof, not a sample.
+- **Prover 3 · sample** corroborates. A sample of a continuum, or a local optimum. It can
+  refute a universal by counterexample but never decide one.
+- **Prover 3 · enumeration** decides. An exhaustive enumeration over a finite set. "No
+  member does X" is a proof, not a sample.
 
 Two further ways a number is pinned here, neither of which is a prover class:
 
@@ -157,7 +157,7 @@ past the float64 `2^53` ceiling where a float count would drift.
 
 | Number | Value | Gates |
 | --- | --- | --- |
-| `certificate.expected == visited` | `\|A\|^H` | completeness (ADR-030), warrant 3b |
+| `certificate.expected == visited` | `\|A\|^H` | completeness (ADR-030), warrant `PROVED` |
 | `n_policies == \|A\|^H` | e.g. 9, 27 | the enumerated count |
 | `cost_per_cycle == \|A\|^H * H` | e.g. 81 | the honest exponential cost (RFC-001) |
 | `FiniteActionSet` size `>= 2` | 2 | a set of one is no choice to search |
@@ -358,21 +358,21 @@ hand could not have manufactured the separation.
 **What the derivation is, stated honestly.** `cond · eps` is a forward-error rule of thumb
 for a single linear solve. This applies it to a seven-step accumulation of predicts,
 contractions and log-determinants, so it is an argument by analogy, not a proved bound.
-That makes it Tier B's *stated error bar*, not Prover 3c's certified bracket, and the demo
-labels it `B` rather than reaching for `CERTIFIED`. The five orders of headroom between
+That makes it a `BOUNDED` *stated error bar*, not the certified bracket validated numerics
+supply, and the demo labels it `BOUNDED` rather than reaching for `CERTIFIED`. The five orders of headroom between
 the declared ceiling and the measured conditioning is what makes the analogy safe enough to
 report, and the gap is stated here rather than left for a reviewer to find.
 
 **Effect on the reported tiers.** Falsifiers 1 and 2 in that demo read `PROVED` on the
 prover axis, from the completeness certificate of the `|A|^H = 78125` enumeration, and
-`B` on the tier axis, from this bound. The two axes answer different questions and neither
+`BOUNDED` on the tier axis, from this bound. The two axes answer different questions and neither
 substitutes for the other: a claim can be decided with nothing stated behind its margin,
-or measured against a tight bar and only sampled. Falsifiers 3 and 4 stay Tier C and carry
+or measured against a tight bar and only sampled. Falsifiers 3 and 4 stay `COMPUTED` and carry
 no warrant at all, since neither produced evidence here.
 
 **What this bound does not cover.** It certifies the float arithmetic, which was never the
 fragile part of `H* = 7`. The live exposure is falsifier 4: `H*` is an upper bound, because
 the declared set clips the reach at `−2` while `−3` reaches the goal in one step, and a set
-containing `−3` flips at 6. A Tier B row reading `8.0e3x` clear invites a reader to take
+containing `−3` flips at 6. A `BOUNDED` row reading `8.0e3x` clear invites a reader to take
 the number as firmer than it is, so the qualifier travels in both detail strings and not
 only here.

@@ -163,6 +163,16 @@ agent.sample_action()                 # ValueError: this Agent has no objective 
 
 The state-dependence is in the *noise*. The mean stays linear. Genuinely **nonlinear sensors**, a curved `g(x)` needing a second-order moment match, are the next step and are not here yet.
 
+## How provable is your result? (experimental)
+
+Most toolboxes let you build an agent and stop there. cpomdp also labels how well each of your results is established, so you do not have to invent a warrant scheme of your own before you can report one honestly.
+
+Every check the suite runs carries three labels. A **warrant** says what established the claim: `PROVED` for a theorem, a symbolic identity, or a finite domain exhausted under a completeness certificate; `CERTIFIED` for validated numerics over a compact domain; `CORROBORATED` for a sample of a continuum, which settles existence and refutes a universal by counterexample and decides no universal at any sample count. A **tier** says how well the number itself is known: `EXACT`, `BOUNDED`, or `COMPUTED`. An **outcome** says what the falsifier did, and a falsifier does not pass — it fires or it does not. `PROVED` with nothing behind it does not construct.
+
+[research/warrant_ledger.md](research/warrant_ledger.md) is the canonical table, and every other document points at it. [warrant_numbers.md](warrant_numbers.md) records the declared numbers those claims are measured against. The vocabulary itself is [src/cpomdp/warrant.py](src/cpomdp/warrant.py), documented at [cpomdp.inferogenesis.com/api/warrant](https://cpomdp.inferogenesis.com/api/warrant/).
+
+Treat this as experimental. It may move out of cpomdp into a standalone inferogenesis tool before the 1.0 release, which is undecided.
+
 ## Swappable backends
 
 You can swap the inference engine if you want to. `KalmanBackend` is the default and does the real work; `RxInferBackend` re-derives the same answers through Julia and exists mainly so the fast path has something independent to check itself against. Both sit behind the `InferenceBackend` protocol, so you can write your own.

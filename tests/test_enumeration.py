@@ -5,8 +5,9 @@
 tiles), scores each with `policy_efe`, and returns the argmin policy and the full `G`
 vector. Because the set is finite and fully enumerated the search **decides** its
 universal (Prover 3 · enumeration), so it carries the `PROVED` warrant — distinct from
-the continuous grid's `CORROBORATED` (a sample of a continuum). A `CompletenessCertificate` records
-`expected = |A|^H` against the `visited` count and asserts they match.
+the continuous grid's `CORROBORATED` (a sample of a continuum). A
+`CompletenessCertificate` records `expected = |A|^H` against the `visited` count and
+asserts they match.
 
 The locks:
 

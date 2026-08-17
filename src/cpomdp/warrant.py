@@ -291,8 +291,9 @@ class CheckReport:
                         f"check {self.name!r} carries a "
                         f"{type(item).__name__} as evidence. There are two kinds, one "
                         "per decisive prover: a CompletenessCertificate for an "
-                        "exhaustive enumeration (Prover 3 · enumeration), a SymbolicReduction for a "
-                        "theorem or a symbolic identity (Provers 1 and 2). Anything "
+                        "exhaustive enumeration (Prover 3 · enumeration), a "
+                        "SymbolicReduction for a theorem or a symbolic identity "
+                        "(Provers 1 and 2). Anything "
                         "else satisfies the PROVED precondition by being present and "
                         "backs nothing."
                     )

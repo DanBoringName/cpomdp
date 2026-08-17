@@ -8,8 +8,9 @@ decides).
 ``EnumeratedEfeSearch`` enumerates **every** length-H sequence of a finite, declared,
 versioned ``FiniteActionSet`` — all ``|A|^H`` of them, *varying* sequences included — so
 "no policy in this set flips" is **decided**, not sampled: warrant ``PROVED``
-(Prover 3 · enumeration). A ``CompletenessCertificate`` records ``expected = |A|^H`` against the ``visited``
-count and asserts they match (ADR-030), so the decisive warrant is earned, not assumed.
+(Prover 3 · enumeration). A ``CompletenessCertificate`` records ``expected = |A|^H``
+against the ``visited`` count and asserts they match (ADR-030), so the decisive warrant
+is earned, not assumed.
 
 The set is versioned because it is a modelling commitment: an action added after results
 are seen must show up in the diff, not be discovered by a reviewer. The ``PROVED``

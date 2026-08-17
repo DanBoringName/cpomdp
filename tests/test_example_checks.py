@@ -210,8 +210,8 @@ def test_crossover_falsifiers_are_reports():
         assert "bound" in report.detail
         assert report.outcome is Outcome.NOT_TRIGGERED
         # The qualifier travels with the number. H* = 7 is an upper bound because the
-        # declared set clips the reach at -2, and a `BOUNDED` row reads stronger than the
-        # claim is without it.
+        # declared set clips the reach at -2, and a `BOUNDED` row reads stronger than
+        # the claim is without it.
         assert "upper bound" in report.detail
 
     # The two that never ran stay distinct, and neither claims a prover.

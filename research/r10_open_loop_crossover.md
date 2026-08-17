@@ -383,7 +383,8 @@ The result to register:
   accumulating commit-channel ambiguity relief (~0.67 nats/step); the flip is epistemically
   driven (chapter 4.1).** Not epistemic accumulation, and not "the pull overtaking the
   gradient".
-- **Warrant.** The flip is a proved finite-enumeration result (Prover 3b) at each horizon;
+- **Warrant.** The flip is a proved finite-enumeration result (Prover 3 · enumeration) at
+  each horizon;
   the mechanism decomposition and the epistemic counterfactual are corroborated by the
   per-step trace and an independent NumPy kernel. The earlier "structural, all H" claim is
   retired.

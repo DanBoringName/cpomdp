@@ -37,7 +37,7 @@ R10, C5 and all of Paper 3 Part 1 are off the reference filter.
 
 **v0.4.5 — GATE-D4.** Cut at PR-8's merge, whatever the gate's outcome. This is the
 citation and rollback point. If the bound holds, it is where "certified" starts being
-true. If it fails, it is the witness the re-scoped Tier A papers cite, and without it that
+true. If it fails, it is the witness the re-scoped `EXACT` papers cite, and without it that
 witness is "main at some commit".
 
 **v0.5 — terminal.** Everything Papers 2 and 3 need from cpomdp. Both pin v0.5. v0.6
@@ -65,9 +65,12 @@ Warrant is a property of the check, not of the number.
 | --- | --- | --- |
 | **1** pen-and-paper theorem | Universals within stated hypotheses | `PROVED`, numerics as *witness* |
 | **2** symbolic computation | Closed-form identities, algebraic non-existence | `PROVED` |
-| **3a** sampling a continuum | Exhibits existence, refutes a universal by counterexample. Never proves a universal, at any seed count | `CORROBORATED` |
-| **3b** exhaustive enumeration over a finite domain | *Decides* the universal, since ¬∃ ≡ ∀¬ | `PROVED`, only with a cardinality certificate |
-| **3c** validated numerics | Proves universals over a compact domain by construction | `CERTIFIED` |
+| **3 · enumeration** exhaustive enumeration over a finite domain | *Decides* the universal, since ¬∃ ≡ ∀¬ | `PROVED`, only with a cardinality certificate |
+| **3 · validated** validated numerics | Proves universals over a compact domain by construction | `CERTIFIED` |
+| **3 · sample** sampling a continuum | Exhibits existence, refutes a universal by counterexample. Never proves a universal, at any sample count | `CORROBORATED` |
+
+`research/warrant_ledger.md` carries the canonical table, with the evidence each warrant
+requires. This is the working copy; where they differ, the ledger is right.
 
 Outcome is orthogonal. A registered falsifier emits `warrant ∈ {PROVED, CERTIFIED,
 CORROBORATED}` and one of five outcomes. `PASS` is not among them: a falsifier fires or it
@@ -90,14 +93,15 @@ cell reads `—`, enforced by `CheckReport`.
 Ordinary two-valued assertions are outside this. "Does the shipped number match the NumPy
 oracle" passes or raises, and needs no vocabulary.
 
-Tiers cut across both. Tier A is a closed-form reference at machine precision. Tier B is
-a stated bar or a certified bracket. Tier C is computed with no statable bar, and the
-word there is *computed*, never *certified*. A bar can be derived from one already
+Tiers cut across both. `EXACT` is a closed-form reference at machine precision. `BOUNDED`
+is a stated bar or a certified bracket. `COMPUTED` has no statable bar, and the word for
+such a number is *computed*, never *certified*. A bar can be derived from one already
 declared elsewhere in the suite rather than invented for the claim; `warrant_numbers.md`
 records the derivation and whether it is a proved bound or a stated error bar.
 
 **The error that recurs.** An action *sweep* over a continuous range is a finite grid
-over an infinite domain, so 3a. A *policy enumeration* over a declared finite set is 3b.
+over an infinite domain, so it samples. A *policy enumeration* over a declared finite set
+enumerates.
 v0.4.4 already encodes this: `EFESelector` prints `CORROBORATED`, `EnumeratedEfeSearch`
 prints `PROVED`. PR-1 extended the vocabulary to checks, added the missing third level,
 and shipped it as `cpomdp.warrant` (ADR-035). Import it; do not restate it.
@@ -177,7 +181,7 @@ Do this first. Everything downstream self-labels off it, and a registered number
 on the audit half.
 
 - [x] Promote `SearchWarrant` to a shared `Warrant` enum (`cpomdp/warrant.py`) and add
-      **`CERTIFIED`** for Prover 3c. Keep `SearchWarrant` as an alias so
+      **`CERTIFIED`** for Prover 3 · validated. Keep `SearchWarrant` as an alias so
       `EFESelector.warrant` and `EnumeratedEfeSearch.warrant` keep their labels
       unchanged. Without `CERTIFIED`, every reference-filter number either borrows
       `PROVED`, which overclaims, or reads `CORROBORATED`, which throws away the bound
@@ -191,7 +195,7 @@ on the audit half.
       suite. Do not rebuild it. Kept its three and added two: `NOT RUN HERE` promoted
       from a prose rule to a member, `NOT RESOLVED` for a genuine tie. The primer's
       `{PASS, FAIL, NOT_RESOLVED}` was tried and rejected (ADR-035).
-- [x] `PROVED` under 3b requires a `CompletenessCertificate`, enforced as a
+- [x] `PROVED` under enumeration requires a `CompletenessCertificate`, enforced as a
       **constructor precondition**. `PROVED` without a certificate becomes
       unrepresentable rather than merely wrong. Widened to *evidence*, since `PROVED`
       also covers Provers 1 and 2, which have no enumeration to certify.
@@ -220,7 +224,7 @@ Two items the audit added, neither registered above:
       from one already declared rather than invented. A margin inside it reports
       `NOT RESOLVED`, not an `AssertionError`.
 - [x] `H* = 7` is an upper bound, because the declared set clips the reach at `−2` while
-      `−3` reaches the goal in one step. That qualifier now travels in both Tier B rows,
+      `−3` reaches the goal in one step. That qualifier now travels in both `BOUNDED` rows,
       not only in the write-up.
 
 **Merge gate:** the negative-eigenvalue rejection test passes on kernel and oracle. The
@@ -383,8 +387,8 @@ asserts a separation without printing its ratio and conditioning. The four-term 
 asserted. A difference and a sum-of-bars are shown to differ on a worked case.
 **ADR on landing.**
 
-**Warrant:** R1 Tier A / Prover 1 with a 3a witness. R2 and R3 Tier A–B / **3b**. R4
-Tier B / 3a.
+**Warrant:** R1 `EXACT` / Prover 1 with a sampled witness. R2 and R3 `EXACT`–`BOUNDED` /
+**Prover 3 · enumeration**. R4 `BOUNDED` / Prover 3 · sample.
 
 ## PR-5 — Control bracket and Paper 2 Part 1 results
 
@@ -411,7 +415,7 @@ of what survives a failure.
 - [ ] **R3** correct + degraded: misspecification below 1e-12, inference gap positive.
 - [ ] **R4** additivity: three terms reconstruct measured `E[F]` within the four-term
       bound.
-- [ ] **R5** Tier A control signature: `J_CE = J*` in closed form, bracket width
+- [ ] **R5** `EXACT` control signature: `J_CE = J*` in closed form, bracket width
       `= J_LQG − J_LQR`, `η_ctrl = 0` to the stated floor.
 - [ ] **C5** matched-pair dissociation. **Solve for the matched pair analytically, not by
       root-search over perturbation magnitude** (Route 1). Frame it as demonstrating
@@ -420,7 +424,7 @@ of what survives a failure.
 **Merge gate:** `J_CE = J*` to machine precision in closed form. R1–R5 and C5 all print
 and assert. No check claims `PROVED` without a certificate.
 
-**Warrant:** R5 Tier A / Provers 1–2, the agreement of two independently computed closed
+**Warrant:** R5 `EXACT` / Provers 1–2, the agreement of two independently computed closed
 forms. That is the strongest thing the tier table licenses without a bound.
 
 ## PR-6 — Paper 3 toolbox and Part 1 results
@@ -431,11 +435,11 @@ forms. That is the strongest thing the tier table licenses without a bound.
 G-A and G-D were the original Phase 0 hedge, scheduled at v0.4.3 and never shipped. They
 are gate-independent and cheap. They are what stands between "a gate failure stalls the
 programme" and "a gate failure costs Part 2's numbers while Paper 3 Part 1 proceeds on
-Tier A results that need no reference filter at all". They belong ahead of PR-7, not
+`EXACT` results that need no reference filter at all". They belong ahead of PR-7, not
 after it.
 
 - [ ] **G-A.** A common interface making each action-selection functional swappable in one
-      line, with closed-form evaluation on the Tier A model class.
+      line, with closed-form evaluation on the `EXACT` model class.
 - [ ] The variant list lives in the model spec and is **versioned**, so a variant added
       after results are seen appears in the diff rather than in the prose.
 - [ ] **G-D.** Every functional comparison returns both the value difference and the
@@ -459,8 +463,8 @@ after it.
 certificate holds at the stated horizon and action set. An undeclared λ or γ is a
 construction error, not a runtime warning. **ADR on landing.**
 
-**Warrant:** G2 is **3b**, decided rather than surveyed. G4 is 3a existence, settled by
-one construction.
+**Warrant:** G2 is **Prover 3 · enumeration**, decided rather than surveyed. G4 is a
+sampled existence claim, settled by one construction.
 
 ## PR-7 — Exact reference filter and the rule ladder
 
@@ -483,7 +487,7 @@ The hard item, and it is shared.
 - [ ] Four rungs is a finite declared set, so the ladder carries a completeness
       certificate too (Route 2). That is what lets R7 reach a decided ordering rather than
       a sampled one.
-- [ ] **Compute and print the R6 gap here, at Tier C, before certification.** GATE-D4
+- [ ] **Compute and print the R6 gap here, at `COMPUTED`, before certification.** GATE-D4
       compares the certified bound against that number by the pre-agreed factor, so the
       gate cannot be evaluated until the uncertified signal exists. This ordering is easy
       to miss and it blocks PR-8.
@@ -561,7 +565,7 @@ prose survived them, which is a failure mode worth not repeating.
       `σ⁴`. Seven of 38 cells fire, all G3 quadrature certification on the two bounded
       families below `σ = 0.04`, where the `x`-extent and refinement tolerances sit up to
       21× over a `1e-10` bar. It never fits a `c₄`, because a number produced here would
-      become the thing the derivation is checked against and the ledger would carry a Tier C
+      become the thing the derivation is checked against and the ledger would carry a `COMPUTED`
       fit under a Prover 1 label. Pass a derived candidate in with `--c4` and G4b tries to
       refute it.
 - [x] `log_ratio_series.py`. Symbolic pins for the log-ratio series `W`, 28 of them, all
@@ -577,7 +581,8 @@ prose survived them, which is a failure mode worth not repeating.
       |p_grid − p_exact| ≤ δ*.
 - [ ] Stated as a number and shown small relative to R6's measured signal by the
       pre-agreed factor.
-- [ ] Emits `CERTIFIED`, not `PROVED`. The distinction is 3c against 3b and it is not
+- [ ] Emits `CERTIFIED`, not `PROVED`. The distinction is validated numerics against
+      enumeration, and it is not
       cosmetic.
 - [ ] **Cut v0.4.5 at this merge whatever the outcome.** Release notes record the gate
       result as a number against the factor, `PASS` or `FAIL`. Changelog, `DECISIONS.md`
@@ -652,9 +657,9 @@ merge block on **PR-9 and PR-10**.
 
 **On failure: stop.** Do not merge PR-9 or PR-10 against an uncertified reference.
 
-**What survives a failure, and it is a paper.** Paper 2 re-scopes to Tier A: Part 1
+**What survives a failure, and it is a paper.** Paper 2 re-scopes to `EXACT`: Part 1
 complete (R1–R5), R10 complete, C5, all of battery families A and B, C1–C5, D3, E1's
-Tier A leg, and all of F. **Paper 3 Part 1 is untouched**, because it is closed-form and
+`EXACT` leg, and all of F. **Paper 3 Part 1 is untouched**, because it is closed-form and
 touches no grid, so PR-6 still stands. What dies: D1, D2, C6, G7, G10, and the certified
 half of G6–G9. Two publishable units remain, which is what the hedge was built to
 preserve.
@@ -669,17 +674,17 @@ Three routes, descending value per hour.
 
 - **R1** is not "two numbers came out below 1e-12". In fixed-R linear-Gaussian with
   p = p\* and exact inference, both divergences are **identically zero by construction**.
-  Prove it, then assert numerically as witness. Tier A, Prover 1.
+  Prove it, then assert numerically as witness. `EXACT`, Prover 1.
 - **R5** is agreement of two independently computed closed forms. Do not compute `J_CE`
   and `J*` by simulation and compare.
 - **C5's matched pair** should be **solved for analytically**, not found by root-search. A
-  searched match is 3a and carries the searcher's tolerance. A constructed match is
-  Tier A. Same result, two tiers apart.
+  searched match is a sample and carries the searcher's tolerance. A constructed match is
+  `EXACT`. Same result, two tiers apart.
 - **G1** is a lemma with a proof, not a numerical observation that an offset looks flat.
 
 ### Route 2 — cheap: make the quantified domain finite and declared, then certify the cardinality
 
-The 3a → 3b conversion, and the largest return per hour on offer, because v0.4.4 already
+The sample → enumeration conversion, and the largest return per hour on offer, because v0.4.4 already
 built the machinery. `CompletenessCertificate` exists. Pointing it at a new domain costs
 an afternoon and converts "we found no counterexample" into "there is no counterexample
 on this set".
@@ -698,14 +703,15 @@ on this set".
       is not.
 
 **The boundary, stated so it is not crossed.** A finite grid over a *continuous* range is
-still 3a. Sweeping perturbation *magnitude* on a grid corroborates. Enumerating a
+still a sample. Sweeping perturbation *magnitude* on a grid corroborates. Enumerating a
 *declared set of magnitudes* decides a claim about that set and nothing more. The
 certificate licenses the enumeration, never the sweep.
 
 ### Route 3 — paid: validated numerics
 
-3c is the only route to a universal over a continuum by execution, and it is what GATE-D4
-buys. R6, R7's rung values, R8, R9, G7 and G10 sit at Tier C without it.
+Validated numerics are the only route to a universal over a continuum by execution, and
+that is what GATE-D4 buys. R6, R7's rung values, R8, R9, G7 and G10 sit at `COMPUTED`
+without it.
 
 **Second-order return, worth pricing in.** A tighter bound does not only certify. It
 widens D2's fit window, whose lower edge sits at `√(k·δ_ref/curvature)`. Adaptive
@@ -713,7 +719,7 @@ quadrature buys warrant on R6, R7 and R9, and it buys R8 the right to exist.
 
 ### What cannot be bought
 
-- **R8's exponent.** A fitted exponent over a continuous sweep is 3a, permanently. Report
+- **R8's exponent.** A fitted exponent over a continuous sweep is a sample, permanently. Report
   it `CORROBORATED` against a registered interval and stop. Its severity comes from having
   been able to come out wrong, not from its warrant.
 - **Any universal over the action continuum.** `H* = 7` is decided over the declared
@@ -727,19 +733,19 @@ quadrature buys warrant on R6, R7 and R9, and it buys R8 the right to exist.
 
 | Result | Best prover attainable | Tier | Bought by |
 | --- | --- | --- | --- |
-| R1 | **1** plus a 3a witness | A | Route 1 |
-| R2, R3 | **3b** over the declared cross | A–B | Route 2, PR-4 |
-| R4 | 3a, **3c** if all four bars certified | B | PR-4 plus Route 3 |
-| R5 | **1–2** plus a machine-precision witness | A | Route 1, PR-5 |
-| R6 | **3c** | B | GATE-D4 |
-| R7 | **3b over rungs, conditional on 3c rung values** | B | Routes 2 and 3 |
-| R8 | 3a, the ceiling | B | Nothing. Say so |
-| R9 | **3c** | B | This *is* Route 3 |
-| R10 | **3b**, already achieved | B | Certificate, hardened by PR-2 |
-| G1 | **1** plus witness | A | Route 1 |
-| G2 | **3b** with certificate | A | Shipped at v0.4.4, applied at PR-6 |
-| G4 | **3a existence**, settled by one construction | A | Construction |
-| G7, G10 | **3c** | B | GATE-D4 |
+| R1 | **1** plus a sampled witness | `EXACT` | Route 1 |
+| R2, R3 | **3 · enumeration** over the declared cross | `EXACT`–`BOUNDED` | Route 2, PR-4 |
+| R4 | 3 · sample, **3 · validated** if all four bars certified | `BOUNDED` | PR-4 plus Route 3 |
+| R5 | **1–2** plus a machine-precision witness | `EXACT` | Route 1, PR-5 |
+| R6 | **3 · validated** | `BOUNDED` | GATE-D4 |
+| R7 | **3 · enumeration over rungs, conditional on validated rung values** | `BOUNDED` | Routes 2 and 3 |
+| R8 | 3 · sample, the ceiling | `BOUNDED` | Nothing. Say so |
+| R9 | **3 · validated** | `BOUNDED` | This *is* Route 3 |
+| R10 | **3 · enumeration**, already achieved | `BOUNDED` | Certificate, hardened by PR-2 |
+| G1 | **1** plus witness | `EXACT` | Route 1 |
+| G2 | **3 · enumeration** with certificate | `EXACT` | Shipped at v0.4.4, applied at PR-6 |
+| G4 | **3 · sample existence**, settled by one construction | `EXACT` | Construction |
+| G7, G10 | **3 · validated** | `BOUNDED` | GATE-D4 |
 
 ---
 
@@ -747,7 +753,7 @@ quadrature buys warrant on R6, R7 and R9, and it buys R8 the right to exist.
 
 | Failure | Routing |
 | --- | --- |
-| **GATE-D4 fails** | PR-9 and PR-10 do not merge. Paper 2 re-scopes to Tier A. Paper 3 becomes a Tier A paper on the collapse of the zoo. Two units survive |
+| **GATE-D4 fails** | PR-9 and PR-10 do not merge. Paper 2 re-scopes to `EXACT`. Paper 3 becomes an `EXACT` paper on the collapse of the zoo. Two units survive |
 | **Ladder non-monotone** | Reported. Registered as a conjecture with a predicted direction, not a theorem |
 | **Adjacent rungs overlap** | `NOT_RESOLVED`. Needs PR-4's F5 to have any resolving power |
 | **D2 window empty** | VOID, routed to the adaptive-grid register item. PR-9 catches it before the fit |
@@ -815,8 +821,9 @@ result PR-2 hardens.
 5. A public surface costs docs, tests, examples and a support commitment. Undocumented
    capability that falls out of internal interfaces stays undocumented until it is
    scheduled.
-6. Warrant is a property of the check, not of the number. The suite distinguishes 3a from
-   3b in its output vocabulary rather than printing both as `PASS`.
+6. Warrant is a property of the check, not of the number. The suite distinguishes a
+   sample from an enumeration in its output vocabulary rather than printing both as
+   `PASS`.
 7. **A declared set is versioned or it is not declared.** Action sets, rule ladders,
    constructor crosses, seed lists, functional variants. Each lives in the model spec, so
    an addition after results are seen appears in the diff rather than in the prose.
@@ -873,7 +880,7 @@ A continuous-state agent should also exercise genuinely continuous action spaces
 only declared finite repertoires. `GradientEfeSelector` is that selector: gradient ascent
 on the differentiable `policy_efe` over a continuous action box.
 
-**Warrant: 3a / `CORROBORATED` only.** Gradient ascent finds a *local* optimum of a
+**Warrant: Prover 3 · sample / `CORROBORATED` only.** Gradient ascent finds a *local* optimum of a
 non-convex objective. Like the grid it searches a continuum without exhausting it, so it
 can never *decide* a universal over the action space. Every result it produces carries the
 `CORROBORATED` label, never `PROVED`, never a bare `PASS` (standing rule 6).
@@ -887,7 +894,8 @@ regions and changes its own gap.
 
 **Wall: strictly separated from the enumerated evidence.** R10's crossover decision rides
 on the finite enumeration. A gradient-selected policy may corroborate alongside it. It
-must never enter the decisive cells, or the 3b certificate is contaminated back to 3a.
+must never enter the decisive cells, or the enumeration's certificate is contaminated
+back to a sample.
 
 - [ ] `GradientEfeSelector` over a continuous action box (`p >= 1`), returning the
       optimised sequence and its `G`. Labelled `CORROBORATED`.
@@ -897,7 +905,7 @@ must never enter the decisive cells, or the 3b certificate is contaminated back 
       separately labelled in any shared harness.
 
 **Not this track — register, do not build.** *Certified* continuous-action coverage,
-deciding "no action in the compact box flips", is Prover 3c. It needs a certified
+deciding "no action in the compact box flips", is Prover 3 · validated. It needs a certified
 branch-and-bound with Lipschitz or interval bounds on `policy_efe` over the box. That is a
 distinct, larger, later workstream. `GradientEfeSelector` does not deliver it and nothing
 here should imply it does.

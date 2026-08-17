@@ -2167,3 +2167,97 @@ number that occasionally drops a quarter is a poor basis for a declared budget.
 - R10 hardening (issue #65) takes **ADR-037**, one past this.
 
 ---
+
+## ADR-038 — the warrant vocabulary drops its letters
+
+**Date:** 2026-08-17
+**Status:** Accepted
+**Phase:** v0.4.5 (certifiable active inference, Paper 2 groundwork)
+**Extends:** ADR-035 (the warrant vocabulary ships)
+
+### The question
+
+`Tier.A`, `Tier.B` and `Tier.C` ranked by position in the alphabet. So did the prover
+sub-modes `3a`, `3b` and `3c`. A reader met `tier B · 3b` in a battery row and had to
+already know two orderings to read it. Neither letter says what it means, and the two
+scales collided badly enough that the ledger carried a standing warning telling readers
+which "tier" was meant.
+
+A second scale made it worse. "Register Tier 1/2" classified deferred work by whether it
+ships a feature, and had nothing to do with how well a number is known.
+
+### Decision
+
+**The tier members become words.** `Tier` keeps its class name, because the concept is
+cited in prose outside this repo. Its members and values do not:
+
+| was | is | value |
+| --- | --- | --- |
+| `Tier.A` | `Tier.EXACT` | `"exact"` |
+| `Tier.B` | `Tier.BOUNDED` | `"bounded"` |
+| `Tier.C` | `Tier.COMPUTED` | `"computed"` |
+
+`CheckReport.__str__` keeps the field word, so a row now reads
+`q: NOT TRIGGERED (PROVED, tier exact). …`.
+
+**The prover sub-modes become words in prose.** They are prose-only, with no code behind
+them, so the rename is free:
+
+| was | is |
+| --- | --- |
+| `3a` | Prover 3 · sample |
+| `3b` | Prover 3 · enumeration |
+| `3c` | Prover 3 · validated |
+
+**"Register Tier 1/2" becomes "register class 1/2".** The collision the ledger's
+vocabulary warning existed to manage is gone, so the warning goes with it.
+
+**`Warrant` and `Outcome` are untouched.** Their members are already words, already
+ordered, and `Warrant` carries the only invariants that matter: `PROVED` requires
+evidence, and a check that never ran carries no warrant.
+
+**Warrant renders strongest-first** wherever it is tabulated: `PROVED`, `CERTIFIED`,
+`CORROBORATED`. No letter stands in for rank anywhere.
+
+**One canonical table**, at the head of `research/warrant_ledger.md`, carrying the
+warrant a claim earns and the evidence it requires, and the tier a number is known to.
+The ledger's sections 1 and 2 are merged under a combined `1–2` heading rather than
+renumbered, because `research/gate_d4_registration.md` cites ledger sections 5 and 8 and
+the battery cites 3 through 6. Renumbering would have broken pointers in a registration
+document that must not be amended. Every other document points at the canonical table
+instead of restating it.
+
+**Aliases were rejected.** `A = EXACT` would have kept every old call site working and
+cost nothing to write. It also would have left two live vocabularies in the repo at once,
+and the point of the change is that a document's vocabulary dates it. A reader meeting
+`3b` in a file should conclude the file predates this decision, not that the author chose
+the older of two current spellings.
+
+### The boundary, for anyone auditing across it
+
+The rename landed on `65-warrant-symbolic-evidence` at
+**`9c70c08b8168e3afbf8ed4e10ef8f97703ade93c`** (code and call sites), with the prose
+following in `3280d72` and the documents after that. Anything at or before `ffc53f7`
+speaks the old vocabulary. The two tables above are the translation, in both directions.
+
+`cpomdp.warrant` was added 2026-08-05, one day after the v0.4.4 release, and has sat
+under `## [Unreleased]` ever since. No release carries `Tier.A`, so this is not a
+breaking change and the changelog records it as the vocabulary the module ships with.
+
+### What was deliberately not renamed
+
+The dated ADRs above keep the words they were written in. `DECISIONS.md` is append-only,
+and a record that silently acquires today's vocabulary stops dating itself, which is the
+property this decision exists to buy. Five references to `3a`, `3b` and `3c` survive in
+ADR-030 and ADR-035 for that reason, and the map above is what translates them.
+
+`research/gate_d4_registration.md` quotes no report lines and needed no amendment.
+
+### Consequences
+
+- A battery row names its tier as `EXACT` rather than as `A`, so it needs no legend.
+- The ledger's vocabulary warning is deleted rather than corrected.
+- Any external document quoting `Tier.B` or `3b` translates through the tables above.
+- `research/` is covered by neither `ty` nor `pytest`, so the check modules under
+  `research/checks/` were smoke-run by hand rather than caught by CI. That gap is real
+  and this decision does not close it.

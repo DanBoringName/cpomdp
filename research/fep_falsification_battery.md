@@ -9,8 +9,9 @@ Standing rule: no number reaches prose unless the check suite prints and asserts
 `SEVERE-TEST` a pre-registered magnitude or exponent, in Mayo's sense · `DEMARCATE`
 where testability ends.
 
-**Tier.** `A` closed-form at machine precision · `B` a stated bar or certified bracket ·
-`C` computed, no statable bar. The word for C is *computed*, never *certified*.
+**Tier.** `EXACT` closed-form at machine precision · `BOUNDED` a stated bar or certified
+bracket · `COMPUTED` no statable bar. The word for a `COMPUTED` number is *computed*,
+never *certified*. `research/warrant_ledger.md` carries the canonical table.
 
 **Readiness.** `v0.4.x ✓` shipped · `PR-n · tag` scheduled, per `BUILD_PLAN.md` ·
 `further` needs capability not yet scheduled.
@@ -32,7 +33,7 @@ collapses all three to the floor.
 
 ## A — The collapse: fixed-R linear-Gaussian under additive control has *exactly zero* action-dependent epistemic value
 
-**A1 · flat epistemic term** · FALSIFY · R-none, P1 eq. (4) · tier A · **v0.4.2 ✓**
+**A1 · flat epistemic term** · FALSIFY · R-none, P1 eq. (4) · tier `EXACT` · **v0.4.2 ✓**
 
 - Predict: per-step epistemic value constant across policies to machine precision.
   `I[x;o|π] = ½ ln det(CΣ⁻Cᵀ + R) − ½ ln det R`, μ absent.
@@ -43,7 +44,7 @@ collapses all three to the floor.
 - Note: R1 is the *decomposition's* calibration zero, which is C1. A1 is P1's
   mutual-information result, a distinct measurement sharing the correct/exact cell.
 
-**A2 · flattening reproduction** · FALSIFY · fixed-R triviality, Rmk 7 · tier A · **v0.4.2 ✓**
+**A2 · flattening reproduction** · FALSIFY · fixed-R triviality, Rmk 7 · tier `EXACT` · **v0.4.2 ✓**
 
 - Predict: the fixed-gain Kalman schedule reproduces posterior mean and covariance for
   every policy and observation sequence. `to_flat_model` succeeds.
@@ -54,7 +55,7 @@ collapses all three to the floor.
   exhibits one coexisting with no Def-1 schedule (observation-independence fails). The
   biconditional is false in general and holds here only by the fixed-R triviality.
 
-**A3 · structural, not accidental** · FALSIFY · P1 eq. (4) sweep · tier A · **v0.4.2 ✓ / trivial v0.5 hardening**
+**A3 · structural, not accidental** · FALSIFY · P1 eq. (4) sweep · tier `EXACT` · **v0.4.2 ✓ / trivial v0.5 hardening**
 
 - Predict: survives arbitrary perturbation of A, B, C, Q and of the *value* of fixed R.
   Breaks only when R gains a state argument or control turns multiplicative.
@@ -66,7 +67,7 @@ collapses all three to the floor.
 
 ## B — The reintroduction: R(x) returns epistemic value, as determinant-visibility
 
-**B1 · dual effect (H3)** · FALSIFY · Thm 1(i) · tier B, ungated · **v0.4.2 ✓**
+**B1 · dual effect (H3)** · FALSIFY · Thm 1(i) · tier `BOUNDED`, ungated · **v0.4.2 ✓**
 
 - Mechanism: R(μ⁻) couples control to the posterior covariance; the Kalman gain
   inherits the dependence.
@@ -80,7 +81,7 @@ collapses all three to the floor.
   covariance carries a dual effect in the strict Bar-Shalom–Tse sense is open in P1.
   Bounds B1 and E1's dual-control bridge.
 
-**B2 · determinant-visibility (H3′)** · FALSIFY · Thm 1(iii), Cor 1 · tier B · **v0.4.2 ✓ (scalar)**
+**B2 · determinant-visibility (H3′)** · FALSIFY · Thm 1(iii), Cor 1 · tier `BOUNDED` · **v0.4.2 ✓ (scalar)**
 
 - Predict: εₖ(π) ≠ εₖ(π′) under H3′. Automatic for scalar observations under H1–H3
   (Cor 1), epistemic value being strictly monotone in the noise variance.
@@ -90,7 +91,7 @@ collapses all three to the floor.
 - Does not buy: the title's claim rests on H3′, not H3. Keep the distinction
   load-bearing.
 
-**B3 · the Rmk-4 knife-edge, dual effect *without* epistemic value** · FALSIFY · Ex 1 · tier B · **v0.4.2–v0.5, analytic, no new capability**
+**B3 · the Rmk-4 knife-edge, dual effect *without* epistemic value** · FALSIFY · Ex 1 · tier `BOUNDED` · **v0.4.2–v0.5, analytic, no new capability**
 
 - Predict: `R(x) = diag(r(x₁), s(x₁))` tracing `(1 + 1/r)(1 + 1/s) = const`. Every
   per-step epistemic value equals `½ ln 3` for every policy while Σ⁺ₖ varies. Parts
@@ -102,7 +103,7 @@ collapses all three to the floor.
 - Does not buy: corroborates the *visibility* reading specifically. Most severe
   self-imposed test in the battery.
 
-**B4 · behavioural dissociation** · FALSIFY · P1 section 5 · tier B · **v0.4.2 ✓**
+**B4 · behavioural dissociation** · FALSIFY · P1 section 5 · tier `BOUNDED` · **v0.4.2 ✓**
 
 - Predict: Agent A (fixed R, frozen at the prior position) and Agent B (R(x)) set off
   together toward the shared-prior arm. Only B reads the cue, learns the context and
@@ -115,7 +116,7 @@ collapses all three to the floor.
   a cue off the pragmatic path, worth **1.72 nats** against a **4.49-nat** pragmatic
   gradient.
 
-**B5 · no-flattening witness** · FALSIFY · Thm 1(ii) · tier B · **v0.4.2 ✓**
+**B5 · no-flattening witness** · FALSIFY · Thm 1(ii) · tier `BOUNDED` · **v0.4.2 ✓**
 
 - Mechanism: structural and data-free. A mean-shifting coupling under state-dependent R
   makes the flat linearisation point μ⁺ diverge from the prior mean μ⁻.
@@ -137,7 +138,7 @@ collapses all three to the floor.
 
 Off-diagonal cells carry the claim. The calibration zero validates nothing on its own.
 
-**C1 · calibration zero** · calibration · R1 · toolbox B, F · tier A · **PR-5 · v0.4.5**
+**C1 · calibration zero** · calibration · R1 · toolbox B, F · tier `EXACT` · **PR-5 · v0.4.5**
 
 - Predict: p = p\*, exact filter → misspecification and inference gap both below `1e-12`.
 - Falsify: a nonzero floor top-left. Textbook zero (Kalman is the exact Bayesian filter
@@ -145,7 +146,7 @@ Off-diagonal cells carry the claim. The calibration zero validates nothing on it
   status; the contribution is the cross.
 - Does not buy: necessary calibration, not a result.
 
-**C2 · misspecification isolation** · FALSIFY · R2 · toolbox B constructors · tier A/B · **PR-5 · v0.4.5**
+**C2 · misspecification isolation** · FALSIFY · R2 · toolbox B constructors · tier `EXACT`/`BOUNDED` · **PR-5 · v0.4.5**
 
 - Predict: parameter-perturb the model, keep inference exact → `D_KL[p* ‖ p]` positive
   and stable across a **declared** seed set, inference gap below `1e-12`.
@@ -153,7 +154,7 @@ Off-diagonal cells carry the claim. The calibration zero validates nothing on it
   falsifies separability, the core metrological claim.
 - Does not buy: this cell, not C1, is what makes the instrument an instrument.
 
-**C3 · inference-gap isolation** · FALSIFY · R3 · toolbox B degraded variants · tier A/B · **PR-5 · v0.4.5**
+**C3 · inference-gap isolation** · FALSIFY · R3 · toolbox B degraded variants · tier `EXACT`/`BOUNDED` · **PR-5 · v0.4.5**
 
 - Predict: p = p\*, degrade inference (frozen gain / wrong fixed R / diagonal-only
   covariance) → inference gap positive, misspecification below `1e-12`.
@@ -161,7 +162,7 @@ Off-diagonal cells carry the claim. The calibration zero validates nothing on it
 - Does not buy: with C2, the two-term separability the one-term accounting cannot
   represent.
 
-**C4 · additivity** · FALSIFY · R4 · toolbox F · tier A · **PR-5 · v0.4.5**
+**C4 · additivity** · FALSIFY · R4 · toolbox F · tier `EXACT` · **PR-5 · v0.4.5**
 
 - Predict: `H(p*) + misspecification + inference gap` reconstruct measured `E[F]` within
   the four-term bound.
@@ -169,20 +170,20 @@ Off-diagonal cells carry the claim. The calibration zero validates nothing on it
   exists, or a term is mis-estimated. Each is a real result about the accounting.
 - Does not buy: closure of *this* decomposition on *this* model class.
 
-**C5 · incompleteness demonstration** · DEMARCATE · R2 + R3 at a matched total · tier A/B · **PR-5 · v0.4.5**
+**C5 · incompleteness demonstration** · DEMARCATE · R2 + R3 at a matched total · tier `EXACT`/`BOUNDED` · **PR-5 · v0.4.5**
 
 - Predict: two agents the collapsed accounting scores *identically* at the same total
   surprise, one misspecified-but-exact and one correct-but-approximate, matched to equal
   `E[F]`, which the instrument separates.
 - Build: **solve for the matched pair analytically**, not by root-search over
   perturbation magnitude. A searched match carries the searcher's tolerance and is
-  Prover 3a; a constructed match is Tier A.
+  a sample; a constructed match is `EXACT`.
 - Falsify: no such matched pair exists. That collapses the instrument to one dimension
   and *vindicates* the standard accounting.
 - Does not buy: demarcates incompleteness. It does not falsify the FEP. Frame as
   incompleteness of the received accounting, **never** as refuting the FEP.
 
-**C6 · breaking the calibration zero under R(x)** · FALSIFY · R6 · toolbox C · tier B · **PR-9 · v0.5**, gated on GATE-D4
+**C6 · breaking the calibration zero under R(x)** · FALSIFY · R6 · toolbox C · tier `BOUNDED` · **PR-9 · v0.5**, gated on GATE-D4
 
 - Mechanism: under R(x) the exact posterior is non-Gaussian and every tractable rule is
   a Gaussian surrogate, so the gap is strictly positive by theorem. The correct/exact
@@ -210,7 +211,7 @@ Protocol: register the diagnosis, not the conclusion. Never discover a threshold
 raising a parameter until the result fires. Require the sign flip at the registered point
 *and* one step below.
 
-**D1 · fidelity-ladder ordering** · SEVERE · R7 · toolbox C, D · tier B · **PR-9 · v0.5**, gated on GATE-D4
+**D1 · fidelity-ladder ordering** · SEVERE · R7 · toolbox C, D · tier `BOUNDED` · **PR-9 · v0.5**, gated on GATE-D4
 
 - Predict: along plug-in `R(μ⁻)` → Spinello–Stilwell iterated → belief-smoothed
   `E[R(x)]` → exact reference, the inference gap decreases at a certified tolerance, ε
@@ -222,11 +223,11 @@ raising a parameter until the result fires. Require the sign flip at the registe
 - **Warrant constraint** (ledger section 5): reportable only when the difference between
   adjacent rungs exceeds the sum of their certified bars. Pre-register the minimum
   separation that counts. Overlapping bars are pre-committed to a **third outcome,
-  `NOT_RESOLVED`**, neither confirmation nor refutation. Without Tier B this leg produces
+  `NOT_RESOLVED`**, neither confirmation nor refutation. Without `BOUNDED` this leg produces
   four computed numbers in an order, which is not a result in either direction.
 - Does not buy: weaker content than D2's exponent. The qualitative half.
 
-**D2 · scaling exponent** · SEVERE · R8 · toolbox C, F · tier B · **PR-9 · v0.5**, gated on GATE-D4
+**D2 · scaling exponent** · SEVERE · R8 · toolbox C, F · tier `BOUNDED` · **PR-9 · v0.5**, gated on GATE-D4
 
 - Predict: `gap ∝ (curvature of R) × (belief spread)²`. Sweep both factors
   independently, fit the exponent, require it inside a pre-registered interval **around
@@ -243,7 +244,7 @@ raising a parameter until the result fires. Require the sign flip at the registe
   exponent contaminated by higher-order terms at large spread.
 - Does not buy: bears on the surrogate-vs-exact geometry only, not on the FEP's core.
 
-**D3 · crossover horizon H\*** · SEVERE · R10 · toolbox A, E · tier B · **v0.4.4 ✓ measured, PR-2 + PR-5 · v0.4.5 complete**
+**D3 · crossover horizon H\*** · SEVERE · R10 · toolbox A, E · tier `BOUNDED` · **v0.4.4 ✓ measured, PR-2 + PR-5 · v0.4.5 complete**
 
 - Predict: sweep H; there exists H\* at which the accumulated epistemic pull overtakes
   the pragmatic gradient, so reach becomes walk. Sign flip asserted at H\* **and**
@@ -275,16 +276,17 @@ raising a parameter until the result fires. Require the sign flip at the registe
 - Does not buy: a prediction about the planning horizon, not about the R(x) mechanism. A
   null weakens the "reach becomes walk" reading without touching Thm 1.
 
-**D4 · certified discretisation bound · GATE-D4** · SEVERE · R9 · toolbox C · tier B · **PR-8 · v0.4.5, hard gate**
+**D4 · certified discretisation bound · GATE-D4** · SEVERE · R9 · toolbox C · tier `BOUNDED` · **PR-8 · v0.4.5, hard gate**
 
 - Predict: the reference filter's error is stated as a number, small relative to R6's
   signal by a **pre-agreed factor**. The factor is written down *before* the bound is
   computed.
 - Build: a certified bound, not a fine grid with a convergence plot. Interval arithmetic
   or a proved quadrature error bound, licensing *for all x in the domain,
-  |p_grid − p_exact| ≤ δ*. Emits `CERTIFIED` (3c), never `PROVED` (3b).
-- Falsify: the bound is not statable at the pre-agreed factor. Tier B collapses to
-  Tier C, Part 2's numbers become uncertified, and the response is a different paper.
+  |p_grid − p_exact| ≤ δ*. Emits `CERTIFIED` from validated numerics, never `PROVED`
+  from an enumeration.
+- Falsify: the bound is not statable at the pre-agreed factor. `BOUNDED` collapses to
+  `COMPUTED`, Part 2's numbers become uncertified, and the response is a different paper.
 - Gate mechanics: v0.4.5 is cut at PR-8's merge whatever the outcome, so a re-scoped
   paper cites a release rather than a commit. C6, D1 and D2 do not merge against an
   uncertified reference.
@@ -295,7 +297,7 @@ raising a parameter until the result fires. Require the sign flip at the registe
 
 ## E — Is the FEP doing independent work?
 
-**E1 · vs dual control** · DEMARCATE · R5 · toolbox E · tier A signature / B leg · **PR-5 · v0.4.5 (signature), v0.5 (R(x) leg)**
+**E1 · vs dual control** · DEMARCATE · R5 · toolbox E · tier `EXACT` signature / `BOUNDED` leg · **PR-5 · v0.4.5 (signature), v0.5 (R(x) leg)**
 
 - Two regimes, kept apart. (a) Fixed-R control signature, where certainty equivalence
   *holds*: certify `J_CE = J*` exactly by separation, bracket width `= J_LQG − J_LQR` in
@@ -313,7 +315,7 @@ raising a parameter until the result fires. Require the sign flip at the registe
 - Does not buy: corroborates the *unification* thesis, which is P1's actual claim. Not
   an independent-prediction thesis. Do not let a reader take the bridge as novel physics.
 
-**E2 · vs reward-plus-information-bonus** · DEMARCATE · rival-agent harness · tier B · **further**
+**E2 · vs reward-plus-information-bonus** · DEMARCATE · rival-agent harness · tier `BOUNDED` · **further**
 
 - Test: search for any `reward + λ·(info gain)` agent reproducing Agent B's
   action-dependent epistemic value **and** the crossover H\* simultaneously.
@@ -395,8 +397,9 @@ raising a parameter until the result fires. Require the sign flip at the registe
 9. **Never let a declared set go unversioned.** Action sets, rule ladders, constructor
    crosses, seed lists, functional variants each live in the model spec, so an addition
    after results are seen appears in the diff rather than in the prose.
-10. **Never print 3a and 3b as the same `PASS`.** A grid sample of a continuum
-    corroborates; a fully enumerated finite set with a cardinality certificate decides.
+10. **Never print a sample and an enumeration as the same `PASS`.** A grid sample of a
+    continuum corroborates. A fully enumerated finite set with a cardinality certificate
+    decides.
 
 ---
 
