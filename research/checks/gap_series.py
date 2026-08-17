@@ -19,10 +19,15 @@ the checks below test the derivation against them rather than describing what it
 section 7 discloses the sequence at its head. The content is unaffected and the
 scheduling is not, and a reader is entitled to judge them separately.
 
-**Nothing here is fitted.** No floats, no family, no value for `R̄`. `ℓ₁..ℓ₄` are free
-symbols throughout, so there is no quantity a measured number could be substituted into.
-That is what makes the agreement with the fit evidence rather than circularity, and it
-is checkable by reading the module.
+**Nothing here is fitted.** No floats and no numeric value for `R̄`. `ℓ₁..ℓ₄` are free
+symbols throughout the derivation, so there is no quantity a measured number could be
+substituted into. That is what makes the agreement with the fit evidence rather than
+circularity, and it is checkable by reading the module.
+
+One check does choose a family, and it is a consequence rather than an input. C7 sets
+`ℓ₂ = ℓ₃ = ℓ₄ = 0` to specialise the *derived* general form to `R = A·e^{bx}`. The
+substitution happens after the coefficient exists, never before it, so it cannot supply
+the answer it checks.
 
 **The predictive is the exact one.** `ν = σz₁ + √R̄·e^{δ/2}·z₂` is the generative
 process written out, not a model of it. Collapsing it to `N(0, R̄)` leaves `c₂` alone
@@ -91,12 +96,6 @@ REGISTRATION_SOURCE = (
 BASIS_SOURCE = (
     "research/gate_d4_registration.md, section 2: the seven-term dimensional basis, "
     "with a parity argument for completeness"
-)
-
-#: Where the fit that predicted two zeros and five fractions is recorded.
-FIT_SOURCE = (
-    "research/gate_d4_registration.md, RESULT 2026-08-10: two coefficients consistent "
-    "with zero, five fractions conjectured and explicitly not established"
 )
 
 #: Where the cumulant statement of the gap is hand derived.
@@ -526,7 +525,7 @@ def check_quartic_basis() -> list[CheckReport]:
         report_identity(
             name=f"C8 predicted zero [{term}]",
             claim=f"the {term} coefficient is exactly zero",
-            correspondence=FIT_SOURCE,
+            correspondence=EXPANSION_SOURCE,
             residual=found[term],
             shown=f"{term}: {found[term]}",
         )
@@ -536,7 +535,7 @@ def check_quartic_basis() -> list[CheckReport]:
         report_identity(
             name=f"C8 fraction [{term}]",
             claim=f"the {term} coefficient is {value}",
-            correspondence=FIT_SOURCE,
+            correspondence=EXPANSION_SOURCE,
             residual=found[term] - value,
             shown=f"{term}: {found[term]}",
         )
@@ -622,7 +621,8 @@ def check_exponential_family() -> list[CheckReport]:
 
     Every log-derivative above the first vanishes, so `l₂ = l₃ = l₄ = 0`. The
     registration predicted `c₄ = α·b⁴ + ζ·b²/R(μ)` from that, before either coefficient
-    was known. The derivation supplies `α = 7/16` and `ζ = −3/4`.
+    was known. The derivation supplies `α = 7/16` and `ζ = −3/4`, under the reverse
+    direction that `ORDER`-level agreement does not extend to `σ⁴`.
 
     Returns:
         The `c₂` report and the `c₄` report.
@@ -642,7 +642,10 @@ def check_exponential_family() -> list[CheckReport]:
         ),
         report_identity(
             name="C7 exponential family c₄",
-            claim="for R = A·e^{bx}, c₄ = 7b⁴/16 − 3b²/(4R̄), exactly two terms",
+            claim=(
+                "for R = A·e^{bx}, c₄ = 7b⁴/16 − 3b²/(4R̄) under reverse KL, "
+                "exactly two terms"
+            ),
             correspondence=BASIS_SOURCE,
             residual=quartic - claimed,
             shown=f"c₄|(l₂=l₃=l₄=0) = {sympy.factor(quartic)}",

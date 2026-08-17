@@ -213,8 +213,9 @@ series and the exact predictive average. `gap_series.py` runs to `σ⁴` and der
 expansion and the predictive are computed, and what happens to a result produced out of
 order.
 
-- [x] `c₄ = 7ℓ₁⁴/16 − ℓ₁²ℓ₂/4 + ℓ₂²/8 + ℓ₁ℓ₃/4 − 3ℓ₁²/(4R̄)`, on free `ℓ₁..ℓ₄` and a
-      symbolic `R̄`. Every registered prediction holds. The five conjectured fractions are
+- [x] `c₄ = 7ℓ₁⁴/16 − ℓ₁²ℓ₂/4 + ℓ₂²/8 + ℓ₁ℓ₃/4 − 3ℓ₁²/(4R̄)` under **reverse KL**, on
+      free `ℓ₁..ℓ₄` and a symbolic `R̄`. `c₂` is direction-free and `c₄` is not, since
+      `κ₃` separates the directions above `σ²`. Every registered prediction holds. The five conjectured fractions are
       the derived ones, the two coefficients reported consistent with zero are identically
       zero, the seven-term basis spans it with no remainder, and the exponential family
       keeps the two terms section 2 of the registration said it could. At the declared
@@ -238,9 +239,10 @@ order.
       fired. It sits on the over-cancellation side of 6 and the registration set
       refutation at 5 or below, so the closed form is neither refuted nor passed by that
       cell.
-- [ ] G4c, leave-one-out exponent stability in `gap_expansion.py`, written against a
+- [x] G4c, leave-one-out exponent stability in `gap_expansion.py`, written against a
       pre-registration that declares its three readings for the `tanh` fire. It cannot
-      convert the fired cell into a pass. The four family runs are not recorded yet.
+      convert the fired cell into a pass. All four family runs are recorded in the
+      registration's RESULT 2026-08-16 on the diagnostic.
 
 Results from the third land in `research/gate_d4_registration.md`, not here.
 
@@ -609,7 +611,7 @@ what makes the timing checkable.
       registered `X = 0.1`. The branch was decided without the answer visible.
 - [x] The convergence shortfall at the bottom of the range disclosed before the refit, not
       after it.
-- [x] `c₄` in closed form, which supersedes that refit:
+- [x] `c₄` in closed form under **reverse KL**, which supersedes that refit:
       `7ℓ₁⁴/16 − ℓ₁²ℓ₂/4 + ℓ₂²/8 + ℓ₁ℓ₃/4 − 3ℓ₁²/(4R̄)`. Derived symbolically on the
       branch above, against predictions the registration carried at earlier dates. The
       fit's residual error is explained rather than absorbed: it was a `COMPUTED`
@@ -660,16 +662,18 @@ prose survived them, which is a failure mode worth not repeating.
       spread, which classifies a fired G4b as grid instability or as a real deviation. It
       is a diagnostic and revises no outcome.
 - [x] `series_kernel.py`. The construction of `W`, its truncated expansion, the moment
-      operator, and the exact predictive average. 22 pins. Explicit polynomial truncation
-      rather than `sympy.series`, which does not terminate on the assembled `W`. `series`
-      survives as the independent arm that licenses the swap through `σ³`.
+      operator, and the exact predictive average. 23 pins. Explicit polynomial truncation
+      rather than `sympy.series`, which costs about an order of magnitude per order on
+      the assembled `W`. `series` survives as the independent arm that licenses the swap
+      through `σ⁴`, which is where `DERIVATIVE_ORDER` stops the truncation path.
 - [x] `log_ratio_series.py`. Symbolic pins for the log-ratio series `W`, 18 of them, all
       holding. It stops at first order in `σ` and its expectation, which is where the
       structure lives and the arithmetic does not. Adds `sympy` as a dev dependency.
       Nothing under `src/cpomdp` imports it.
-- [x] `gap_series.py`. `c₂` and `c₄` from the kernel, 29 identities. No floats, no family,
-      no value for `R̄`, so there is no quantity a measured number could be substituted
-      into. That is what makes the agreement with the earlier fit evidence rather than
+- [x] `gap_series.py`. `c₂` and `c₄` from the kernel, 29 identities. No floats and no
+      numeric `R̄` in the derivation, so there is no quantity a measured number could be
+      substituted into. C7 specialises to the exponential family after the fact, never
+      before it. That is what makes the agreement with the earlier fit evidence rather than
       circularity, and it is checkable by reading the module.
 
 - [ ] Write down the **pre-agreed factor** before this PR is opened. A factor agreed after

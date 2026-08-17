@@ -2257,9 +2257,15 @@ does not weaken the result's content. It changes what may be claimed about the r
 
 - `SymbolicReduction` is public API and carries a `docs/api` page. A `PROVED` report is now
   reachable by argument as well as by enumeration.
-- 52 identities across `series_kernel`, `log_ratio_series` and `gap_series` report `PROVED`
+- 70 identities across `series_kernel`, `log_ratio_series` and `gap_series` report `PROVED`
   at Tier A, each carrying a reduction. Mutation probes confirm the suite discriminates
-  rather than merely agreeing.
+  rather than merely agreeing. The CI job pins all three counts.
+- `c₄` is a reverse-KL coefficient. `c₂` is direction-free, checked at `σ²` and asserted no
+  further, so every site quoting `c₄` carries the direction with it.
+- One of the four out-of-sample families fires. `1.5 + 0.5 tanh(x)` returns `σ^6.302`
+  against a ±0.25 bar, on the over-cancellation side of 6, and the leave-one-out
+  diagnostic leaves it standing. The fire is carried alongside the three passes rather
+  than summarised with them.
 - `c₄` moves from a Tier C fit with a 0.36% extraction spread to a closed form. The fit's
   residual error is explained rather than absorbed, and the registration's simple-fraction
   hypothesis is settled instead of left open.

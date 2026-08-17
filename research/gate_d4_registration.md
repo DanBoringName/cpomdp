@@ -990,6 +990,131 @@ already takes `--c6` and shifts the predicted exponent to 8 when given one, so d
 `c₆` at `σ⁶` and re-running would decide it. That derivation does not exist, this paragraph
 is not evidence, and the `tanh` cell stays fired until such a test is registered and run.
 
+### AMENDMENT 2026-08-17: the fired cell was measured with a rounded candidate
+
+The `tanh` row above reads `σ^6.302` with a leave-one-out spread of 0.018. Both numbers
+belong to a `--c4` of `0.0061107`, the five-significant-figure value this document tabled,
+not to the closed form the derivation produced. Re-measured on the same six cells with the
+same code:
+
+| `--c4` supplied for `tanh` | G4b exponent | G4c spread | smallest residual |
+| --- | --- | --- | --- |
+| `0.0061107` (the value tabled above) | σ^6.302 | 0.018 | 6.4× the quadrature floor |
+| `0.00611074` (six significant figures) | σ^6.133 | 0.069 | 7.7× the floor |
+| `0.0061107361819873` (the closed form) | σ^6.148 | 0.062 | 7.6× the floor |
+
+**The mechanism, and why it reaches this family alone.** The rounded candidate differs from
+the closed form by `3.6e-8`. Multiplied by `σ⁴` at the bottom cell that is `5.8e-15`, against
+a residual there of `3.8e-14`, so the rounding accounts for about 15% of the smallest
+residual on the grid. That cell carries the leverage in a log-log slope. It bites `tanh`
+because only there does the residual sit within an order of magnitude of the quadrature
+floor: at full precision the smallest residual is 7.6× the floor.
+
+**The exact candidates, so this cannot recur silently.** All four are the closed form
+evaluated at `μ = 1`, to seventeen significant figures:
+
+| family | `--c4` |
+| --- | --- |
+| `1 + x²` | `-0.18750000000000000` |
+| `exp(x)` | `0.16159041912141826` |
+| `1.5 + 0.5 tanh(x)` | `0.0061107361819873193` |
+| `1.5 + 0.5 sin(x)` | `-0.00074203206428907733` |
+
+One family per invocation, since a single `--c4` applied to a run of several mis-tests all
+but one:
+
+```text
+uv run --no-sync python -m research.checks.gap_expansion --check \
+    --families tanh --c4 0.0061107361819873193
+```
+
+**What this does and does not change.** The recorded outcome stands: the `tanh` cell fired,
+and it is not un-fired by re-running it with better inputs after seeing that it fired. That
+is the move this section exists to prevent, and it applies to a rounding the registrant made
+as much as to a threshold. What changes is what may be claimed about *why* it fired. The
+0.302 deviation is no longer attributable to the residual alone, because 0.154 of it is
+attributable to the candidate's precision. The remaining 0.148 at full precision sits inside
+the ±0.25 bar, so a run registered at full precision would not have fired this cell. That
+is a statement about a run nobody registered.
+
+Any write-up quoting the fire carries this amendment with it. Quoting `σ^6.302` without the
+candidate that produced it is quoting a number that cannot be reproduced from the closed
+form.
+
+### PRE-REGISTRATION 2026-08-17: candidate precision, before any exponent cell is read again
+
+Registered before the next exponent measurement of any kind, and before `c₆` exists.
+
+**The precondition.** A `--c4` or `--c6` candidate is supplied at no fewer than fifteen
+significant figures, and the digits used are recorded beside the cell they produced. A cell
+measured with a rounded candidate is **VOID**, not passed and not fired.
+
+**The rule that makes it checkable.** Before an exponent is read, the run states
+`|Δcandidate| · σ⁴` at the smallest `σ` on the grid against the residual there. Above 1% of
+that residual the candidate is not precise enough for the grid and the cell is VOID. This
+is arithmetic on numbers the run already has, and it is decidable before the exponent is
+looked at.
+
+**Why it is registered rather than applied now.** Applying it to the `tanh` cell would
+convert a fired falsifier into a VOID one on the strength of a defect found after the fire.
+The cell keeps its recorded outcome. The precondition binds what comes next.
+
+### AMENDMENT 2026-08-17: what the leave-one-out diagnostic licenses
+
+The RESULT above reads the diagnostic as showing "the exponent is a property of the residual
+rather than of the grid", and as showing the deviation "is not attributable to the four cells
+whose G3 certification fires on this family". Both are wider than the diagnostic supports.
+
+**Dropping one cell at a time tests one cell at a time.** Every refit still contains at
+least three of the four uncertified cells, so a joint effect of those four cannot appear in
+the spread. The pre-registration declined a two-cell refit for want of power, and the
+conclusion drawn is the one that refit would have supported.
+
+**A grid-wide effect is invisible to it, by construction.** An effect present in every
+cell, whether the grid's range, its spacing, or a bias shared across it, moves every refit
+together and reports as a small spread. From here that is indistinguishable from a stable real deviation.
+
+**Narrowed to what it licenses:** no single `σ` cell accounts for the deviation. The joint
+effect of the four uncertified cells is untested and stays open, and so does the grid as a
+whole. Deciding either needs a different grid or a multi-cell refit, neither of which is
+this diagnostic.
+
+### AMENDMENT 2026-08-17: the closed form is a reverse-KL coefficient
+
+The boxed `c₄` in RESULT 2026-08-16 carries no direction. It is the **reverse** direction,
+`KL(q ‖ p)`, which is the one section 2 specifies and the one the quadrature implements.
+
+`c₂` is direction-free, and that is checked at `σ²` and asserted no further, because `κ₃`
+separates the two directions above it. `c₄` is therefore direction-specific. Under forward
+KL the `ℓ₁⁴` term changes sign:
+
+```text
+reverse:  c₄  =   7ℓ₁⁴/16  −  ℓ₁²ℓ₂/4  +  ℓ₂²/8  +  ℓ₁ℓ₃/4  −  3ℓ₁²/(4R̄)
+forward:  c₄  =  −3ℓ₁⁴/16  +  ℓ₁²ℓ₂/4  +  ℓ₂²/8  +  ℓ₁ℓ₃/4  −  3ℓ₁²/(4R̄)
+```
+
+At the declared operating point that is `−3/16` reverse against `−13/16` forward. Every site
+stating the closed form carries the word "reverse" inside the box, so the two cannot be
+confused by a reader who arrives at the formula without the section around it.
+
+### AMENDMENT 2026-08-17: the anti-circularity claim, restated to what is true
+
+Section 7 says the symbolic modules contain "no floats, no family … `ℓ₁..ℓ₄` are free
+symbols throughout". The substance holds and the letter does not. `gap_series` hard-codes
+the five conjectured fractions in order to check against them, and `check_exponential_family`
+substitutes `ℓ₂ = ℓ₃ = ℓ₄ = 0` to specialise to `R = A·e^{bx}`. Both live in checks that
+read the derived coefficient, never in the path that computes it.
+
+**Restated, stronger and checkable:** no fitted number enters the path that computes `c₄`.
+That path is `averaged_gap`, `quartic_coefficient` and `basis_coefficients`, and a reader
+can confirm it by reading those three functions. Everything downstream of them compares the
+result against something. Nothing upstream of them has a number in it.
+
+**And the `R̄` sentence.** `R̄` is never given a **numeric value** anywhere in the symbolic
+path. It is reparameterised as `1/inverse` in two places for polynomial manipulation, which
+is a change of variable and not a value. That is the precise claim, and it is what makes a
+check that would still pass at `R̄ = 1` a check that has lost a variable.
+
 ## Stop conditions (DECLARED 2026-08-07)
 
 Two branches, disjoint, split by which half of the instrument failed.
