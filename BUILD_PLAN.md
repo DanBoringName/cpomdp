@@ -239,6 +239,15 @@ order.
       fired. It sits on the over-cancellation side of 6 and the registration set
       refutation at 5 or below, so the closed form is neither refuted nor passed by that
       cell.
+- [x] The `tanh` fire is candidate-precision sensitive, disclosed rather than re-run. The
+      6.302 belongs to a `--c4` of `0.0061107`, the five-figure value the registration
+      tabled. At full precision the same six cells read σ^6.148, inside the bar. The cell
+      keeps its recorded outcome, because a result is not un-fired by re-running it with
+      better inputs after seeing it fire. A candidate-precision precondition is registered
+      for the next cell instead.
+- [x] Three guards on the instrument, none of which revises a recorded outcome: `--c4`
+      takes one family, G4c voids off the declared grid, and the control branch that lived
+      in prose is now a report. All four recorded runs reproduce unchanged.
 - [x] G4c, leave-one-out exponent stability in `gap_expansion.py`, written against a
       pre-registration that declares its three readings for the `tanh` fire. It cannot
       convert the fired cell into a pass. All four family runs are recorded in the

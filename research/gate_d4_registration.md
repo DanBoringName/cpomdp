@@ -1115,6 +1115,67 @@ path. It is reparameterised as `1/inverse` in two places for polynomial manipula
 is a change of variable and not a value. That is the precise claim, and it is what makes a
 check that would still pass at `R̄ = 1` a check that has lost a variable.
 
+### AMENDMENT 2026-08-17: three guards on the instrument, and one disclosed late
+
+None of these revises a recorded outcome. The runs above used one family on the declared
+grid, which is what the guards now require, so all four reproduce unchanged: `σ^5.982`
+spread 0.008, `σ^5.984` spread 0.007, `σ^6.302` spread 0.018, `σ^6.004` spread 0.005. The
+guards make future misuse visible. They do not re-read anything.
+
+**One family per `--c4`.** `--families` defaults to all five and each has its own `c₄`, so
+a single candidate across a run tests one family and mis-tests the rest. The failure is
+not quiet in the harmless direction: the wrong candidate leaves the quartic surviving, G4b
+reads an exponent near 4 and fires, and G4c reports a spread near zero because every refit
+is wrong the same way. That prints as a stable real deviation. `gap_expansion` now refuses
+the combination at the parser.
+
+**G4c reports VOID off the declared grid.** The readings registered for this diagnostic
+were declared against `EXPANSION_SIGMAS` literally. `_stability_report` never saw that
+tuple and would happily interpret a spread from any `--sigmas`. It now returns
+`NOT_APPLICABLE` naming both grids, since the registered rule does not interpret a number
+from a grid it did not declare.
+
+**The control is now a report rather than a sentence.** The pre-registration's
+"uninformative on all four" branch existed only in prose, with no cross-family aggregation
+in code to evaluate it. `G4c control` emits once per run and fires when every family that
+produced a spread read unstable.
+
+**Disclosed late: the four-cell minimum.** `_stability_report` requires four cells above
+the quadrature floor before it will report a spread. That guard was written with the
+implementation, not before it, so it is a rule this document did not declare in advance.
+It is kept, because a leave-one-out spread over three cells is not a measurement, and it
+is recorded here as an undeclared guard rather than presented as a registered one. It did
+not bind on any run above: all four families supplied six cells.
+
+### AMENDMENT 2026-08-17: the commit record for section 7, and what a rebase did to it
+
+Section 7's entries assert their own ordering. Where that ordering is checkable from the
+git history, this is the map. Identities are as they stand on `65-gap-series-c4` after the
+rebase described below.
+
+| claim | first registered | measured or proved |
+| --- | --- | --- |
+| `c₄` closed form, and the disclosure that it ran first | `bfe98d8` 2026-08-16 | `bfe98d8` 2026-08-16 |
+| the three out-of-sample families, bar and VOID escape declared | `bfe98d8` 2026-08-16 | `bfe98d8` 2026-08-16 |
+| G4c's rule and its three readings | `8e29a0e` 2026-08-16 | `8e29a0e` 2026-08-16 |
+| the rounded-candidate disclosure | `ff1e622` 2026-08-17 | `ff1e622` 2026-08-17 |
+| candidate precision as a precondition | `ff1e622` 2026-08-17 | binds the next cell, unmeasured |
+| the three instrument guards | this commit | this commit |
+
+**Three rows register and measure in the same commit, which is the weakness already stated
+above for G4c.** It applies to the `c₄` result and the out-of-sample table as well. For
+those the ordering rests on this document's account rather than on the history, and the
+structural argument carries it instead: the symbolic path contains no fitted number, which
+a reader checks by reading it rather than by trusting a date.
+
+**A rebase changed the hashes and nothing else.** `65-gap-series-c4` was rebased onto the
+warrant-vocabulary work on 2026-08-17. Author dates survived it: `8e29a0e` is authored
+2026-08-16 and committed 2026-08-17, and every replayed commit carries the same split.
+Commit order survived it too. The ordering above rests on that sequence and those author
+dates, so nothing about what was known when is weakened by it. Only the identities moved,
+and the pre-rebase ones are reachable from no branch, so a hash taken from an earlier draft
+is re-read against the table above.
+
 ## Stop conditions (DECLARED 2026-08-07)
 
 Two branches, disjoint, split by which half of the instrument failed.

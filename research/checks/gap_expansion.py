@@ -633,6 +633,20 @@ def _stability_report(
         The diagnostic's report.
     """
     magnitudes = np.abs(residual)
+    # The registered readings were declared against EXPANSION_SIGMAS literally. On any
+    # other grid the spread is a number this document's rule does not interpret.
+    if tuple(np.round(sigmas, 12)) != tuple(np.round(sorted(EXPANSION_SIGMAS), 12)):
+        return CheckReport(
+            name=name,
+            warrant=None,
+            outcome=Outcome.NOT_APPLICABLE,
+            tier=Tier.BOUNDED,
+            detail=(
+                "VOID — the registered readings are declared against the grid "
+                f"{tuple(sorted(EXPANSION_SIGMAS))}, and this ran on "
+                f"{tuple(float(s) for s in sigmas)}"
+            ),
+        )
     if len(sigmas) < 4 or float(np.min(magnitudes)) < QUADRATURE_FLOOR:
         return CheckReport(
             name=name,
@@ -756,7 +770,54 @@ def run_checks(
         reports += _check_residual_exponent(
             family, cells, slope_tolerance, c4_candidate, c6_candidate
         )
+    if c4_candidate is not None:
+        reports.append(_control_report(reports, slope_tolerance))
     return reports
+
+
+def _control_report(reports: Sequence[CheckReport], tolerance: float) -> CheckReport:
+    """The registered control on G4c: whether any family's exponent was stable.
+
+    The pre-registration reads a `tanh` spread below the bar as a real deviation *only*
+    if the diagnostic discriminates at all. Its "uninformative on all four" branch fires
+    when every family is unstable, and until now that branch lived in prose with nothing
+    in code to evaluate it.
+
+    Args:
+        reports: the run's reports so far, G4c's among them.
+        tolerance: the spread bar G4c used.
+
+    Returns:
+        The control's report, one per run.
+    """
+    stability = [report for report in reports if report.name.startswith("G4c ")]
+    ran = [
+        report
+        for report in stability
+        if report.outcome in (Outcome.NOT_TRIGGERED, Outcome.FIRED)
+    ]
+    if not ran:
+        return CheckReport(
+            name="G4c control",
+            warrant=None,
+            outcome=Outcome.NOT_APPLICABLE,
+            tier=Tier.BOUNDED,
+            detail=f"VOID — no family produced a spread ({len(stability)} attempted)",
+        )
+    unstable = [report for report in ran if report.outcome is Outcome.FIRED]
+    return CheckReport(
+        name="G4c control",
+        warrant=Warrant.CORROBORATED,
+        outcome=Outcome.FIRED if len(unstable) == len(ran) else Outcome.NOT_TRIGGERED,
+        tier=Tier.BOUNDED,
+        detail=(
+            f"FAIL — every family read unstable at bar {tolerance:.2f}, so a spread "
+            "below it says nothing about any one of them"
+            if len(unstable) == len(ran)
+            else f"PASS — {len(ran) - len(unstable)} of {len(ran)} families read "
+            f"stable at bar {tolerance:.2f}, so the diagnostic discriminates"
+        ),
+    )
 
 
 def _print_table(measurements: Sequence[GapMeasurement]) -> None:
@@ -842,6 +903,15 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if arguments.c6 is not None and arguments.c4 is None:
         parser.error("--c6 needs --c4: a sextic candidate cannot be tested on its own")
+
+    # A wrong candidate fires G4b near σ^4 and gives G4c a spread of 0.000, which reads
+    # as a stable real deviation rather than as the mistyped command it is.
+    if arguments.c4 is not None and len(arguments.families) > 1:
+        parser.error(
+            f"--c4 takes one family, got {len(arguments.families)}: "
+            f"{', '.join(arguments.families)}. Each family has its own c₄. "
+            "Re-run with --families <one>."
+        )
 
     chosen = [FAMILIES[key] for key in arguments.families]
     if not arguments.check:
