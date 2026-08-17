@@ -9,25 +9,33 @@
 
 Continuous active inference for Python. The continuous-state sibling of [pymdp](https://github.com/infer-actively/pymdp).
 
-pymdp is great, but it speaks in discrete states. A lot of the world isn't discrete. Positions, velocities, temperatures, the kinds of things you'd actually want an agent to track and steer, don't come in neat little categories. cpomdp fills that gap. You hand it a linear-Gaussian model of how the world moves and what you can see of it, and you get back an agent that perceives and acts in the same `infer_states` / `sample_action` loop pymdp users already know.
+**cpomdp** is a JAX-native active inference toolbox for continuous state spaces. You give it a linear-Gaussian generative model and you get an agent that tracks hidden states and selects actions by minimising expected free energy.
 
-That's the whole idea: keep the pymdp muscle memory, swap the discrete machinery underneath for continuous.
+Continuous means continuous: positions, velocities, concentrations, temperatures. State-dependent observation noise keeps the epistemic term alive, so information-seeking behaviour is available in a regime where it is [**provably**](#how-provable-is-your-result-experimental) absent. Inference runs as message passing over a Forney factor graph, JIT-compilable and vmappable end to end.
 
-Full documentation — API reference and guides — lives at [cpomdp.inferogenesis.com](https://cpomdp.inferogenesis.com/).
+The loop is `infer_states` / `sample_action`, which pymdp users will recognise. cpomdp is its continuous-state sibling. The machinery underneath is its own.
+
+Full documentation, including API reference and guides, lives at [cpomdp.inferogenesis.com](https://cpomdp.inferogenesis.com/).
 
 ## What cpomdp does
 
-**Exact continuous perception.** The mean dynamics are linear and the noise is Gaussian, so the filter is an exact Kalman filter. No sampling and no variational gap. No approximation to tune. The same closed form runs whether you are tracking or acting.
+**Exact continuous perception.** Linear mean dynamics and Gaussian noise make the filter an exact Kalman filter, closed form, nothing sampled. Under fixed noise there is no variational gap. The same code path runs whether you are tracking or acting.
 
-**Epistemics that survive the linear-Gaussian collapse.** Under a *fixed* linear-Gaussian sensor the epistemic term of expected free energy is identical for every policy (Koudahl, Kouw & de Vries 2021). cpomdp deviates from that model by the smallest amount that avoids the collapse. It lets the *noise* depend on the state. The mean stays linear. That noise is a state-dependent sensor `R(x)` (Corva 2026), or state-dependent process noise `Q(x)`. The action then reaches the posterior covariance, so the epistemic term moves with it. Information-seeking behaviour is available in a regime where it is proved away.
+**Action that reaches the posterior covariance.** cpomdp lets the observation noise depend on the state, `R(x)` (Corva 2026), or the process noise, `Q(x)`. The mean stays linear. Because the covariance now responds to what the agent does, the epistemic term of expected free energy differs across policies and information-seeking behaviour becomes available. Under a *fixed* linear-Gaussian sensor that term is identical for every policy (Koudahl, Kouw & de Vries 2021); state-dependent noise is the smallest deviation from that model which escapes the result.
 
-**Multi-step expected free energy, searched and certified.** EFE over an H-step horizon (`cpomdp.efe.policy_efe`), plus an exhaustive search across the entire space of action sequences `A^H` (`cpomdp.enumeration.EnumeratedEfeSearch`) that hands back a `CompletenessCertificate`. So "this is the best plan" is *decided* over the declared action set rather than sampled from it, and the object that says so is checkable. Receding-horizon and open-loop selectors wrap the search, and both report the honest per-cycle cost `|A|^H · H` rather than a grid's much smaller number.
+**One knob between exploiting and exploring.** `StateGoal` and `ObservationGoal` carry a precision Λ. The pragmatic term scales with Λ and the epistemic term does not, so Λ alone decides whether an agent beelines for the goal or detours to sharpen its belief first. The four bacilli above differ in that number and nothing else.
 
-With `R(x)` alive a short-horizon agent walks straight past the information. Stretch the horizon and it detours to collect it. Curiosity needs both.
+**Multi-step EFE, searched and certified.** `cpomdp.efe.policy_efe` scores an H-step horizon. `cpomdp.enumeration.EnumeratedEfeSearch` sweeps the full action space `A^H` and returns a `CompletenessCertificate`, so "this is the best plan" is decided over the declared action set rather than sampled from it, and the object that says so is checkable. Receding-horizon and open-loop selectors wrap the search, and both report the true per-cycle cost `|A|^H · H`. Drop the epistemic term and steady-state LQR is what remains.
+
+**Inference as message passing.** Beliefs propagate over a Forney factor graph through the `CouplingGraph` backend, with a temporal-edge partition controlling which off-diagonal precision blocks cross the time boundary. Where a model cannot be flattened, cpomdp raises `IncompatibleLinearizationError` rather than returning a quietly wrong number: state-dependent `R(x)` combined with a mean-shifting coupling makes flattening structurally impossible, and the two-pass linearisation is the supported route.
+
+**What is not here.** The mean stays linear. Genuinely nonlinear sensors, a curved `g(x)` needing a second-order moment match, are the next step rather than a current feature.
+
+Horizon length decides whether the epistemic machinery pays off. With `R(x)` alive a short-horizon agent still walks past the information; stretch the horizon and it detours to collect it. Curiosity needs the term and the lookahead together.
 
 ## Example
 
-Four bacilli seeking food in the same world — the continuous-state answer to pymdp's mouse-seeking-cheese, now with the **epistemic** term v0.3 adds. The twist: the food's position is **hidden**, and a **beacon** marks where the agent can *see* it. Visiting the beacon doesn't sharpen where the agent thinks *it* is — it sharpens where it thinks the *food* is, which it can't act on directly. That makes the information genuinely **instrumental**: resolving it changes where the agent then heads. Each body sits at its **true** hidden state; the blue `+` is where it believes it is, the diamond is where it believes the food is (both with their uncertainty ellipses), and the star is the food's true, hidden location. The four differ in **one number only** — the **goal precision Λ** each is built with. They all minimise the same Expected Free Energy `G = pragmatic − epistemic`; because the pragmatic (goal) term scales with Λ while the epistemic (information) term doesn't, Λ alone tips the balance: **classic LQR** and a **sharp Λ** beeline to the agent's current food guess and never detour; a **balanced Λ** detours to the beacon, learns where the food really is, *then* heads there with confidence; a **weak Λ** is so over-curious it parks at the beacon and never eats. One real knob — the precision you'd actually pass — four behaviours.
+Four bacilli seeking food in the same world — the continuous-state answer to pymdp's mouse-seeking-cheese, now with an **epistemic** term. The twist: the food's position is **hidden**, and a **beacon** marks where the agent can *see* it. Visiting the beacon doesn't sharpen where the agent thinks *it* is — it sharpens where it thinks the *food* is, which it can't act on directly. That makes the information genuinely **instrumental**: resolving it changes where the agent then heads. Each body sits at its **true** hidden state; the blue `+` is where it believes it is, the diamond is where it believes the food is (both with their uncertainty ellipses), and the star is the food's true, hidden location. The four differ in **one number only** — the **goal precision Λ** each is built with. They all minimise the same Expected Free Energy `G = pragmatic − epistemic`; because the pragmatic (goal) term scales with Λ while the epistemic (information) term doesn't, Λ alone tips the balance: **classic LQR** and a **sharp Λ** beeline to the agent's current food guess and never detour; a **balanced Λ** detours to the beacon, learns where the food really is, *then* heads there with confidence; a **weak Λ** is so over-curious it parks at the beacon and never eats. One real knob — the precision you'd actually pass — four behaviours.
 
 ![Four bacilli learning where the food is, under different goal precisions Λ, via continuous active inference](docs/assets/bacillus_uncertain_food.gif)
 
@@ -163,19 +171,29 @@ agent.sample_action()                 # ValueError: this Agent has no objective 
 
 The state-dependence is in the *noise*. The mean stays linear. Genuinely **nonlinear sensors**, a curved `g(x)` needing a second-order moment match, are the next step and are not here yet.
 
+## How provable is your result? (experimental)
+
+Most toolboxes let you build an agent and stop there. cpomdp also labels how well each of your results is established, so you do not have to invent a warrant scheme of your own before you can report one honestly.
+
+Every check the suite runs carries three labels. A **warrant** says what established the claim: `PROVED` for a theorem, a symbolic identity, or a finite domain exhausted under a completeness certificate; `CERTIFIED` for validated numerics over a compact domain; `CORROBORATED` for a sample of a continuum, which settles existence and refutes a universal by counterexample and decides no universal at any sample count. A **tier** says how well the number itself is known: `EXACT`, `BOUNDED`, or `COMPUTED`. An **outcome** says what the falsifier did, and a falsifier does not pass — it fires or it does not. `PROVED` with nothing behind it does not construct.
+
+[research/warrant_ledger.md](research/warrant_ledger.md) is the canonical table, and every other document points at it. [warrant_numbers.md](warrant_numbers.md) records the declared numbers those claims are measured against. The vocabulary itself is [src/cpomdp/warrant.py](src/cpomdp/warrant.py), documented at [cpomdp.inferogenesis.com/api/warrant](https://cpomdp.inferogenesis.com/api/warrant/).
+
+Treat this as experimental. It may move out of cpomdp into a standalone inferogenesis tool before the 1.0 release, which is undecided.
+
 ## Swappable backends
 
 You can swap the inference engine if you want to. `KalmanBackend` is the default and does the real work; `RxInferBackend` re-derives the same answers through Julia and exists mainly so the fast path has something independent to check itself against. Both sit behind the `InferenceBackend` protocol, so you can write your own.
 
 ## Status
 
-Still pre-1.0. v0.4.4 is the current release. It added the multi-step slice of expected free energy: horizon rollouts, exhaustive search with completeness certificates, and the horizon at which a planner stops reaching and starts sensing. The demos were rebuilt on top of it. The crossover now also runs on the flat Kalman/EFE route, the cue-maze task works in any number of dimensions, and the shared plotting machinery lives in `examples/gallery.py`. The `Agent` / `infer_states` / `sample_action` surface has been stable since v0.3 and is what I am trying to hold steady. If you have a request or a suggestion that would make that front-facing API more usable, please open a GitHub issue. Until 1.0 a minor version is where breaking changes can land.
+Still pre-1.0. v0.4 secures the public API around the factor-graph backend and the enumeration layer. If you have a request or a suggestion that would make the front-facing API more usable, open a GitHub issue, I am happy to listen. Until 1.0, a minor version is where breaking changes can land.
 
 ## Development
 
 I designed and built cpomdp — the architecture, the conditionally-linear-Gaussian formulation, the API, and every decision in [DECISIONS.md](https://github.com/inferogenesis/cpomdp/blob/main/DECISIONS.md) are mine. The design draws on my day-to-day work as a full-time software engineer and on hands-on expertise integrating and developing large machine-learning models at scale using event-driven microservice architecture.
 
-I used an AI coding assistant (Claude Opus-4.8) as a tool under close review: to draft docstrings, probe for edge cases and candidate bugs, and expand the test suite, including adversarial ones. Everything it produced I read, checked, and approved before it landed. None of it is taken on trust — the numbers are validated independently against the RxInfer (Julia) and analytic NumPy oracles described above. Correctness rests on those checks, not on the tool that helped write the code.
+I used AI coding assistants (Claude Opus 4.8, and Opus 5 from v0.4) as tools under close review: to draft docstrings, probe for edge cases and candidate bugs, and expand the test suite, including adversarial ones. Everything they produced I read, checked, and approved before it landed. None of it is taken on trust. The numbers are validated independently against the RxInfer (Julia) and analytic NumPy oracles described above. Correctness rests on those checks, not on the tools that helped write the code.
 
 ## Contributions
 

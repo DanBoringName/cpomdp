@@ -62,11 +62,13 @@ MIN_EIG_FLOOR = 1e-9
 COND_CEILING = 1e8
 
 # The registered action set the anchors were fixed against. It clips the reach at the
-# grid edge -2, so it needs two steps to reach the goal at -3; a set containing the
-# optimal reach -3 flips one horizon sooner (see the +edge measurement below). H* on
-# this set is therefore an upper bound, and the honest headline number.
+# grid edge -2, so it needs two steps to reach the goal at -3. A set containing -3,
+# which reaches the goal in one step from the start, flips one horizon sooner (see the
+# +edge measurement below). H* on this set is therefore an upper bound, and the honest
+# headline number. Wider sets are unmeasured: -3 is the one-step reach from the start,
+# not an established optimum, since the walk arrives at the cue at +1.
 V1 = [-2.0, -1.0, 0.0, 1.0, 2.0]  # the registered action set (clips the reach at -2)
-V1_EDGE = [-3.0, *V1]  # + the optimal reach -3; flips one horizon sooner
+V1_EDGE = [-3.0, *V1]  # + the one-step reach -3; flips one horizon sooner
 ACTION_SET = FiniteActionSet([[a] for a in V1], version="v1")
 EDGE_SET = FiniteActionSet([[a] for a in V1_EDGE], version="v1-edge")
 FLIP_H = 7  # the crossover horizon on ACTION_SET
@@ -381,16 +383,19 @@ def falsifiers(
         return "cue-ward" if measurement.cue_ward else "prior-ward"
 
     # Travels with the number everywhere it is quoted: the declared set clips the reach
-    # at -2 while the unconstrained optimum is -3, so 7 is an upper bound on H*, and a
+    # at -2 while -3 reaches the goal in one step, so 7 is an upper bound on H*, and a
     # set containing -3 flips at 6. The error bound certifies the arithmetic, which was
     # never the exposure here.
-    upper = f"H* = {FLIP_H} is an upper bound (set clips the reach at -2, optimum -3)"
+    upper = (
+        f"H* = {FLIP_H} is an upper bound "
+        "(set clips the reach at -2, one-step reach -3)"
+    )
     return (
         CheckReport(
             name="1. no crossover at feasible H",
             warrant=Warrant.PROVED,
             outcome=crossover_exists(),
-            tier=Tier.B,
+            tier=Tier.BOUNDED,
             detail=(
                 f"argmin is {where(at_flip)} at H = {at_flip.horizon}, inside "
                 f"H_MAX = {H_MAX}. {upper}. {_bar(at_flip)}"
@@ -401,7 +406,7 @@ def falsifiers(
             name="2. flip not clean at H*/H*-1",
             warrant=Warrant.PROVED,
             outcome=flip_is_clean(),
-            tier=Tier.B,
+            tier=Tier.BOUNDED,
             detail=(
                 f"argmin is {where(at_prior)} at H = {at_prior.horizon} and "
                 f"{where(at_flip)} at H = {at_flip.horizon}. {upper}. "
@@ -413,14 +418,14 @@ def falsifiers(
             name="3. not reproducible across seeds",
             warrant=None,
             outcome=Outcome.NOT_APPLICABLE,
-            tier=Tier.C,
+            tier=Tier.COMPUTED,
             detail="void by construction: no observation draw to vary across seeds",
         ),
         CheckReport(
             name="4. H* unstable under refinement",
             warrant=None,
             outcome=Outcome.NOT_RUN_HERE,
-            tier=Tier.C,
+            tier=Tier.COMPUTED,
             detail=(
                 f"step-0.5 refinement costs {9**7 * 7} steps. Recorded in the "
                 "write-up, and the live exposure on this number"
@@ -530,7 +535,7 @@ def _print_tables() -> None:
     refine_cost = 9**7 * 7
     hmax_cost = 5**H_MAX * H_MAX
     print("\n5. Action-set dependence and feasibility:")
-    print(f"   optimal reach -3 -> H* = {edge_star}; the registered set clips the")
+    print(f"   one-step reach -3 -> H* = {edge_star}; the registered set clips the")
     print(f"   reach to -2, so H* = {FLIP_H} is an upper bound.")
     print(f"   recorded, not re-run here (cost {refine_cost} steps): a step-0.5")
     print("   refinement of the same range left the H=6 and H=7 argmins unchanged,")
@@ -604,11 +609,11 @@ def check() -> None:
     assert rc.cond_s.max() < COND_CEILING
     assert rc.cond_sigma_post.max() < COND_CEILING
 
-    # The equal-billing measurement (H* one sooner with the optimal reach -3) and the
+    # The equal-billing measurement (H* one sooner with the one-step reach -3) and the
     # refinement-stability check are heavier enumerations; they print in the bare run
     # and are recorded in the write-up rather than gated on every CI pass.
     print(f"Crossover at H* = {FLIP_H} on the registered set ({FLIP_H - 1} with the")
-    print("optimal reach): the exhaustive argmin flips reach -> two-phase walk. The")
+    print("one-step reach): the exhaustive argmin flips reach -> two-phase walk. The")
     print("gradient decays below a flat ~1.7-nat epistemic pull; zero it and the")
     print("flip moves to H~10, so the epistemic is load-bearing. Oracle- and")
     print("conditioning-confirmed.")

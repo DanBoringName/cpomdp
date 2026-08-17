@@ -3,12 +3,14 @@
 The enumerated counterpart of ``EFESelector``'s continuous grid, and a deliberately
 *different object* so the two cannot be confused. ``EFESelector`` samples a continuous
 action box and tiles each sample into a **constant-action** policy — a sample of a
-continuum, warrant ``CORROBORATED`` (Prover 3a: corroborates, never decides).
+continuum, warrant ``CORROBORATED`` (Prover 3 · sample: corroborates, never
+decides).
 ``EnumeratedEfeSearch`` enumerates **every** length-H sequence of a finite, declared,
 versioned ``FiniteActionSet`` — all ``|A|^H`` of them, *varying* sequences included — so
-"no policy in this set flips" is **decided**, not sampled: warrant ``PROVED`` (Prover
-3b). A ``CompletenessCertificate`` records ``expected = |A|^H`` against the ``visited``
-count and asserts they match (ADR-030), so the decisive warrant is earned, not assumed.
+"no policy in this set flips" is **decided**, not sampled: warrant ``PROVED``
+(Prover 3 · enumeration). A ``CompletenessCertificate`` records ``expected = |A|^H``
+against the ``visited`` count and asserts they match (ADR-030), so the decisive warrant
+is earned, not assumed.
 
 The set is versioned because it is a modelling commitment: an action added after results
 are seen must show up in the diff, not be discovered by a reviewer. The ``PROVED``
@@ -57,7 +59,7 @@ __all__ = [
 # The search vocabulary predates the shared one, and named two of its three levels. It
 # is now that enum, so `SearchWarrant.PROVED` and `Warrant.PROVED` are one object and
 # `EnumeratedEfeSearch.warrant` keeps its return type. A search earns `PROVED` from a
-# full enumeration (Prover 3b) and `CORROBORATED` from a grid sample (3a).
+# full enumeration (Prover 3 · enumeration) and `CORROBORATED` from a grid sample.
 SearchWarrant = Warrant
 
 
@@ -122,7 +124,7 @@ class CompletenessCertificate:
     declared one. **Coverage**: ``visited == expected``, so it was enumerated in full.
     They come apart wherever ``visited`` is a loop-carried counter rather than an
     array's length, which is where a padding bug lives, and coverage alone is what
-    carries the Prover 3b licence.
+    carries the Prover 3 · enumeration licence.
 
     The certificate names its set. ``expected`` on its own conflates the base with the
     exponent — 81 is ``9**2`` and ``3**4`` — so a bare count is not self-describing and

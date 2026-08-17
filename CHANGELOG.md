@@ -17,10 +17,24 @@ an exposure rather than a result.
 
 - `cpomdp.warrant` — the vocabulary every check labels itself from. `Warrant` carries the
   prover class (`PROVED`, `CERTIFIED`, `CORROBORATED`), `Outcome` what a registered
-  falsifier did, `Tier` what it was measured against, and `CheckReport` all four with a
-  reason. `CERTIFIED` is new: validated numerics prove a universal over a compact domain,
-  which is stronger than a sample and weaker than a decision, and forcing it into either
-  neighbour overclaims or throws away the bound (ADR-035).
+  falsifier did, `Tier` what it was measured against (`EXACT`, `BOUNDED`, `COMPUTED`), and
+  `CheckReport` all four with a reason. `CERTIFIED` is new: validated numerics prove a
+  universal over a compact domain, which is stronger than a sample and weaker than a
+  decision, and forcing it into either neighbour overclaims or throws away the bound
+  (ADR-035). Every member is a word rather than a letter, so a row says what it means
+  without a reader knowing the ordering. The prover sub-modes read the same way in prose:
+  `Prover 3 · sample`, `Prover 3 · enumeration`, `Prover 3 · validated`. The canonical
+  table is at `research/warrant_ledger.md`.
+- `cpomdp.SymbolicReduction` — evidence for a `PROVED` claim decided by argument rather
+  than by enumeration (Provers 1 and 2). A CAS establishes that one expression equals
+  another and has nothing to say about whether those are the expressions the analytic
+  claim is about, which the warrant ledger records as a human obligation. The type carries
+  the claim, where the setup was hand derived against the problem, and the assumptions the
+  identity is contingent on. Blank fields do not construct, so a `correspondence` nobody
+  can fill honestly routes a check to `CORROBORATED` instead of passing silently. Blank
+  means blank to a reader: whitespace, the zero-width formatting characters, a line break
+  into a one-line render, and a field that is not text are all refused, with `assumptions`
+  checked entry by entry.
 - `check_summary` prints `n registered, m tested here, k fired`, then counts per
   `(warrant × outcome)`. Registering four falsifiers and testing two is a different claim
   from testing four, and one number cannot carry both.
@@ -57,17 +71,19 @@ an exposure rather than a result.
 - `SearchWarrant` is an alias of `Warrant`. Every call site keeps its members and its
   return type, so `EFESelector.warrant` still reads `CORROBORATED` and
   `EnumeratedEfeSearch.warrant` still reads `PROVED`.
-- `PROVED` without evidence does not construct, enforced in `CheckReport`. A completeness
-  certificate is the only evidence today. A theorem citation joins it when a Prover 1
-  check needs one. Evidence is a tuple, so a claim quantified over several enumerations carries
-  all their certificates rather than one of them.
+- `PROVED` without evidence does not construct, enforced in `CheckReport`. Two kinds
+  qualify, one per decisive prover: a completeness certificate for an exhaustive
+  enumeration, a `SymbolicReduction` for a theorem or a symbolic identity (Provers 1 and
+  2). Evidence is a tuple, so a claim quantified over several enumerations carries all
+  their certificates rather than one of them. Every item is checked for its kind, so a
+  path naming where the proof lives cannot satisfy the precondition by being present.
 - A check that never ran carries no warrant. `CORROBORATED` asserts sampling-grade evidence
   was obtained, so attributing it to a falsifier void by construction claims evidence that
   does not exist. That cell reads `—`, enforced at construction.
 - `examples/ffg/crossover.py --check` reports its falsifiers on two axes. Rows 1 and 2 read
-  `PROVED` from the enumeration certificates and Tier B from the error bound. The `H* = 7`
+  `PROVED` from the enumeration certificates and `BOUNDED` from the error bound. The `H* = 7`
   upper-bound qualifier now travels in both detail strings, not only in the write-up. The
-  declared set clips the reach at `-2` while the optimum is `-3`. A margin inside its
+  declared set clips the reach at `-2` while `-3` reaches the goal in one step. A margin inside its
   bound reports `NOT RESOLVED` rather than raising, since a tie is a finding about the
   measurement and an exception erases it.
 - ADR-029 said the check vocabulary must never ship in `cpomdp`. ADR-035 reverses that on

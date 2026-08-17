@@ -1,4 +1,4 @@
-# Warrant ledger
+# Warrant numbers
 
 Every declared number in the cpomdp test suite — a margin, a ceiling, a floor, or a
 tolerance — is recorded here with its reason: what it is, the magnitude it gates, how much
@@ -11,16 +11,27 @@ A growing tracker alongside `DECISIONS.md` (the architecture decisions) and `BUI
 the crossover statistic's H=1 anchors; more sections land as new declared numbers enter the
 suite.
 
+`research/warrant_ledger.md` fixes what the instrument may claim, naming the provers, the
+labels, the evidence each one has to carry, and the claim shapes that are out of reach.
+This file records the numbers those claims are measured against. Where a bar's *licence*
+is in question, read the ledger. Where its *value* is, read on.
+
 ## How to read a warrant
 
 Two vocabularies, kept apart on purpose.
 
-**Prover class** (how well a claim is warranted, from Paper 1's taxonomy):
+**Prover class** (how well a claim is warranted, from Paper 1's taxonomy). All five modes,
+the `Warrant` label each earns, and the evidence `CheckReport` requires before it accepts
+`PROVED` are tabulated at the head of `research/warrant_ledger.md`. The two that gate most
+of the numbers below:
 
-- **3a** corroborates. A sample of a continuum, or a local optimum. It can refute a
-  universal by counterexample but never decide one.
-- **3b** decides. An exhaustive enumeration over a finite set. "No member does X" is a
-  proof, not a sample.
+- **Prover 3 · sample** corroborates. A sample of a continuum, or a local optimum. It can
+  refute a universal by counterexample but never decide one.
+- **Prover 3 · enumeration** decides. An exhaustive enumeration over a finite set. "No
+  member does X" is a proof, not a sample.
+
+Two further ways a number is pinned here, neither of which is a prover class:
+
 - **byte-identity** (RFC-001). Two code paths that run the identical IEEE-754 operations
   in the identical order return bit-for-bit equal results. Asserted with
   `assert_array_equal`, not `allclose`.
@@ -146,7 +157,7 @@ past the float64 `2^53` ceiling where a float count would drift.
 
 | Number | Value | Gates |
 | --- | --- | --- |
-| `certificate.expected == visited` | `\|A\|^H` | completeness (ADR-030), warrant 3b |
+| `certificate.expected == visited` | `\|A\|^H` | completeness (ADR-030), warrant `PROVED` |
 | `n_policies == \|A\|^H` | e.g. 9, 27 | the enumerated count |
 | `cost_per_cycle == \|A\|^H * H` | e.g. 81 | the honest exponential cost (RFC-001) |
 | `FiniteActionSet` size `>= 2` | 2 | a set of one is no choice to search |
@@ -265,7 +276,7 @@ the statistic, not a tuned parameter.
 | number | value | what it is |
 | --- | --- | --- |
 | `H*` (registered set) | 7 | first horizon whose exhaustive argmin over `crossover-v1^H` is cue-ward — a two-phase walk `[+1,−2,−2,0,0,0,0]`. Cue-ward at H = 7, 8, 9 |
-| `H*` (with optimal reach) | 6 | on `{−3,…,2}`, which contains the unconstrained optimal reach `−3`. So the registered 7 is an upper bound (the grid clips the reach at `−2`) |
+| `H*` (with the one-step reach) | 6 | on `{−3,…,2}`, which contains `−3`, the action reaching the goal in one step from the start. So the registered 7 is an upper bound (the grid clips the reach at `−2`). Wider sets are not measured: `−3` is not established as optimal, since the walk arrives at the cue at `x = +1`, from where the goal is a displacement of `−4` |
 | `ΔG(7)` | −0.1520 | `G(walk) − G(reach)` at H=7; the flip margin. Relative size 3.6e−4 against `G ≈ 425`, so the margin is small and must be shown well-conditioned |
 | pragmatic-only crossing | H ≈ 10 | with the epistemic term zeroed, the argmin is prior-ward through H = 9 and crosses near 10 — so the ~1.7-nat epistemic pull is what advances the flip to 7 |
 | `H_max` | 9 | declared feasibility bound; enumeration cost `5⁹·9 = 17,578,125` scored steps, measured. Larger H_max is a declared budget increase |
@@ -347,21 +358,21 @@ hand could not have manufactured the separation.
 **What the derivation is, stated honestly.** `cond · eps` is a forward-error rule of thumb
 for a single linear solve. This applies it to a seven-step accumulation of predicts,
 contractions and log-determinants, so it is an argument by analogy, not a proved bound.
-That makes it Tier B's *stated error bar*, not Prover 3c's certified bracket, and the demo
-labels it `B` rather than reaching for `CERTIFIED`. The five orders of headroom between
+That makes it a `BOUNDED` *stated error bar*, not the certified bracket validated numerics
+supply, and the demo labels it `BOUNDED` rather than reaching for `CERTIFIED`. The five orders of headroom between
 the declared ceiling and the measured conditioning is what makes the analogy safe enough to
 report, and the gap is stated here rather than left for a reviewer to find.
 
 **Effect on the reported tiers.** Falsifiers 1 and 2 in that demo read `PROVED` on the
 prover axis, from the completeness certificate of the `|A|^H = 78125` enumeration, and
-`B` on the tier axis, from this bound. The two axes answer different questions and neither
+`BOUNDED` on the tier axis, from this bound. The two axes answer different questions and neither
 substitutes for the other: a claim can be decided with nothing stated behind its margin,
-or measured against a tight bar and only sampled. Falsifiers 3 and 4 stay Tier C and carry
+or measured against a tight bar and only sampled. Falsifiers 3 and 4 stay `COMPUTED` and carry
 no warrant at all, since neither produced evidence here.
 
 **What this bound does not cover.** It certifies the float arithmetic, which was never the
 fragile part of `H* = 7`. The live exposure is falsifier 4: `H*` is an upper bound, because
-the declared set clips the reach at `−2` while the unconstrained optimum is `−3`, and a set
-containing `−3` flips at 6. A Tier B row reading `8.0e3x` clear invites a reader to take
+the declared set clips the reach at `−2` while `−3` reaches the goal in one step, and a set
+containing `−3` flips at 6. A `BOUNDED` row reading `8.0e3x` clear invites a reader to take
 the number as firmer than it is, so the qualifier travels in both detail strings and not
 only here.
