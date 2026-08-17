@@ -395,7 +395,7 @@ def falsifiers(
             name="1. no crossover at feasible H",
             warrant=Warrant.PROVED,
             outcome=crossover_exists(),
-            tier=Tier.B,
+            tier=Tier.BOUNDED,
             detail=(
                 f"argmin is {where(at_flip)} at H = {at_flip.horizon}, inside "
                 f"H_MAX = {H_MAX}. {upper}. {_bar(at_flip)}"
@@ -406,7 +406,7 @@ def falsifiers(
             name="2. flip not clean at H*/H*-1",
             warrant=Warrant.PROVED,
             outcome=flip_is_clean(),
-            tier=Tier.B,
+            tier=Tier.BOUNDED,
             detail=(
                 f"argmin is {where(at_prior)} at H = {at_prior.horizon} and "
                 f"{where(at_flip)} at H = {at_flip.horizon}. {upper}. "
@@ -418,14 +418,14 @@ def falsifiers(
             name="3. not reproducible across seeds",
             warrant=None,
             outcome=Outcome.NOT_APPLICABLE,
-            tier=Tier.C,
+            tier=Tier.COMPUTED,
             detail="void by construction: no observation draw to vary across seeds",
         ),
         CheckReport(
             name="4. H* unstable under refinement",
             warrant=None,
             outcome=Outcome.NOT_RUN_HERE,
-            tier=Tier.C,
+            tier=Tier.COMPUTED,
             detail=(
                 f"step-0.5 refinement costs {9**7 * 7} steps. Recorded in the "
                 "write-up, and the live exposure on this number"

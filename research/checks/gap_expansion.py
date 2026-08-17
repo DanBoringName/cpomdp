@@ -9,7 +9,7 @@ The gap expands in prior spread as::
 
 **This module does not fit `c₄` or `c₆`, and that is a constraint rather than an
 omission.** A number extracted here before the derivation lands becomes the thing the
-derivation gets checked against, and then the warrant ledger carries a Tier C fit
+derivation gets checked against, and then the warrant ledger carries a `COMPUTED` fit
 wearing a Prover 1 label. The derivation has to be primary. So what is measured here
 is *structure*, which a derivation must reproduce and which cannot stand in for one:
 
@@ -329,7 +329,7 @@ def _check_preconditions(family: NoiseFamily) -> CheckReport:
             name=name,
             warrant=Warrant.CORROBORATED,
             outcome=Outcome.FIRED,
-            tier=Tier.B,
+            tier=Tier.BOUNDED,
             detail=f"FAIL — {failure}",
         )
     derivative = family.log_noise_derivative
@@ -338,7 +338,7 @@ def _check_preconditions(family: NoiseFamily) -> CheckReport:
             name=name,
             warrant=Warrant.CORROBORATED,
             outcome=Outcome.NOT_TRIGGERED,
-            tier=Tier.B,
+            tier=Tier.BOUNDED,
             detail=(
                 "PASS — R > 0 on the span; R'(μ) = 0 by construction, so c₂ = 0 "
                 "and the gap is expected to vanish identically. Checked by G2"
@@ -348,7 +348,7 @@ def _check_preconditions(family: NoiseFamily) -> CheckReport:
         name=name,
         warrant=Warrant.CORROBORATED,
         outcome=Outcome.NOT_TRIGGERED,
-        tier=Tier.B,
+        tier=Tier.BOUNDED,
         detail=(
             f"PASS — R > 0 on [{span[0]:.2f}, {span[1]:.2f}], "
             f"ℓ'(μ) = {derivative:.6f} ≠ 0"
@@ -374,7 +374,7 @@ def _check_certification(
             name=name,
             warrant=None,
             outcome=Outcome.NOT_APPLICABLE,
-            tier=Tier.B,
+            tier=Tier.BOUNDED,
             detail=f"VOID — {measurement.void_reason.value}",
         )
     fired = measurement.outcome is Outcome.FIRED
@@ -382,7 +382,7 @@ def _check_certification(
         name=name,
         warrant=Warrant.CORROBORATED,
         outcome=measurement.outcome,
-        tier=Tier.B,
+        tier=Tier.BOUNDED,
         detail=(
             f"{'FAIL' if fired else 'PASS'} — gap {measurement.gap:.10e}; binding axis "
             f"{measurement.binding_axis} at {measurement.binding_error:.2e} against "
@@ -417,7 +417,7 @@ def _check_c2(
             name=name,
             warrant=None,
             outcome=Outcome.NOT_APPLICABLE,
-            tier=Tier.B,
+            tier=Tier.BOUNDED,
             detail="no closed form declared for this family",
         )
     expected = closed_form_c2(family)
@@ -426,7 +426,7 @@ def _check_c2(
             name=name,
             warrant=None,
             outcome=Outcome.NOT_APPLICABLE,
-            tier=Tier.B,
+            tier=Tier.BOUNDED,
             detail="c₂ = 0 by construction; the vanishing gap is G2's claim",
         )
     usable = [cell for cell in measurements if cell.void_reason is None]
@@ -435,7 +435,7 @@ def _check_c2(
             name=name,
             warrant=None,
             outcome=Outcome.NOT_APPLICABLE,
-            tier=Tier.B,
+            tier=Tier.BOUNDED,
             detail=f"only {len(usable)} usable cells; Richardson needs two",
         )
     first, second = usable[0], usable[1]
@@ -450,7 +450,7 @@ def _check_c2(
         name=name,
         warrant=Warrant.CORROBORATED,
         outcome=Outcome.FIRED if error > tolerance else Outcome.NOT_TRIGGERED,
-        tier=Tier.A,
+        tier=Tier.EXACT,
         detail=(
             f"{'FAIL' if error > tolerance else 'PASS'} — quadrature {measured:.8f} "
             f"against closed form {expected:.8f}, {error:.2e} relative, bar "
@@ -483,7 +483,7 @@ def _check_vanishing(
             name=name,
             warrant=None,
             outcome=Outcome.NOT_APPLICABLE,
-            tier=Tier.A,
+            tier=Tier.EXACT,
             detail="R varies, so the gap is not expected to vanish",
         )
     worst = max((abs(cell.gap) for cell in measurements), default=math.nan)
@@ -492,7 +492,7 @@ def _check_vanishing(
         name=name,
         warrant=Warrant.CORROBORATED,
         outcome=Outcome.FIRED if fired else Outcome.NOT_TRIGGERED,
-        tier=Tier.A,
+        tier=Tier.EXACT,
         detail=(
             f"{'FAIL' if fired else 'PASS'} — largest |gap| {worst:.2e} across "
             f"{len(measurements)} spreads, against {tolerance:.0e}"
@@ -534,7 +534,7 @@ def _check_residual_exponent(
                 name=name,
                 warrant=None,
                 outcome=Outcome.NOT_APPLICABLE,
-                tier=Tier.B,
+                tier=Tier.BOUNDED,
                 detail="the expansion vanishes; there is no residual to read",
             )
         ]
@@ -545,7 +545,7 @@ def _check_residual_exponent(
                 name=name,
                 warrant=None,
                 outcome=Outcome.NOT_APPLICABLE,
-                tier=Tier.B,
+                tier=Tier.BOUNDED,
                 detail=f"only {len(usable)} usable cells; a slope needs three",
             )
         ]
@@ -569,7 +569,7 @@ def _check_residual_exponent(
                 name=f"G4b candidate c₄ [{family.name}]",
                 warrant=None,
                 outcome=Outcome.NOT_RUN_HERE,
-                tier=Tier.B,
+                tier=Tier.BOUNDED,
                 detail=(
                     "no candidate declared. The analytic derivation is outstanding; "
                     "pass --c4 <derived> once it lands and this leg tries to refute it"
@@ -624,7 +624,7 @@ def _exponent_report(
             name=name,
             warrant=None,
             outcome=Outcome.NOT_APPLICABLE,
-            tier=Tier.B,
+            tier=Tier.BOUNDED,
             detail=(
                 f"VOID — {VoidReason.NUMERICAL_FLOOR.value}: the residual after "
                 f"{subtracted} reaches {float(np.min(magnitudes)):.1e}"
@@ -637,7 +637,7 @@ def _exponent_report(
         name=name,
         warrant=Warrant.CORROBORATED,
         outcome=Outcome.FIRED if fired else Outcome.NOT_TRIGGERED,
-        tier=Tier.B,
+        tier=Tier.BOUNDED,
         detail=(
             f"{'FAIL' if fired else 'PASS'} — after {subtracted} the residual "
             f"scales as σ^{slope:.3f}, against a predicted σ^{expected:.0f} "

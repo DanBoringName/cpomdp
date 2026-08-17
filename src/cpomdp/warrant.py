@@ -40,16 +40,18 @@ class Warrant(Enum):
 
     ``PROVED`` — the claim is decided. A pen-and-paper theorem within its stated
     hypotheses (Prover 1), a symbolic identity (Prover 2), or a finite domain enumerated
-    in full, where ¬∃ ≡ ∀¬ (Prover 3b). Under 3b it is earned only with a completeness
-    certificate. Without one the enumeration is a sample wearing a decision's label.
+    in full, where ¬∃ ≡ ∀¬ (Prover 3 · enumeration). Under that last one it is earned
+    only with a completeness certificate. Without one the enumeration is a sample
+    wearing a decision's label.
 
     ``CERTIFIED`` — validated numerics prove a universal over a compact domain by
-    construction (Prover 3c). Stronger than a sample, weaker than a decision, and it
-    carries the bound it was computed with. Collapsing it into ``PROVED`` overclaims.
-    Collapsing it into ``CORROBORATED`` throws the bound away.
+    construction (Prover 3 · validated). Stronger than a sample, weaker than a decision,
+    and it carries the bound it was computed with. Collapsing it into ``PROVED``
+    overclaims. Collapsing it into ``CORROBORATED`` throws the bound away.
 
-    ``CORROBORATED`` — a sample of a continuum (Prover 3a). It exhibits existence and
-    refutes a universal by counterexample. It never decides one, at any seed count.
+    ``CORROBORATED`` — a sample of a continuum (Prover 3 · sample). It exhibits
+    existence and refutes a universal by counterexample. It never decides one, at any
+    sample count.
 
     Orthogonal to outcome. A check reports both, and the three levels print in distinct
     vocabulary so a corroborative green run is visibly that.
@@ -94,18 +96,19 @@ _TESTED_HERE = (Outcome.NOT_TRIGGERED, Outcome.FIRED, Outcome.NOT_RESOLVED)
 class Tier(Enum):
     """What the check was measured against.
 
-    ``A`` — a closed-form reference at machine precision.
-    ``B`` — a stated bar, or a certified bracket.
-    ``C`` — computed, with no statable bar. The word for a Tier C number is *computed*,
-    never *certified*.
+    ``EXACT`` — a closed-form reference at machine precision.
+    ``BOUNDED`` — a stated bar, or a certified bracket.
+    ``COMPUTED`` — no statable bar. The word for such a number is *computed*, never
+    *certified*.
 
-    Cuts across warrant and outcome rather than ranking them. A Tier A reference can be
-    sampled (3a) and a Tier C number can come out of an exhaustive enumeration (3b).
+    Cuts across warrant and outcome rather than ranking them. An ``EXACT`` reference can
+    be sampled (Prover 3 · sample) and a ``COMPUTED`` number can come out of an
+    exhaustive enumeration (Prover 3 · enumeration).
     """
 
-    A = "A"
-    B = "B"
-    C = "C"
+    EXACT = "exact"
+    BOUNDED = "bounded"
+    COMPUTED = "computed"
 
 
 #: Unicode general categories that put nothing on the page: the controls, the format
@@ -220,7 +223,7 @@ class SymbolicReduction:
 
 if TYPE_CHECKING:
     # What backs a ``PROVED`` claim, one member per decisive prover the suite runs. A
-    # completeness certificate decides by exhausting a finite domain (3b). A symbolic
+    # completeness certificate decides by exhausting a finite domain. A symbolic
     # reduction decides by identity (Provers 1 and 2) and enumerates nothing, so a
     # certificate is the wrong evidence for it rather than a missing one.
     Evidence = CompletenessCertificate | SymbolicReduction
@@ -288,7 +291,7 @@ class CheckReport:
                         f"check {self.name!r} carries a "
                         f"{type(item).__name__} as evidence. There are two kinds, one "
                         "per decisive prover: a CompletenessCertificate for an "
-                        "exhaustive enumeration (Prover 3b), a SymbolicReduction for a "
+                        "exhaustive enumeration (Prover 3 · enumeration), a SymbolicReduction for a "
                         "theorem or a symbolic identity (Provers 1 and 2). Anything "
                         "else satisfies the PROVED precondition by being present and "
                         "backs nothing."
@@ -297,7 +300,7 @@ class CheckReport:
             raise ValueError(
                 f"check {self.name!r} reports PROVED with no evidence. A decided "
                 "universal needs something statable behind it: a completeness "
-                "certificate for an exhaustive enumeration (Prover 3b), a "
+                "certificate for an exhaustive enumeration (Prover 3 · enumeration), a "
                 "SymbolicReduction for a theorem or a symbolic identity (Provers 1 "
                 "and 2). Report CERTIFIED for a bound over a compact domain, "
                 "CORROBORATED for a sample."

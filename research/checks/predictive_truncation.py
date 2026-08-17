@@ -246,7 +246,7 @@ def _check_truncation(report: TruncationReport) -> CheckReport:
             name=name,
             warrant=None,
             outcome=Outcome.NOT_APPLICABLE,
-            tier=Tier.B,
+            tier=Tier.BOUNDED,
             detail=f"VOID — {report.void_reason.value}",
         )
     verdict = "FAIL" if report.outcome is Outcome.FIRED else "PASS"
@@ -254,7 +254,7 @@ def _check_truncation(report: TruncationReport) -> CheckReport:
         name=name,
         warrant=Warrant.CORROBORATED,
         outcome=report.outcome,
-        tier=Tier.B,
+        tier=Tier.BOUNDED,
         detail=(
             f"{verdict} — truncation {report.relative_truncation:.2e} against a floor "
             f"of {report.floor:.2e}; L = {report.half_width:.3f} covers "
@@ -284,7 +284,7 @@ def _check_reference(family: NoiseFamily, report: TruncationReport) -> CheckRepo
             name=name,
             warrant=None,
             outcome=Outcome.NOT_APPLICABLE,
-            tier=Tier.B,
+            tier=Tier.BOUNDED,
             detail="no external reference for this cell",
         )
     agrees = _same_to_sig_figs(
@@ -294,7 +294,7 @@ def _check_reference(family: NoiseFamily, report: TruncationReport) -> CheckRepo
         name=name,
         warrant=Warrant.CORROBORATED,
         outcome=Outcome.NOT_TRIGGERED if agrees else Outcome.FIRED,
-        tier=Tier.B,
+        tier=Tier.BOUNDED,
         detail=(
             f"{'PASS' if agrees else 'FAIL'} — measured "
             f"{report.relative_truncation:.2e} against {reference:.1e} "
@@ -334,7 +334,7 @@ def _check_tail_shape(
             name=name,
             warrant=None,
             outcome=Outcome.NOT_APPLICABLE,
-            tier=Tier.B,
+            tier=Tier.BOUNDED,
             detail=f"VOID — {VoidReason.NUMERICAL_FLOOR.value}, density underflowed",
         )
     top_nu, top_log = offsets[-3:], log_density[-3:]
@@ -354,7 +354,7 @@ def _check_tail_shape(
         name=name,
         warrant=Warrant.CORROBORATED,
         outcome=Outcome.FIRED if fired else Outcome.NOT_TRIGGERED,
-        tier=Tier.B,
+        tier=Tier.BOUNDED,
         detail=(
             f"{'FAIL' if fired else 'PASS'} — {shape} fit wins (residuals "
             f"{linear_residual:.2e} vs {quadratic_residual:.2e}), slope "
@@ -414,7 +414,7 @@ def _bounded_family_report(
         name=name,
         warrant=Warrant.CORROBORATED,
         outcome=Outcome.NOT_TRIGGERED if clean else Outcome.FIRED,
-        tier=Tier.B,
+        tier=Tier.BOUNDED,
         detail=(
             f"{'PASS' if clean else 'FAIL'} — bounded R, tail unresolved at "
             f"{len(unresolved)} of {len(reports)} cells, under the quadrature floor "
@@ -441,7 +441,7 @@ def _exposed_family_report(
         name=name,
         warrant=Warrant.CORROBORATED,
         outcome=Outcome.FIRED if fired else Outcome.NOT_TRIGGERED,
-        tier=Tier.B,
+        tier=Tier.BOUNDED,
         detail=(
             f"{'FAIL' if fired else 'PASS'} — unbounded R, {len(fired)} of "
             f"{len(reports)} cells above the floor, worst truncation {worst:.2e}"
@@ -472,7 +472,7 @@ def _check_materiality(
             name=name,
             warrant=None,
             outcome=Outcome.NOT_APPLICABLE,
-            tier=Tier.B,
+            tier=Tier.BOUNDED,
             detail=f"VOID — {report.void_reason.value}",
         )
     core, tail = core_and_tail(family, report.sigma**2, report.half_width, settings)
@@ -484,7 +484,7 @@ def _check_materiality(
         name=name,
         warrant=Warrant.CORROBORATED,
         outcome=Outcome.FIRED if ratio >= bar else Outcome.NOT_TRIGGERED,
-        tier=Tier.B,
+        tier=Tier.BOUNDED,
         detail=(
             f"{'FAIL' if ratio >= bar else 'PASS'} — gap {total_gap:.3e}, quartic "
             f"residual {quartic:.3e}, truncation {abs(tail):.2e}, ratio {ratio:.1e} "
@@ -516,7 +516,7 @@ def _check_convergence(
             name=name,
             warrant=None,
             outcome=Outcome.NOT_APPLICABLE,
-            tier=Tier.B,
+            tier=Tier.BOUNDED,
             detail=f"VOID — {report.void_reason.value}",
         )
     core, tail = core_and_tail(
@@ -528,7 +528,7 @@ def _check_convergence(
             name=name,
             warrant=None,
             outcome=Outcome.NOT_APPLICABLE,
-            tier=Tier.B,
+            tier=Tier.BOUNDED,
             detail=(
                 f"VOID — {VoidReason.NUMERICAL_FLOOR.value}: {refined:.2e} at or under "
                 f"{QUADRATURE_FLOOR:.0e}"
@@ -539,7 +539,7 @@ def _check_convergence(
         name=name,
         warrant=Warrant.CORROBORATED,
         outcome=Outcome.FIRED if moved >= CONVERGENCE_BAR else Outcome.NOT_TRIGGERED,
-        tier=Tier.B,
+        tier=Tier.BOUNDED,
         detail=(
             f"{'FAIL' if moved >= CONVERGENCE_BAR else 'PASS'} — refinement moves the "
             f"truncation by {moved:.1%} against a {CONVERGENCE_BAR:.0%} bar "

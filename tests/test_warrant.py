@@ -152,14 +152,20 @@ class TestOutcome:
 
 class TestTier:
     def test_the_three_tiers(self):
-        # A: closed-form reference at machine precision. B: a stated bar or certified
-        # bracket. C: computed, with no statable bar.
-        assert Tier.A.value == "A"
-        assert Tier.B.value == "B"
-        assert Tier.C.value == "C"
+        # EXACT: closed-form reference at machine precision. BOUNDED: a stated bar or
+        # certified bracket. COMPUTED: no statable bar.
+        assert Tier.EXACT.value == "exact"
+        assert Tier.BOUNDED.value == "bounded"
+        assert Tier.COMPUTED.value == "computed"
 
     def test_no_fourth_tier(self):
-        assert [t.name for t in Tier] == ["A", "B", "C"]
+        assert [t.name for t in Tier] == ["EXACT", "BOUNDED", "COMPUTED"]
+
+    def test_no_letter_stands_in_for_a_tier(self):
+        # The letters ranked by position, so a reader had to know the ordering to read
+        # a row. Each value now says what it means on its own.
+        assert not {"A", "B", "C"} & {tier.value for tier in Tier}
+        assert not {"A", "B", "C"} & set(Tier.__members__)
 
 
 class TestCheckReport:
@@ -168,7 +174,7 @@ class TestCheckReport:
         *,
         warrant=Warrant.CORROBORATED,
         outcome=Outcome.NOT_TRIGGERED,
-        tier=Tier.C,
+        tier=Tier.COMPUTED,
         evidence=(),
     ):
         # Defaults to the report that needs no evidence: a sample, computed, green.
@@ -186,7 +192,7 @@ class TestCheckReport:
         assert report.name == "flip-decided"
         assert report.warrant is Warrant.CORROBORATED
         assert report.outcome is Outcome.NOT_TRIGGERED
-        assert report.tier is Tier.C
+        assert report.tier is Tier.COMPUTED
 
     def test_detail_is_required(self):
         # A check that cannot say why it reports what it reports is a bare outcome
@@ -196,7 +202,7 @@ class TestCheckReport:
                 name="flip-decided",
                 warrant=Warrant.CORROBORATED,
                 outcome=Outcome.NOT_TRIGGERED,
-                tier=Tier.C,
+                tier=Tier.COMPUTED,
             )
 
     def test_is_frozen(self):
@@ -210,7 +216,7 @@ class TestCheckReport:
 
     def test_carries_the_evidence_it_was_given(self):
         cert = _certificate()
-        report = self._report(warrant=Warrant.PROVED, tier=Tier.A, evidence=(cert,))
+        report = self._report(warrant=Warrant.PROVED, tier=Tier.EXACT, evidence=(cert,))
         assert report.evidence == (cert,)
 
     def test_warrant_and_outcome_are_independent(self):
@@ -239,7 +245,7 @@ class TestChecksThatNeverRanCarryNoWarrant:
             name="void-check",
             warrant=warrant,
             outcome=outcome,
-            tier=Tier.C,
+            tier=Tier.COMPUTED,
             detail="why",
         )
 
@@ -408,7 +414,7 @@ class TestProvedNeedsEvidence:
             name="flip-decided",
             warrant=warrant,
             outcome=outcome,
-            tier=Tier.A,
+            tier=Tier.EXACT,
             detail="exhaustive argmin over crossover-v1^7 is cue-ward",
             evidence=evidence,
         )
@@ -495,7 +501,7 @@ class TestCheckSummary:
             name=name,
             warrant=warrant,
             outcome=outcome,
-            tier=Tier.C,
+            tier=Tier.COMPUTED,
             detail="why",
             evidence=evidence,
         )

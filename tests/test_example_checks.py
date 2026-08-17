@@ -204,13 +204,13 @@ def test_crossover_falsifiers_are_reports():
         assert len(certificates) == len(report.evidence)
         assert all(certificate.complete for certificate in certificates)
         # The other axis: decided by enumeration, and measured against a stated bar.
-        # A Tier B row has to name the bar, or the tier is a label with nothing under
+        # A `BOUNDED` row has to name the bar, or the tier is a label with nothing under
         # it. `bound` is what the margin was read against.
-        assert report.tier is Tier.B
+        assert report.tier is Tier.BOUNDED
         assert "bound" in report.detail
         assert report.outcome is Outcome.NOT_TRIGGERED
         # The qualifier travels with the number. H* = 7 is an upper bound because the
-        # declared set clips the reach at -2, and a Tier B row reads stronger than the
+        # declared set clips the reach at -2, and a `BOUNDED` row reads stronger than the
         # claim is without it.
         assert "upper bound" in report.detail
 
