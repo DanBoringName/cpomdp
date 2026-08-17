@@ -130,9 +130,7 @@ CONSTRUCTION_SOURCE = (
 )
 
 #: Where the σ-expansion of `h`, `δ` and `W` is recorded.
-EXPANSION_SOURCE = (
-    "research/c4_hand_derivation.md, Step 3 (expansion in prior spread)"
-)
+EXPANSION_SOURCE = "research/c4_hand_derivation.md, Step 3 (expansion in prior spread)"
 
 #: The scope every reduction in this module inherits. `R` smooth and positive at `μ` is
 #: what lets `l = log R` be Taylored at all; the expansion is formal, so no convergence
