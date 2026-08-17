@@ -9,9 +9,10 @@ in ``cpomdp.enumeration``, covering searches alone. That name survives as an ali
 
 ``CheckReport`` is what a check emits. It pairs the warrant with an ``Outcome`` and a
 ``Tier``, which vary independently: a run can be green throughout and have decided
-nothing with the summary should saying so.
+nothing, and the summary says so.
 """
 
+import unicodedata
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -107,6 +108,46 @@ class Tier(Enum):
     C = "C"
 
 
+#: Unicode general categories that put nothing on the page: the controls, the format
+#: characters (soft hyphen, the zero-width space and the joiners, the byte-order mark),
+#: and the three kinds of separator. ``str.strip()`` removes the separators and the
+#: whitespace controls and leaves the format characters behind, so a field of them alone
+#: survives a presence check while reading as empty.
+_UNPRINTED = frozenset({"Cc", "Cf", "Zl", "Zp", "Zs"})
+
+
+def _reject_unreadable(name: str, value: object, blank_reason: str) -> None:
+    """Raise unless a reduction's ``value`` is one-line text that puts ink on the page.
+
+    Args:
+        name: the field, as it appears in the message.
+        value: what was passed for it.
+        blank_reason: why this particular field may not be blank, appended to the
+            message when it is.
+
+    Raises:
+        ValueError: if ``value`` is not a string, is blank, or holds a line break.
+    """
+    if not isinstance(value, str):
+        raise ValueError(
+            f"symbolic reduction passed {name} as {type(value).__name__}. The field is "
+            "text a reader reads back, so anything else records the obligation in a "
+            "form nothing renders."
+        )
+    if all(unicodedata.category(character) in _UNPRINTED for character in value):
+        raise ValueError(
+            f"symbolic reduction has a blank {name}. Whitespace and the zero-width "
+            "characters count as blank here, since they satisfy a presence check and "
+            f"put nothing on the page. {blank_reason}"
+        )
+    if value.splitlines() != [value]:
+        raise ValueError(
+            f"symbolic reduction has a line break in {name}. A reduction renders as "
+            "one line beside the check it backs, so a second line arrives in the "
+            "middle of a summary row."
+        )
+
+
 @dataclass(frozen=True)
 class SymbolicReduction:
     """What backs a Prover 2 claim: the correspondence a CAS cannot supply.
@@ -128,8 +169,9 @@ class SymbolicReduction:
             the algebra.
 
     Raises:
-        ValueError: if the assumptions are not a tuple, or if either of the other two
-            fields is blank.
+        ValueError: if the assumptions are not a tuple, or if the claim, the
+            correspondence or any assumption is not one-line text with a visible
+            character in it.
     """
 
     claim: str
@@ -149,14 +191,22 @@ class SymbolicReduction:
             ("claim", self.claim),
             ("correspondence", self.correspondence),
         ):
-            if not value.strip():
-                raise ValueError(
-                    f"symbolic reduction has a blank {name}. Prover 2 is theorem-grade "
-                    "only where the symbolic setup was hand derived against the "
-                    "analytic problem, so a reduction naming neither the statement nor "
-                    "where it was checked backs nothing. Fill both, or report "
-                    "CORROBORATED and say why in the check's detail."
-                )
+            _reject_unreadable(
+                name,
+                value,
+                "Prover 2 is theorem-grade only where the symbolic setup was hand "
+                "derived against the analytic problem, so a reduction naming neither "
+                "the statement nor where it was checked backs nothing. Fill both, or "
+                "report CORROBORATED and say why in the check's detail.",
+            )
+        for position, assumption in enumerate(self.assumptions, start=1):
+            _reject_unreadable(
+                f"assumption {position}",
+                assumption,
+                "An entry nobody filled in is scope a reader cannot check, and it "
+                "renders as a gap in the list rather than as a caveat. Say what the "
+                "condition is, or drop the entry.",
+            )
 
     def __str__(self) -> str:
         """The reduction as one line: the claim, where it was checked, its scope."""
@@ -176,6 +226,17 @@ if TYPE_CHECKING:
     Evidence = CompletenessCertificate | SymbolicReduction
 
 
+def _evidence_types() -> tuple[type, ...]:
+    """The evidence classes, as a tuple ``isinstance`` accepts.
+
+    Imported on call rather than at module scope: ``enumeration`` imports this module,
+    so the certificate is only reachable once that import has finished.
+    """
+    from cpomdp.enumeration import CompletenessCertificate
+
+    return (CompletenessCertificate, SymbolicReduction)
+
+
 @dataclass(frozen=True)
 class CheckReport:
     """One check's result: what it found, how well, and against what.
@@ -191,15 +252,16 @@ class CheckReport:
         tier: what the check was measured against.
         detail: why it reports what it reports, in one line. Required, so a report
             cannot be a bare outcome with extra fields.
-        evidence: what backs the claim, as a tuple. Required non-empty when the warrant
-            is ``PROVED`` and unused otherwise. A tuple rather than one item because a
-            claim quantified over several enumerations rests on all their certificates,
-            and carrying one of them understates what was checked.
+        evidence: what backs the claim, as a tuple of ``CompletenessCertificate`` and
+            ``SymbolicReduction``. Required non-empty when the warrant is ``PROVED``
+            and unused otherwise. A tuple rather than one item because a claim
+            quantified over several enumerations rests on all their certificates, and
+            carrying one of them understates what was checked.
 
     Raises:
         ValueError: if the warrant is ``PROVED`` and no evidence was given, if a check
-            that never ran here carries a warrant anyway, or if the evidence is not a
-            tuple.
+            that never ran here carries a warrant anyway, if the evidence is not a
+            tuple, or if an item in it is neither of the two evidence kinds.
     """
 
     name: str
@@ -218,7 +280,20 @@ class CheckReport:
                 "resting on several enumerations can carry all of their certificates. "
                 "Wrap a single one: (certificate,)."
             )
-        if self.warrant is Warrant.PROVED and not self.evidence:
+        if self.evidence:
+            permitted = _evidence_types()
+            for item in self.evidence:
+                if not isinstance(item, permitted):
+                    raise ValueError(
+                        f"check {self.name!r} carries a "
+                        f"{type(item).__name__} as evidence. There are two kinds, one "
+                        "per decisive prover: a CompletenessCertificate for an "
+                        "exhaustive enumeration (Prover 3b), a SymbolicReduction for a "
+                        "theorem or a symbolic identity (Provers 1 and 2). Anything "
+                        "else satisfies the PROVED precondition by being present and "
+                        "backs nothing."
+                    )
+        if self.warrant is Warrant.PROVED and len(self.evidence) == 0:
             raise ValueError(
                 f"check {self.name!r} reports PROVED with no evidence. A decided "
                 "universal needs something statable behind it: a completeness "

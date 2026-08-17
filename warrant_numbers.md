@@ -1,4 +1,4 @@
-# Warrant ledger
+# Warrant numbers
 
 Every declared number in the cpomdp test suite — a margin, a ceiling, a floor, or a
 tolerance — is recorded here with its reason: what it is, the magnitude it gates, how much
@@ -11,16 +11,27 @@ A growing tracker alongside `DECISIONS.md` (the architecture decisions) and `BUI
 the crossover statistic's H=1 anchors; more sections land as new declared numbers enter the
 suite.
 
+`research/warrant_ledger.md` fixes what the instrument may claim, naming the provers, the
+labels, the evidence each one has to carry, and the claim shapes that are out of reach.
+This file records the numbers those claims are measured against. Where a bar's *licence*
+is in question, read the ledger. Where its *value* is, read on.
+
 ## How to read a warrant
 
 Two vocabularies, kept apart on purpose.
 
-**Prover class** (how well a claim is warranted, from Paper 1's taxonomy):
+**Prover class** (how well a claim is warranted, from Paper 1's taxonomy). All five modes,
+the `Warrant` label each earns, and the evidence `CheckReport` requires before it accepts
+`PROVED` are tabulated at the head of `research/warrant_ledger.md`. The two that gate most
+of the numbers below:
 
 - **3a** corroborates. A sample of a continuum, or a local optimum. It can refute a
   universal by counterexample but never decide one.
 - **3b** decides. An exhaustive enumeration over a finite set. "No member does X" is a
   proof, not a sample.
+
+Two further ways a number is pinned here, neither of which is a prover class:
+
 - **byte-identity** (RFC-001). Two code paths that run the identical IEEE-754 operations
   in the identical order return bit-for-bit equal results. Asserted with
   `assert_array_equal`, not `allclose`.

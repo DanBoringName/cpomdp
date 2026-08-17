@@ -8,6 +8,26 @@
 
 ---
 
+## The vocabulary the library enforces
+
+`cpomdp.warrant` enforces the table below at construction. The labels are the three members of `Warrant`. The evidence column is a constructor precondition. `CheckReport` refuses `PROVED` with an empty evidence tuple, and refuses any item in that tuple that is not one of the two kinds.
+
+| Prover | What it does | Label | Evidence it carries |
+| --- | --- | --- | --- |
+| **1** pen-and-paper theorem | Universals within stated hypotheses | `PROVED` | `SymbolicReduction` |
+| **2** symbolic computation | Closed-form identities, algebraic non-existence | `PROVED` | `SymbolicReduction` |
+| **3a** sampling a continuum | Exhibits existence. Refutes a universal by counterexample. Never decides one, at any seed count | `CORROBORATED` | none |
+| **3b** exhaustive enumeration over a finite domain | *Decides* the universal, since ¬∃ ≡ ∀¬ | `PROVED` | `CompletenessCertificate` |
+| **3c** validated numerics | Proves universals over a compact domain by construction | `CERTIFIED` | none. The bound travels in the tier |
+
+Neither kind substitutes for the other. A completeness certificate says a finite domain was enumerated in full, at `expected == |A|^H` and `visited == expected` over a named action set. A reduction decides by argument and enumerates nothing, so a certificate is the wrong evidence for it rather than a missing one. A claim resting on an identity asserted over an enumerated family carries both.
+
+`SymbolicReduction` records the claim in words, where the symbolic setup was hand derived against the analytic problem it stands for, and the conditions the identity is contingent on. That correspondence is the human obligation section 1 names under Prover 2. A CAS establishes that one expression equals another and has nothing to say about whether those are the expressions the analytic claim is about. That step is recorded, not assumed. A field that is not text, one holding only whitespace, one holding only zero-width characters, and one carrying a line break all fail to construct, in `assumptions` entry by entry. A field nobody can fill honestly is the signal to report `CORROBORATED` and say why in the check's detail.
+
+Outcome is orthogonal to all of it. A check that never ran here carries no warrant at all. The five outcomes, the three certification tiers and the run summary are documented at `docs/api/warrant.md`. The declared numbers those checks are measured against live in `warrant_numbers.md`, one entry per margin, ceiling, floor and tolerance, each with its first-principles basis. That file is not this one. This ledger fixes what may be claimed. That one records what the claims are measured with.
+
+---
+
 ## 1. Three provers, three different licences
 
 Everything the programme asserts is established by one of three mechanisms. They are not interchangeable, and most overclaiming in this literature comes from silently swapping one for another.
