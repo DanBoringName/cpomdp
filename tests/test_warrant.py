@@ -1,7 +1,7 @@
 """The shared `Warrant` vocabulary and the check report that carries it.
 
-`SearchWarrant` had two levels: `PROVED` (3b, exhaustive enumeration) and `CORROBORATED`
-(3a, a grid sample). `Warrant` adds `CERTIFIED` (3c, validated numerics over a compact
+`SearchWarrant` had two levels: `PROVED` (exhaustive enumeration) and `CORROBORATED`
+(a grid sample). `Warrant` adds `CERTIFIED` (validated numerics over a compact
 domain) and moves to `cpomdp.warrant`, where checks can reach it too. `SearchWarrant`
 stays as an alias, so existing call sites keep their members and their return type.
 
@@ -55,7 +55,7 @@ def _finite_set(actions):
 
 
 def _certificate():
-    """A complete certificate: the evidence a 3b `PROVED` claim carries."""
+    """A complete certificate: the evidence an enumerated `PROVED` claim carries."""
     return CompletenessCertificate(
         expected=4,
         visited=4,
@@ -227,10 +227,14 @@ class TestCheckReport:
         assert report.warrant is Warrant.CORROBORATED
 
     def test_renders_one_line_naming_all_of_it(self):
+        # The tier reads as its own word. `"C"` passed here as a substring of
+        # CORROBORATED, so the row could have lost the tier and the check stayed green.
         line = str(self._report())
         assert line.count("\n") == 0
-        for part in ("flip-decided", "NOT TRIGGERED", "CORROBORATED", "C", "cue-ward"):
-            assert part in line
+        assert line == (
+            "flip-decided: NOT TRIGGERED (CORROBORATED, tier computed). "
+            "exhaustive argmin over crossover-v1^7 is cue-ward"
+        )
 
     def test_a_check_with_no_warrant_renders_a_dash(self):
         line = str(self._report(warrant=None, outcome=Outcome.NOT_APPLICABLE))
