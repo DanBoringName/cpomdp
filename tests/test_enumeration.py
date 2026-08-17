@@ -173,13 +173,39 @@ class TestCompletenessCertificate:
         # `expected != visited` with a PROVED warrant is a certificate certifying its
         # own failure. It used to construct and read `complete = False`, which put the
         # contradiction one attribute access away from anyone who did not look.
-        with pytest.raises(ValueError, match="PROVED"):
-            CompletenessCertificate(expected=9, visited=8, warrant=SearchWarrant.PROVED)
+        with pytest.raises(ValueError, match="complete"):
+            CompletenessCertificate(
+                expected=9,
+                visited=8,
+                warrant=SearchWarrant.PROVED,
+                action_set_size=3,
+                horizon=2,
+                action_set_version="v1",
+            )
+
+    def test_a_proved_certificate_must_quantify_over_the_declared_set(self):
+        # The other half. `expected` is supplied rather than derived, so a count that
+        # does not match |A|^H means the certificate is naming a set nobody enumerated
+        # — and `expected` alone cannot say, since 81 is 9^2 and 3^4 both.
+        with pytest.raises(ValueError, match="declared set"):
+            CompletenessCertificate(
+                expected=81,
+                visited=81,
+                warrant=SearchWarrant.PROVED,
+                action_set_size=3,
+                horizon=2,
+                action_set_version="v1",
+            )
 
     def test_an_incomplete_enumeration_is_corroborated(self):
         # The honest label for a partial enumeration: it sampled the set.
         cert = CompletenessCertificate(
-            expected=9, visited=8, warrant=SearchWarrant.CORROBORATED
+            expected=9,
+            visited=8,
+            warrant=SearchWarrant.CORROBORATED,
+            action_set_size=3,
+            horizon=2,
+            action_set_version="v1",
         )
         assert not cert.complete
 

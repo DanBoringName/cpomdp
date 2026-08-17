@@ -109,8 +109,9 @@ and shipped it as `cpomdp.warrant` (ADR-035). Import it; do not restate it.
 | PR | Title | Serves | Blocked by | Alias | Size | Tag |
 | --- | --- | --- | --- | --- | --- | --- |
 | **PR-1** | Warrant plumbing and the `slogdet` oracle audit | 2, 3 | — | P2-3, F4, P2-9 | M | v0.4.5 |
-| **PR-2** | R10 hardening | 2, 3 | PR-1 | P2-9 | M | v0.4.5 |
-| **PR-3** | World/Agent seam, exogenous action, constructors | 2, 3 | PR-1 | P2-1a (B) | L | v0.4.5 |
+| **PR-1b** | Chunked enumerator (`O(chunk)` residency) | 2, 3 | — | — | S | v0.4.5 |
+| **PR-2** | R10 hardening | 2, 3 | PR-1, PR-1b | P2-9 | M | v0.4.5 |
+| **PR-3** | World/Agent seam, exogenous action, constructors | 2, 3 | PR-1, PR-1b | P2-1a (B) | L | v0.4.5 |
 | **PR-4** | Paper 2 scoring: evaluator, cells, error bars | 2, 3 | PR-3 | P2-1b (B), F1–F3, F5 | L | v0.4.5 |
 | **PR-5** | Control bracket and Paper 2 Part 1 results | 2 | PR-4 | P2-4 (E) | L | v0.4.5 |
 | **PR-6** | Paper 3 toolbox and Part 1 results | 3 | PR-1, PR-3 | G-A, G-C, G-D | L | v0.4.5 |
@@ -127,9 +128,16 @@ nineteen items into eleven PRs pushed six of them to L. That is the trade.
 so nothing shortens it except starting PR-7 early.
 
 **Parallel tracks.** PR-1 and PR-2 touch nothing else and can go first or alongside
-anything. PR-3 is the fan-out point. After it lands, three tracks run independently: the
-Paper 2 scoring track (PR-4 → PR-5), the reference-filter track (PR-7 → PR-8), and the
-Paper 3 track (PR-6). Only PR-9 and PR-10 wait on the gate.
+anything. PR-1b is the exception: it edits `enumeration.py`, which PR-3 also opens, so it
+goes ahead of both rather than beside them. PR-3 is the fan-out point. After it lands,
+three tracks run independently: the Paper 2 scoring track (PR-4 → PR-5), the
+reference-filter track (PR-7 → PR-8), and the Paper 3 track (PR-6). Only PR-9 and PR-10
+wait on the gate.
+
+**ADR numbers are not pre-allocated.** A PR takes the next free number when it lands, and
+the heading carries its decision date. Reserving numbers against unwritten work collides
+the moment one PR needs two, and it sorts the file against the commit record, which is
+what an audit reads. Landed work keeps the number it took: PR-1 is ADR-035, PR-1b ADR-036.
 
 **Every PR.** `uv run --no-sync pytest -m "not rxinfer and not slow"` green,
 `uv run --no-sync ruff check src/cpomdp tests examples mkdocs_hooks.py` clean,
@@ -197,10 +205,40 @@ Two items the audit added, neither registered above:
 **Merge gate:** the negative-eigenvalue rejection test passes on kernel and oracle. The
 suite summary renders. No existing check loses its label. **ADR-035.** — met.
 
+## PR-1b — the chunked enumerator
+
+`serves: 2, 3` · `blocked by: —` · `alias: —` · `size: S` · `tag: v0.4.5` · `ADR-036`
+
+Ahead of PR-2, and dated, because PR-2's registration pre-commits against adopting a
+chunked enumerator in response to a `VOID` outcome. Taking it before any cell is declared
+is a different act, and the record has to be able to show it.
+
+- [x] `ChunkedEfeSearch` beside `EnumeratedEfeSearch`. Blocks decode their own indices as
+      base-`|A|` numerals in `itertools.product` order and reduce to running scalars, so
+      neither the policy set nor the score vector is ever resident. `evaluate` keeps its
+      contract, including the full `G` vector G-D reads.
+- [x] The combine defines the tie-break rather than inheriting it: blocks in increasing
+      order, strict `<`, so the globally lowest index wins exactly as `jnp.argmin` does.
+      A 32-way-tie fixture records that both paths agree there.
+- [x] `CompletenessCertificate` carries `action_set_size`, `horizon` and
+      `action_set_version`, and `PROVED` requires **both** `expected == |A|^H` (domain)
+      and `visited == expected` (coverage). `visited` is loop-carried now, so those come
+      apart where padding bugs live. The set naming also fixes a defect older than
+      chunking: `expected` alone conflates base with exponent, 81 being `9^2` and `3^4`.
+- [x] Cross-path bit-identity at `9^7`, the largest cell both paths run: identical argmin
+      index, identical policy, `G` equal under `==` at `425.163110098734`, which is
+      `ANCHOR_WALK`. Recorded in `research/warrant_ledger.md`, not only in the suite.
+- [x] Measured: peak 5.401 GiB → 0.431 GiB (12.5×), flat across `9^4`–`9^7` because what
+      remains is the fixed XLA baseline. Throughput 13.1k → 39.0k policies/s.
+
+**Merge gate:** the chunked path reproduces the front-loaded argmin bit for bit at the
+largest shared cell, completeness holds at an `N` indivisible by the block, and residency
+tracks the block rather than the enumeration. **ADR-036.** — met.
+
 ## PR-2 — R10 hardening
 
 `serves: 2, 3` · `blocked by: PR-1` · `alias: P2-9` · `size: M` · `tag: v0.4.5` ·
-`ADR-036`
+`ADR: on landing`
 
 Gate-independent. Paper 3's G9 inherits the qualifier this produces.
 
@@ -219,13 +257,28 @@ Gate-independent. Paper 3's G9 inherits the qualifier this produces.
         axis. Where no direction can be argued in advance, register a stability test at a
         stated tolerance (`|ΔH*| ≤ 1`) rather than dressing a stability check as a
         directional prediction.
-  - [ ] Pre-declare the compute budget: `5^7 = 78,125`, `7^7 = 823,543`,
-        `9^7 = 4,782,969`, `9^8 ≈ 4.3 × 10^7` if `H*` rises under refinement. Budget
-        exceeded is **VOID**, meaning unmeasured, never "stable".
-  - [ ] Size the run against `free -g` before launching it. Treat
-        `cue_maze.enumeration_cost` as a floor and budget roughly 1.6× it. The WSL memory
-        cap is configured rather than physical, and an over-sized enumeration takes the
-        whole session down.
+  - [ ] Pre-declare the compute budget, in **both units**, because they disagree: the
+        cell counts here are policies (`5^7 = 78,125`, `7^7 = 823,543`,
+        `9^7 = 4,782,969`, `9^8 ≈ 4.3 × 10^7`) while the ledger's `H_max = 9` is 17.6M
+        *scored steps*. `9^7` at H = 7 is 33.5M scored steps: inside one budget, double
+        the other. Budget exceeded is **VOID**, meaning unmeasured, never "stable".
+  - [ ] Decide `9^8` and `17^7` deliberately rather than by contingency. PR-1b removed
+        the memory wall, so they are 18 minutes and 2.9 hours at the measured 39.0k
+        policies/s, not the `VOID (memory)` they were. Accept or decline each in the
+        registration, before the run.
+  - [ ] The extension axis has one named unmeasured cell to answer, `{−4,…,2}`.
+        `research/r10_open_loop_crossover.md` carried a row for it reading "`H* = 6`,
+        unchanged (`−3` already optimal)", deduced from `−3` reaching the goal in one step
+        rather than measured. No commit in this repo builds that set, so the row is
+        retracted and the cell reads *not measured*. The deduction is also not safe: the
+        walk arrives at the cue at `x = +1`, from where the goal at `x = −3` is a
+        displacement of `−4`, so a set containing `−4` offers a one-step return the
+        six-action set does not. Measure it under a completeness certificate.
+  - [ ] Size the run against `free -g` before launching it. `cue_maze.enumeration_cost`
+        describes the **front-loaded** path only. On the chunked path peak is
+        block-determined and flat in `|A|^H`, so re-derive any budget line taken from the
+        old figure. The WSL memory cap is configured rather than physical, and an
+        over-sized enumeration takes the whole session down.
   - [ ] Wire `cue_maze.best_reachable_noise` in as the void guard. A refined set that
         cannot land on the cue produces a null indistinguishable from "information is
         never worth the detour", which is pure geometry and not a result.
@@ -238,12 +291,12 @@ Gate-independent. Paper 3's G9 inherits the qualifier this produces.
       model, a different backend, whole-state epistemic, no search.
 
 **Merge gate:** both axes report an outcome, `PASS`, `FAIL` or `VOID`, against their
-registered prediction. **ADR-036.**
+registered prediction. **ADR on landing.**
 
 ## PR-3 — World/Agent seam, exogenous action, constructors
 
 `serves: 2, 3` · `blocked by: PR-1` · `alias: P2-1a (B)` · `size: L` · `tag: v0.4.5` ·
-`ADR-037`
+`ADR: on landing`
 
 The foundation, and the fan-out point. Paper 3 reuses the seam, the exogenous action mode
 and the constructors without modification, which is why the module boundary below is a
@@ -266,12 +319,12 @@ test rather than a convention.
       does not import it. Assert it with an import test. A test outlives a PR boundary.
 
 **Merge gate:** the no-read-path test passes. The import test holds. The constructor set
-round-trips through the model spec and shows up in a diff when extended. **ADR-037.**
+round-trips through the model spec and shows up in a diff when extended. **ADR on landing.**
 
 ## PR-4 — Paper 2 scoring: evaluator, separation cells, error bars
 
 `serves: 2, and F5 serves 3` · `blocked by: PR-3` · `alias: P2-1b (B), F1, F2, F3, F5` ·
-`size: L` · `tag: v0.4.5` · `ADR-038`
+`size: L` · `tag: v0.4.5` · `ADR: on landing`
 
 - [ ] `ThreeTermEvaluator` returns `Decomposition(misspecification, inference_gap)`, two
       divergences directly computed. The type carries no entropy field and no entropy
@@ -307,7 +360,7 @@ round-trips through the model spec and shows up in a diff when extended. **ADR-0
 **Merge gate:** the cross enumerates completely. R2 and R3 print at `PROVED`. No cell
 asserts a separation without printing its ratio and conditioning. The four-term bound is
 asserted. A difference and a sum-of-bars are shown to differ on a worked case.
-**ADR-038.**
+**ADR on landing.**
 
 **Warrant:** R1 Tier A / Prover 1 with a 3a witness. R2 and R3 Tier A–B / **3b**. R4
 Tier B / 3a.
@@ -352,7 +405,7 @@ forms. That is the strongest thing the tier table licenses without a bound.
 ## PR-6 — Paper 3 toolbox and Part 1 results
 
 `serves: 3` · `blocked by: PR-1, PR-3` · `alias: G-A, G-C, G-D, G1–G5` · `size: L` ·
-`tag: v0.4.5` · `ADR-039`
+`tag: v0.4.5` · `ADR: on landing`
 
 G-A and G-D were the original Phase 0 hedge, scheduled at v0.4.3 and never shipped. They
 are gate-independent and cheap. They are what stands between "a gate failure stalls the
@@ -383,7 +436,7 @@ after it.
 
 **Merge gate:** G1's constant offset prints and is flat across policies at H = 1. The G2
 certificate holds at the stated horizon and action set. An undeclared λ or γ is a
-construction error, not a runtime warning. **ADR-039.**
+construction error, not a runtime warning. **ADR on landing.**
 
 **Warrant:** G2 is **3b**, decided rather than surveyed. G4 is 3a existence, settled by
 one construction.
@@ -421,10 +474,83 @@ enumerates completely.
 ## PR-8 — Certified discretisation bound · GATE-D4 · tag v0.4.5
 
 `serves: 2, 3` · `blocked by: PR-7` · `alias: P2-6 (C′)` · `size: L` · `tag: v0.4.5` ·
-`ADR-040`
+`ADR: on landing`
+
+**Landed ahead of the PR: `research/gate_d4_registration.md`, opened 2026-08-07.** The gate
+asks whether the bound is small relative to R6's signal, and the signal comes from the very
+filter the bound certifies. By the time the gate is evaluable both quantities exist, and a
+factor fixed then can be sized to the answer. The only window in which neither exists is
+the one before PR-7 builds the filter, so the registration opens in it and fixes what it
+can. Amendments are appended and dated rather than folded in, and the file's git history is
+what makes the timing checkable.
+
+- [x] `d4-family-v1` declared before any coefficient was computed. Scalar chain,
+      `R(x) = R₀ + κ·x²`, spread `σ²` and curvature `κ` as the swept axes, `μ = √(R₀/κ)`
+      derived rather than swept. The selection reason is that Paper 1's `R(x)` result
+      already uses this family, so it was not chosen toward the bar.
+- [x] The curvature ceiling is settled and **vacuous** for this family, which closes one of
+      the three stop branches analytically.
+- [x] `c₂ = (R'(μ)/2R(μ))²` in closed form. It is a perfect square, so `c₂ > 0` is an
+      analytic positivity statement at leading order rather than a measurement. The
+      registered `c₂ ≤ 0` stop branch collapsed into the `R'(μ) ≠ 0` precondition and was
+      retired, because a row that can never fire reads as a check when it is not one.
+- [x] `c₄` refit over the declared `σ ∈ [0.06, 0.30]`, 28 cases across four `R` families,
+      exact `c₂σ²` subtraction, seven-term dimensional basis. Median relative residual
+      0.60% against the 24% the `(a, b)`-only basis left. Extraction spread at the
+      operating point 0.36%, against 35% before. Two of the seven coefficients came out at
+      0.1% and 0.3% of the largest and are reported as consistent with zero, not deleted.
+- [x] The dilute-versus-subtract rule was written down before the refit ran and fired for
+      **subtract**: 0.36% by extraction and 1.03% by basis fit, both far inside the
+      registered `X = 0.1`. The branch was decided without the answer visible.
+- [x] The convergence shortfall at the bottom of the range disclosed before the refit, not
+      after it.
+- [ ] `T`, `D` and `k_min` are still outstanding. `T` needs `c₄` scanned along the ridge
+      rather than at the single operating point.
+- [ ] Subtraction moved the upper edge, and this is an open question the decision created.
+      `σ_max` was defined as where the quartic reaches a fraction `f` of the quadratic. With
+      the quartic subtracted the binding truncation is `c₆`, which is unmeasured. Either
+      redefine `σ_max` against `c₆` or keep `f` as a bound that subtraction makes slack.
+      Registered as open, since choosing now is choosing with the refit's outcome in view.
+
+**The checks that back it live in `research/checks/`.** Standalone modules run with
+`--check`, not on the `pytest` path, and each prints under `cpomdp.warrant`'s vocabulary.
+They exist because the scripts that produced the original 28 `c₄` cases were lost and only
+prose survived them, which is a failure mode worth not repeating.
+
+- [x] `gap_kernel.py`. The averaged inference-gap quadrature, defined once, pinning the
+      three conventions the lost scripts recorded only in prose: reverse KL, `R` frozen at
+      the prior mean, the average taken under the true predictive. Callers own the
+      questions, this module owns the integral.
+- [x] `predictive_truncation.py`. Measures the `y` grid against the density it actually
+      integrates. The half-width comes from the plug-in `R(μ)` while `p*(y)` is a scale
+      mixture, so a "`k` standard deviations" rule sizes a Gaussian tail against a
+      non-Gaussian one and no `k` is safe on principle. **Six of 49 cells fire**, all on the
+      two unbounded-`R` families at `σ = 0.25` and `0.30`: the nominal 9σ grid covers 8.81
+      to 8.87 true standard deviations, and the log-density there is linear rather than
+      quadratic (slope `−2.604`/unit for `R = 1 + x²`, crossover at `ν* ≈ 13.93` against a
+      grid edge at 13.01), which is the exponential tail the rule cannot see. C4 settles
+      what it costs: the worst truncation is four or more orders below the 0.36% extraction
+      spread already carried on `c₄`, so the fires are real and immaterial to the
+      coefficient. The module reports and does not fix. The production grid rule stays where
+      it is and the red cells are the output.
+- [x] `gap_expansion.py`. Structure of the small-spread expansion **without** its
+      coefficients. It certifies the gap on three axes, checks `c₂` against its closed form
+      to `5.8e−7` relative or better on all four families, and tests the residual's
+      *exponent* after each known term comes off: `σ^3.965` to `σ^4.038` against a predicted
+      `σ⁴`. Seven of 38 cells fire, all G3 quadrature certification on the two bounded
+      families below `σ = 0.04`, where the `x`-extent and refinement tolerances sit up to
+      21× over a `1e-10` bar. It never fits a `c₄`, because a number produced here would
+      become the thing the derivation is checked against and the ledger would carry a Tier C
+      fit under a Prover 1 label. Pass a derived candidate in with `--c4` and G4b tries to
+      refute it.
+- [x] `log_ratio_series.py`. Symbolic pins for the log-ratio series `W`, 28 of them, all
+      holding. It stops at first order in `σ` and its expectation, which is where the
+      structure lives and the arithmetic does not. Adds `sympy` as a dev dependency.
+      Nothing under `src/cpomdp` imports it.
 
 - [ ] Write down the **pre-agreed factor** before this PR is opened. A factor agreed after
-      seeing the bound is not a gate.
+      seeing the bound is not a gate. The registration is where it goes, and `T` is an
+      expression there rather than a value, so this closes when `T` does.
 - [ ] A **certified** bound, not a fine grid with a convergence plot. Interval arithmetic
       or a proved quadrature error bound, the device licensing *for all x in the domain,
       |p_grid − p_exact| ≤ δ*.
@@ -437,7 +563,7 @@ enumerates completely.
       entry, `CITATION.cff` and `__init__.__version__` on the release commit, matching
       v0.4.4's discipline.
 
-**Merge gate — hard, existential.** See "GATE-D4" below. **ADR-040.**
+**Merge gate — hard, existential.** See "GATE-D4" below. **ADR on landing.**
 
 ## PR-9 ⛔ — Window harness and Paper 2 Part 2 results
 
@@ -494,7 +620,11 @@ and assert at their stated tiers.
 With one bound and two tags, the gate is a blocking condition on **PR-8** and an explicit
 merge block on **PR-9 and PR-10**.
 
-- [ ] Write down the pre-agreed factor before PR-8 is opened.
+- [~] Write down the pre-agreed factor before PR-8 is opened.
+      `research/gate_d4_registration.md` carries it. The family, the stop branches and the
+      gate's form as `gap > T` are all dated 2026-08-07, before any coefficient existed.
+      `c₂` and `c₄` have since landed. `T` is still an expression, so the item closes when
+      `T` takes a value, and that has to happen before PR-7 merges.
 - [ ] Mark PR-9 and PR-10 blocked in the tracker, not by convention. A gate honoured by
       memory is not honoured.
 - [ ] Tag v0.4.5 at PR-8's merge regardless of outcome.
@@ -609,14 +739,30 @@ quadrature buys warrant on R6, R7 and R9, and it buys R8 the right to exist.
 
 ## Documents to amend
 
-Two tracked programme documents carry the gate.
+Three tracked programme documents carry the gate. A fourth, the R10 write-up, carries the
+result PR-2 hardens.
 
+- [x] `research/gate_d4_registration.md`, new. It holds the gate's registered side:
+      `d4-family-v1`, the stop branches, `c₂`, `c₄`, the dilute-versus-subtract rule and
+      the `T` expression. PR-8's section lists what is fixed and what is still outstanding.
+      Amend it by appending a dated block, never by editing the text a later block
+      corrects.
 - [x] `research/warrant_ledger.md`. The five "v0.4.4 gate" sites read `GATE-D4`, the
       header names v0.4.5 as the tag that carries it, the scoring-harness and rule-family
       pinning points at PR-3/PR-4 and PR-7, and the opening line names the battery by
       filename.
+- [x] `research/warrant_ledger.md`, again. The instrument changed under R10's published
+      numbers, so the two paths' agreement is registered in the ledger rather than left in
+      the test suite: identical argmin index and `G` equal under `==` at `9⁷`, residency
+      12.5× down, throughput 3.0× up, and the superseded budget lines restated at 39.0k
+      policies/s.
 - [ ] `research/warrant_ledger.md`, still open. Section 2's availability column moves off
       bare version numbers onto PRs.
+- [x] `research/r10_open_loop_crossover.md`. "Optimal reach" was the wrong name for `−3`
+      and is now "one-step reach" throughout, since `−3` reaches the goal in one step from
+      the start and is not optimal from where the walk actually stands. The deduced
+      `{−4,…,2}` row is retracted and reads *not measured*, with the reason stated and the
+      measurement routed to PR-2's extension axis.
 - [x] `research/fep_falsification_battery.md`. Readiness reads `PR-n · tag` throughout,
       `GATE-D4 at v0.4.6` reads `GATE-D4 · PR-8 · v0.4.5`, D3's "E outstanding, scheduled
       v0.4.5" reads PR-5, and D3 now completes at v0.4.5 rather than v0.5, because PR-2

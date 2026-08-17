@@ -91,7 +91,12 @@ def _measurement(horizon, *, delta_g, cue_ward, bound=1e-5):
     return crossover.FlipMeasurement(
         horizon=horizon,
         certificate=CompletenessCertificate(
-            expected=5**horizon, visited=5**horizon, warrant=Warrant.PROVED
+            expected=5**horizon,
+            visited=5**horizon,
+            warrant=Warrant.PROVED,
+            action_set_size=5,
+            horizon=horizon,
+            action_set_version="v1",
         ),
         delta_g=delta_g,
         bound=bound,

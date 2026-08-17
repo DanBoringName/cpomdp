@@ -5,7 +5,7 @@ passes. The first turned an earlier "no crossover" reading (a sweep capped one h
 short) into the H\* = 7 finding. The second made the decisive measurement the exhaustive
 argmin flip rather than the post-selection ΔG curve, corrected the mechanism to a decaying
 pragmatic gradient against a flat epistemic pull, and split H\* = 7 (clipped reach) from
-H\* = 6 (optimal reach). The third added the direct counterfactual that the flip is
+H\* = 6 (one-step reach). The third added the direct counterfactual that the flip is
 epistemically driven (chapter 4.1), moved the conditioning onto the registered rollout-
 hygiene bars (chapter 5), declared the feasibility bound (chapter 6), and fixed the
 falsifier accounting (chapter 7).*
@@ -30,8 +30,8 @@ anchors, on the pre-registered `crossover-v1` action set `{−2,−1,0,1,2}`:
   accumulated epistemic pull overtakes the pragmatic gradient" is literally wrong: the
   pull overtakes nothing. The gradient decays below a constant pull.
 - **Equal billing.** H\* = 7 is an upper bound: `crossover-v1` clips the reach at the grid
-  edge `−2`, so it needs two steps to reach the goal. On any set containing the optimal
-  reach `−3`, **H\* = 6**. H\* is stable under genuine refinement (a step-0.5 grid over the
+  edge `−2`, so it needs two steps to reach the goal. On the six-action set containing the
+  one-step reach `−3`, **H\* = 6**. H\* is stable under genuine refinement (a step-0.5 grid over the
   same range gives the identical argmin at H = 6 and H = 7).
 
 The headline margin is small (`ΔG(7) = −0.152` on a 425-nat scale, `3.6e−4` relative), so
@@ -174,17 +174,30 @@ constant policy cannot express the two-phase walk.
 ### 3.4 Equal billing: H\* = 7 is a clipped-reach upper bound; H\* = 6 with the optimum
 
 `crossover-v1` clips the reach at the grid edge `−2`, so the direct reach needs two steps
-(`0 → −2 → −3`) to reach the goal. The *unconstrained* optimal reach is `−3` (`x = −3` hits
-the goal in one step). Adding it moves the flip one horizon sooner:
+(`0 → −2 → −3`) to reach the goal. Adding `−3`, which reaches the goal from the start in one
+step, moves the flip one horizon sooner:
 
 | action set | H\* | argmin at H\* |
 |---|---|---|
 | `crossover-v1` `{−2,−1,0,1,2}` (registered) | **7** | `[+1,−2,−2,0,0,0,0]` |
-| `{−3,−2,−1,0,1,2}` (contains the optimal reach) | **6** | `[+1,−3,−1,0,0,0]` |
-| `{−4,…,2}` | 6 | unchanged (`−3` already optimal) |
+| `{−3,−2,−1,0,1,2}` (contains the one-step reach) | **6** | `[+1,−3,−1,0,0,0]` |
+| `{−4,…,2}` and wider | not measured | see below |
 
-So 7 is the pre-registered number and an upper bound; 6 is the value on any set containing
-the optimal reach. Both get stated, not one as a footnote to the other.
+So 7 is the pre-registered number and an upper bound; 6 is the value on the six-action set.
+Both get stated, not one as a footnote to the other.
+
+**What the wider sets do is open, and an earlier version of this table answered it by
+deduction.** That row read "`H* = 6`, unchanged (`−3` already optimal)", which was reasoned
+from `−3` reaching the goal in one step rather than measured. No commit in this repo's
+history builds `{−4,…,2}`. The deduction is also not obviously safe: `−3` is the one-step
+reach *from the start*, while the walk arrives at the cue at `x = +1`, from where the goal
+at `x = −3` is a displacement of `−4`. A set containing `−4` therefore offers the walk a
+one-step return that `{−3,…,2}` does not, so a lower `G` at H = 6 is available in
+principle and the horizon may or may not move with it.
+
+Registering the extension axis and measuring it under a completeness certificate is PR-2's
+work (issue #65). Until then this cell is unmeasured, which is a weaker claim than the one
+it replaces and the only one the evidence supports.
 
 This is distinct from *refinement*. A genuine refinement subdivides the same range: on a
 step-0.5 grid over `[−2, 2]` (`|A|^H·H = 9⁷·7 = 33.5M` at H = 7) the argmin is byte-identical
@@ -194,7 +207,7 @@ argmin lies in it the scores must match; that half is a code-correctness check r
 The evidential content is the other half: **no intermediate action yields a lower `G`**, so
 subdividing does not move the optimum toward the cue. So H\* is stable under refinement
 (registered falsifier 4, not triggered). A step-0.25 grid was dropped on cost (`17⁷·7 ≈
-1.6B`). The 7 → 6 shift is a range *extension* supplying the omitted optimal reach, a
+1.6B`). The 7 → 6 shift is a range *extension* supplying the omitted one-step reach, a
 different operation from refinement.
 
 ## 4. Why — the mechanism (a decaying gradient, from accumulating ambiguity relief)
@@ -303,7 +316,7 @@ is a larger reimplementation the couplings do not repay here. The 0.152-nat marg
 **Analytic cross-check.** The per-step ambiguity relief is capped by
 `½·Λ_commit·(C·Σ⁺·Cᵀ)[0,0] ≈ ½·0.6·2.56 = 0.77` nats/step, against a one-time net detour
 cost of ~2.77 nats. So `H\* ≥ 2 + 2.77/0.77 ≈ 5.6`, i.e. **H\* ≥ 6 independent of the
-enumeration**, consistent with the measured 7 (clipped) and 6 (optimal reach).
+enumeration**, consistent with the measured 7 (clipped) and 6 (one-step reach).
 
 ## 6. How I first read this as a null, and why the correction is a departure, not a tuning
 
@@ -360,12 +373,12 @@ vocabulary: *not triggered* for the testable three, *not applicable* for the see
   and recomputes identically.
 - **Falsifier 4** (H\* unstable under a declared refinement): *not triggered* — H\* is
   byte-identical under a step-0.5 refinement of the same range at H = 6 and H = 7. The
-  7 → 6 shift is a range extension supplying the optimal reach, recorded as such.
+  7 → 6 shift is a range extension supplying the one-step reach, recorded as such.
 
 The result to register:
 
 - **H\* = 7** on `crossover-v1` (upper bound, clipped reach); **H\* = 6** on any set
-  containing the optimal reach `−3`. The pre-registered number is 7.
+  containing the one-step reach `−3`. The pre-registered number is 7.
 - **Mechanism: a pragmatic gradient decaying below a constant epistemic pull, driven by
   accumulating commit-channel ambiguity relief (~0.67 nats/step); the flip is epistemically
   driven (chapter 4.1).** Not epistemic accumulation, and not "the pull overtaking the
