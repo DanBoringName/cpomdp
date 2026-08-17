@@ -153,13 +153,28 @@ order, all serving PR-8's registration:
 | `65-gap-series-c2-gate` | the symbolic kernel, the warrant wiring, and `c₂` |
 | `65-gap-series-c4` | σ⁴ and `c₄` |
 
-The first is `src/cpomdp/warrant.py` and its docs page and nothing else. Its review
-question is distinct from any derivation and gets waved through if buried in one. Landed
-there: `SymbolicReduction`, carrying the claim, where the setup was hand derived against
-the problem, and the assumptions the identity is contingent on. `Evidence` becomes a union
-of it and `CompletenessCertificate`, so `PROVED` is reachable by argument as well as by
-enumeration. Blank fields do not construct, which is what keeps the correspondence from
-being a formality.
+Landed on the first: `SymbolicReduction`, carrying the claim, where the setup was hand
+derived against the problem, and the assumptions the identity is contingent on.
+`Evidence` becomes a union of it and `CompletenessCertificate`, so `PROVED` is reachable
+by argument as well as by enumeration. Every item in the evidence tuple is checked for
+its kind, so a path naming where the proof lives cannot satisfy the precondition by being
+present. Blank means blank to a reader. A field that is not text, one holding only
+whitespace, one holding only zero-width characters, and one carrying a line break all
+fail to construct, with `assumptions` checked entry by entry. That is what keeps the
+correspondence from being a formality.
+
+`Tier` lost its letters on the same branch (ADR-038). `EXACT`, `BOUNDED` and `COMPUTED`
+replace `A`, `B` and `C`, and the prover sub-modes read `Prover 3 · sample`,
+`Prover 3 · enumeration` and `Prover 3 · validated` in prose. Aliases were rejected. Two
+live vocabularies would stop a document's vocabulary from dating it. The canonical table
+moved to the head of `research/warrant_ledger.md` and every other document points at it. The README gained a section on what the labels mean, and was
+brought up to v0.4 while it was open.
+
+That branch is wider than it was scoped to be, and the widening is deliberate. Landing
+the vocabulary docs beside the type they describe keeps them from trailing three PRs
+behind it. The review question is unchanged: does the programme accept a Prover 2
+evidence type, and what must it carry. Read that first. The rename is mechanical and sits
+in its own commits, so it skims.
 
 Results from the other two land in `research/gate_d4_registration.md` and the modules under
 `research/checks/`, not here.
