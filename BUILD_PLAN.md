@@ -188,13 +188,13 @@ now reports them as `CheckReport`. `gap_series.py` derives `c₂` and stops.
       `series` can be afforded.
 - [x] `c₂ = ℓ₁²/4` symbolically, against the registration's `(R'(μ)/2R(μ))²` derived
       before this series existed. Two independently computed closed forms agreeing is the
-      Tier A licence, not a tolerance being met.
+      `EXACT` licence, not a tolerance being met.
 - [x] The gap is derived twice and the two are checked against each other: once from
       `log E_q[e^W] − E_q[W]` directly, once as `κ₂/2` from the cumulant recursion.
       Reverse and forward KL agree at `σ²`, and the agreement is **not** asserted beyond
       it, since `κ₃` separates them and that separation is why the pinned conventions
       matter at `σ⁴`.
-- [x] 52 identities across the three modules, every one `PROVED` at Tier A carrying a
+- [x] 52 identities across the three modules, every one `PROVED` at `EXACT` carrying a
       `SymbolicReduction`. Mutation probes confirm the suite discriminates: an off-by-one
       truncation fires four kernel checks, a wrong fourth moment fires its own, and a
       wrong `c₂` claim fires rather than being absorbed.

@@ -7,7 +7,7 @@ The inference gap at a fixed observation is a cumulant difference::
 Expanded in prior spread and averaged over the innovation, its leading coefficient is
 `c₂`. The registration derived that coefficient independently, in closed form, as
 `(R'(μ)/2R(μ))²`. This module derives it again from the series and checks the two
-against each other. That is the Tier A licence exactly: agreement of two independently
+against each other. That is the `EXACT` licence exactly: agreement of two independently
 computed closed forms.
 
 **`ORDER` is 2, and it is a module constant.** The quartic is the next piece of work and
@@ -273,7 +273,7 @@ def check_c2_against_the_registration() -> list[CheckReport]:
     """C4: `c₂ = l₁²/4`, against the closed form derived before this series existed.
 
     The registration has `c₂ = (R'(μ)/2R(μ))²`, and `R'/R` is `l₁` by definition, so the
-    two forms are the same statement reached by different routes. That is what Tier A
+    two forms are the same statement reached by different routes. That is what `EXACT`
     licenses: agreement of two independently computed closed forms, not a numerical
     coincidence at a tolerance.
 

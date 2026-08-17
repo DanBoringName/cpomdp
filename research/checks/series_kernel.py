@@ -477,7 +477,7 @@ def _proved(name: str, claim: str, correspondence: str, shown: str) -> CheckRepo
         name=name,
         warrant=Warrant.PROVED,
         outcome=Outcome.NOT_TRIGGERED,
-        tier=Tier.A,
+        tier=Tier.EXACT,
         detail=f"PASS — {claim}. got: {shown}",
         evidence=(_reduction(claim, correspondence),),
     )
@@ -498,7 +498,7 @@ def _refuted(name: str, claim: str, shown: str) -> CheckReport:
         name=name,
         warrant=Warrant.CORROBORATED,
         outcome=Outcome.FIRED,
-        tier=Tier.A,
+        tier=Tier.EXACT,
         detail=f"FAIL — claimed {claim}. got: {shown}",
     )
 

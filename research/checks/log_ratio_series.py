@@ -32,7 +32,7 @@ Symbolic throughout. No floats, no numerics, no functional form chosen for `R`: 
 log-derivatives `l₁..l₄` stay free symbols and `R̄` stays symbolic and is never set to
 one. A check that passes only at `R̄ = 1` is a check that has lost a variable.
 
-Every identity reports `PROVED` at Tier A, carrying a
+Every identity reports `PROVED` at `EXACT`, carrying a
 [`SymbolicReduction`][cpomdp.SymbolicReduction] that names where the symbolic setup was
 hand derived against the analytic problem. A CAS establishes that one expression equals
 another and cannot establish that those are the expressions the claim is about, which is
