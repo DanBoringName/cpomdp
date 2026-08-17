@@ -76,7 +76,10 @@ REGISTRATION_SOURCE = (
 )
 
 #: Where the cumulant statement of the gap is hand derived.
-CUMULANT_SOURCE = "hand derivation, Step 4 (gap as half the variance at leading order)"
+CUMULANT_SOURCE = (
+    "research/c4_hand_derivation.md, Step 4 "
+    "(the gap as half the variance at leading order)"
+)
 
 #: A free positive scale, for the covariance check. `R → a·R` leaves every
 #: log-derivative alone, since `log(aR) = log a + log R`, and moves `R̄` alone.
@@ -188,6 +191,12 @@ def check_gap_is_half_the_variance() -> list[CheckReport]:
     `log E_q[e^W] − E_q[W]` directly. The other takes `κ₂/2` from the cumulant
     recursion. They part company at the third cumulant, which is why the claim is
     scoped to `σ²` and not stated generally.
+
+    **What the agreement does not cover.** Neither arm calls the other, and that is all
+    the independence claimed. Both read the same `W` from `log_ratio_in_sigma` and both
+    take their expectations through the same `gaussian_expectation`. An error in either
+    shared piece moves the two arms together and this check stays green. It separates
+    the cumulant route from the generating-function route, not the kernel they share.
 
     Returns:
         The report, as a one-item list.

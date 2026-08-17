@@ -181,11 +181,13 @@ its expansion and the moment operator. `log_ratio_series.py` keeps its structura
 now reports them as `CheckReport`. `gap_series.py` derives `c₂` and stops.
 
 - [x] The expansion is built by explicit polynomial truncation rather than by
-      `sympy.series`, which does not terminate in fifteen minutes on the assembled `W`.
-      Every primitive is a geometric, binomial or exponential sum, and truncation happens
-      inside each product. The swap is licensed by a check, not by inspection: the
-      truncation path equals `series(W)` term for term through `σ³`, which is as far as
-      `series` can be afforded.
+      `sympy.series`. Every primitive is a geometric, binomial or exponential sum, and
+      truncation happens inside each product. The swap is licensed by a check, not by
+      inspection: the truncation path equals `series(W)` term for term through `σ⁴`,
+      which is where `DERIVATIVE_ORDER` stops the truncation path rather than where
+      `series` stops being affordable. `series` costs about an order of magnitude more
+      per order (2 s at `σ⁴`, 8.5 s at `σ⁵`, 83.5 s at `σ⁶`), which is the real reason
+      the pipeline does not rest on it.
 - [x] `c₂ = ℓ₁²/4` symbolically, against the registration's `(R'(μ)/2R(μ))²` derived
       before this series existed. Two independently computed closed forms agreeing is the
       `EXACT` licence, not a tolerance being met.
@@ -194,13 +196,16 @@ now reports them as `CheckReport`. `gap_series.py` derives `c₂` and stops.
       Reverse and forward KL agree at `σ²`, and the agreement is **not** asserted beyond
       it, since `κ₃` separates them and that separation is why the pinned conventions
       matter at `σ⁴`.
-- [x] 52 identities across the three modules, every one `PROVED` at `EXACT` carrying a
+- [x] 53 identities across the three modules, every one `PROVED` at `EXACT` carrying a
       `SymbolicReduction`. Mutation probes confirm the suite discriminates: an off-by-one
       truncation fires four kernel checks, a wrong fourth moment fires its own, and a
       wrong `c₂` claim fires rather than being absorbed.
-- [x] Deleting the Kalman shift from `h` fires **T4 and nothing else**. `gap_series` is
-      blind to it, because at `σ²` the gap reads only the first-order term of `W`. That
-      was measured rather than assumed, and it is what the quartic work inherits.
+- [x] Deleting the Kalman shift from `h` fires **five checks**: T4's `σ²` coefficient
+      and its Kalman-shift report, and K4 at `σ²`, `σ³` and `σ⁴`. T4 is the only one
+      that names the shift. K4 reports only that two paths disagree. `gap_series` stays
+      blind
+      to it, because at `σ²` the gap reads only the first-order term of `W`. That was
+      measured rather than assumed, and it is what the quartic work inherits.
 - [ ] `c₄`. Not started, and nothing in these modules fits or guesses one. A number
       produced before the derivation lands becomes the thing the derivation is checked
       against. `gap_expansion --c4` is the refutation route and produces no candidate.

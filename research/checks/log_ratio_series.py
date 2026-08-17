@@ -37,7 +37,8 @@ Every identity reports `PROVED` at `EXACT`, carrying a
 hand derived against the analytic problem. A CAS establishes that one expression equals
 another and cannot establish that those are the expressions the claim is about, which is
 the condition the warrant ledger attaches to Prover 2 being theorem-grade. A refuted
-identity reports `FIRED` and carries no warrant, since it produced no decision.
+identity reports `FIRED` at `CORROBORATED`: simplification is incomplete, so a residual
+the CAS could not reduce is evidence that something is wrong rather than proof of what.
 
 Where this sits against the numeric checks. ``gap_kernel`` implements the same three
 conventions in quadrature (reverse KL, `R` frozen at `R(μ)`, averaged under the true
@@ -170,11 +171,18 @@ def check_displacement_series() -> list[CheckReport]:
     posterior mean. A derivation that measures `h` from the wrong centre loses exactly
     this term, so asserting it is non-zero is asserting the two are not interchangeable.
 
-    **This is the only check that catches a lost shift, which was measured rather than
-    assumed.** Deleting the `σ²` term from `h` and re-running the three suites fires T4
-    and nothing else: every other pin here survives it, and ``gap_series`` is entirely
-    blind to it, because at `σ²` the gap reads only the first-order term of `W`. The
-    shift is wrong at `σ⁴`, so this pin is what the quartic work inherits.
+    **What a lost shift costs, measured rather than assumed.** Deleting the `σ²` term
+    from `h` and re-running the three suites fires five checks: T4's own `σ²`
+    coefficient and its Kalman-shift report here, and `series_kernel`'s K4 at `σ²`, `σ³`
+    and `σ⁴`. K4 fires because the mutation moves the truncation path and leaves the
+    `series` arm where it was, so the two stop agreeing. ``gap_series`` is blind to it
+    and reports twelve clean checks, because at `σ²` the gap reads only the first-order
+    term of `W`.
+
+    T4 is still the check that *names* the shift. It is the only one that asserts the
+    coefficient is `ν/R̄`, non-zero and free of `z`, so it says what is wrong. K4 reports
+    only that two paths disagree. The shift is wrong at `σ⁴`, so this pin is what
+    the quartic work inherits.
 
     Returns:
         One report per coefficient, plus the shift report.

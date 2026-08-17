@@ -15,7 +15,7 @@ structural properties, ``gap_series`` extracts coefficients. Extracted from
 ``log_ratio_series`` when the second caller arrived, on the same principle that put the
 quadrature in ``gap_kernel``.
 
-Notation, matching the hand derivation:
+Notation, matching ``research/c4_hand_derivation.md``:
 
 ===========  ==========================================================
 `s`          prior variance, `σ²`
@@ -25,13 +25,18 @@ Notation, matching the hand derivation:
 `z`          standard normal draw under `q`
 ===========  ==========================================================
 
-**Truncation, not ``sympy.series``.** A nested ``series(together(W), sigma, 0, 5)`` on
-the assembled expression does not terminate in fifteen minutes. Every primitive here is
-therefore built as an explicit polynomial in `σ` (a geometric series for the gain, a
-binomial one for the posterior width, the exponential series for `e^{−δ}`), and
-:func:`truncate` drops what is above the working order by coefficient extraction, which
-runs in milliseconds. ``sympy.series`` appears only in the checks, as an independent arm
-on the primitives, where the expressions are small rational functions and it is cheap.
+**Truncation, not ``sympy.series``.** Every primitive here is built as an explicit
+polynomial in `σ` (a geometric series for the gain, a binomial one for the posterior
+width, the exponential series for `e^{−δ}`), and :func:`truncate` drops what is above
+the working order by coefficient extraction, which runs in milliseconds.
+
+The reason is cost growth, not a wall. Measured on the assembled `W`,
+``series(together(W), sigma, 0, n)`` costs about 2 s at `σ⁴`, 8.5 s at `σ⁵` and 83.5 s
+at `σ⁶`, near enough an order of magnitude per order. That is affordable at the orders
+this module works to and not at the ones it is built to reach, and it is a poor
+foundation for a pipeline that expands, multiplies and truncates repeatedly.
+``sympy.series`` is therefore used only in the checks, as an independent arm against the
+truncation path.
 
 **Truncate inside every product.** Intermediate swell is the whole cost of the pipeline,
 and every factor here is of non-negative order in `σ`, so dropping high powers early
@@ -120,11 +125,14 @@ PRIOR_VARIANCE = SIGMA**2
 #: Where the hand derivation's construction of `W` is recorded, for the correspondence
 #: field of every reduction resting on it.
 CONSTRUCTION_SOURCE = (
-    "hand derivation, Steps 1-2 (log-ratio and the reciprocal identity)"
+    "research/c4_hand_derivation.md, Steps 1-2 "
+    "(the log-ratio and the reciprocal identity)"
 )
 
 #: Where the σ-expansion of `h`, `δ` and `W` is recorded.
-EXPANSION_SOURCE = "hand derivation, Step 3 (expansion in prior spread)"
+EXPANSION_SOURCE = (
+    "research/c4_hand_derivation.md, Step 3 (expansion in prior spread)"
+)
 
 #: The scope every reduction in this module inherits. `R` smooth and positive at `μ` is
 #: what lets `l = log R` be Taylored at all; the expansion is formal, so no convergence
@@ -133,7 +141,8 @@ EXPANSION_SOURCE = "hand derivation, Step 3 (expansion in prior spread)"
 STANDING_ASSUMPTIONS = (
     "R smooth and positive at μ, so l = log R has a Taylor expansion there",
     "the expansion is formal in σ, with no convergence claim",
-    "reverse KL, R frozen at the prior mean R(μ), the average taken under q",
+    "reverse KL, R frozen at the prior mean R(μ), the average taken under the exact "
+    "predictive",
 )
 
 
@@ -274,12 +283,28 @@ def increment_series(order: int) -> sympy.Expr:
     The powers of `h` are accumulated one at a time and truncated at each step, so the
     fourth-order term never carries the full product before it is cut.
 
+    `h` is `O(σ)`, so the `k`-th term `l_k·h^k/k!` is `O(σ^k)` and an expansion to
+    `σ^order` needs log-derivatives up to `l_order`. Only `l₁..l₄` are carried, so an
+    order above `DERIVATIVE_ORDER` would silently drop the terms it cannot express and
+    return a polynomial that looks complete. That is the failure this rejects.
+
     Args:
         order: the highest power of `σ` to keep, inclusive.
 
     Returns:
         The increment's expansion.
+
+    Raises:
+        ValueError: if `order` exceeds `DERIVATIVE_ORDER`.
     """
+    if order > DERIVATIVE_ORDER:
+        raise ValueError(
+            f"increment_series({order}) needs log-derivatives up to l{order}, and this "
+            f"module carries l1..l{DERIVATIVE_ORDER}. The missing terms would be "
+            "dropped rather than reported, so the result would read as a complete "
+            f"expansion to σ^{order}. Raise DERIVATIVE_ORDER and extend the symbols "
+            "before asking for this order."
+        )
     displacement = displacement_series(order)
     power = displacement
     total = L1 * power
@@ -484,7 +509,13 @@ def _proved(name: str, claim: str, correspondence: str, shown: str) -> CheckRepo
 
 
 def _refuted(name: str, claim: str, shown: str) -> CheckReport:
-    """A failed identity. The refutation is the result, and it carries no warrant.
+    """A failed identity. The refutation is the result, and it is corroborative.
+
+    `CORROBORATED` rather than `PROVED`, and the asymmetry is the point. A residual the
+    CAS reduces to zero decides the identity. A residual it fails to reduce decides
+    nothing, since simplification is incomplete and a true zero it could not find looks
+    the same from here. So a passing check is theorem-grade and a firing one is evidence
+    that something is wrong rather than proof of what.
 
     Args:
         name: the check's label.
@@ -703,8 +734,10 @@ def check_assembled_against_series() -> list[CheckReport]:
     the working order.
 
     The `series` arm is built here rather than imported, so it stays independent of the
-    module being checked. It is capped at `σ³`. Past that the call is the one measured
-    not to terminate, which is the reason the truncation path exists.
+    module being checked. It runs to `σ⁴`, which is where `DERIVATIVE_ORDER` stops the
+    truncation path rather than where `series` stops being affordable: only `l₁..l₄` are
+    carried, so `σ⁵` has no expressible left-hand side to compare against. Raising the
+    constant is what moves this check, not a faster CAS.
 
     **Order conventions differ, and the difference is real.** ``sympy.series(expr, x, 0,
     n)`` keeps powers *below* `n`. :func:`truncate` keeps powers *up to and including*
@@ -715,7 +748,7 @@ def check_assembled_against_series() -> list[CheckReport]:
         One report per order checked.
     """
     reports = []
-    for exclusive in (2, 3, 4):
+    for exclusive in range(2, DERIVATIVE_ORDER + 2):
         displacement = sympy.expand(
             (kalman_gain() * NU + posterior_sd() * Z)
             .series(SIGMA, 0, exclusive)

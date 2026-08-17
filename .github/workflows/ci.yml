@@ -61,6 +61,50 @@ jobs:
           uv run pytest -m "not rxinfer and not slow"
           --cov=cpomdp --cov-report=term-missing --cov-fail-under=80
 
+  symbolic:
+    name: symbolic suites (c₂ gate)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v8.2.0
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      # sympy rides in the default `dev` group; nothing under `src/cpomdp` imports it.
+      - run: uv sync --locked
+      # `research/` is covered by neither `ty` (pyproject `[tool.ty.src] include`) nor
+      # `pytest` (`testpaths = ["tests"]`), so without this job a broken check module
+      # reaches main and is found by hand or not at all.
+      #
+      # Each module already exits non-zero when an identity fires. The counts are pinned
+      # on top of that, because a stage quietly dropped from `run_checks` removes its
+      # checks without failing anything — the suite would go green by asking less.
+      # Changing a count here is meant to be a deliberate edit, reviewed with the diff.
+      - name: symbolic suites, counts pinned
+        run: |
+          set -uo pipefail
+          status=0
+          run_suite() {
+            module=$1
+            expected=$2
+            echo "::group::$module"
+            if ! output=$(uv run python -m "research.checks.$module" --check 2>&1); then
+              echo "::error::$module: a check fired"
+              status=1
+            fi
+            echo "$output"
+            summary=$(printf '%s\n' "$output" | grep -E '^[0-9]+ registered' || true)
+            if [ "$summary" != "$expected" ]; then
+              echo "::error::$module: expected '$expected', got '$summary'"
+              status=1
+            fi
+            echo "::endgroup::"
+          }
+          run_suite series_kernel    "23 registered, 23 tested here, none fired"
+          run_suite log_ratio_series "18 registered, 18 tested here, none fired"
+          run_suite gap_series       "12 registered, 12 tested here, none fired"
+          exit $status
+
   oracle:
     name: rxinfer oracle (Julia)
     runs-on: ubuntu-latest
