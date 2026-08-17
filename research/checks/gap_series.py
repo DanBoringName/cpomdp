@@ -9,7 +9,8 @@ Expanded in prior spread and averaged over the innovation, its coefficients are 
 and this module derives it again from the series. That is the `EXACT` licence exactly:
 agreement of two independently computed closed forms.
 
-`c₄` had no closed form before this module produced one. It had a **fit**, at Tier C,
+`c₄` had no closed form before this module produced one. It had a **fit**, at
+`COMPUTED`,
 and a registered seven-term basis with two coefficients reported consistent with zero
 and five conjectured fractions. Those are predictions, dated earlier than this file, and
 the checks below test the derivation against them rather than describing what it found.

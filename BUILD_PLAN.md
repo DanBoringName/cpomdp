@@ -218,14 +218,15 @@ order.
       the derived ones, the two coefficients reported consistent with zero are identically
       zero, the seven-term basis spans it with no remainder, and the exponential family
       keeps the two terms section 2 of the registration said it could. At the declared
-      operating point it is `−3/16`, 1.2% off the Tier C fit it supersedes.
+      operating point it is `−3/16`, 1.2% off the `COMPUTED` fit it supersedes.
 - [x] The innovation is averaged under the exact predictive `ν = σz₁ + √R̄·e^{δ/2}·z₂`.
       Collapsing it to `N(0, R̄)` leaves `c₂` untouched and gives a `c₄` 5.7 times the
       exact one, so the nesting decides the coefficient rather than refining it. C9
       measures the difference symbolically. `predictive_truncation` had already recorded
       why: `p*` is a scale mixture with exponential tails.
-- [x] 69 identities now, up from 52: 22 in `series_kernel`, 18 in `log_ratio_series`, 29
-      in `gap_series`. All `PROVED` at Tier A on a `SymbolicReduction`.
+- [x] 70 identities now, up from 53: 23 in `series_kernel`, 18 in `log_ratio_series`,
+      29 in `gap_series`. All `PROVED` at `EXACT` on a `SymbolicReduction`. The CI job
+      pins all three counts.
 - [x] The derivation ran before anything registered it, and that is disclosed at the head
       of the registration's section 7 rather than repaired. Rerunning after registering
       would be a rerun by someone who knows the answer.
@@ -611,7 +612,8 @@ what makes the timing checkable.
 - [x] `c₄` in closed form, which supersedes that refit:
       `7ℓ₁⁴/16 − ℓ₁²ℓ₂/4 + ℓ₂²/8 + ℓ₁ℓ₃/4 − 3ℓ₁²/(4R̄)`. Derived symbolically on the
       branch above, against predictions the registration carried at earlier dates. The
-      fit's residual error is explained rather than absorbed: it was a Tier C extraction
+      fit's residual error is explained rather than absorbed: it was a `COMPUTED`
+      extraction
       of a small rational. Section 7 of the registration holds it, the disclosure that the
       run preceded its registration, and the out-of-sample runs on the other families,
       where `tanh` fires.

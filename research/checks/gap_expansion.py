@@ -638,7 +638,7 @@ def _stability_report(
             name=name,
             warrant=None,
             outcome=Outcome.NOT_APPLICABLE,
-            tier=Tier.B,
+            tier=Tier.BOUNDED,
             detail=(
                 f"VOID — a leave-one-out spread needs four cells above the floor; "
                 f"{len(sigmas)} declared, minimum residual "
@@ -655,7 +655,7 @@ def _stability_report(
         name=name,
         warrant=Warrant.CORROBORATED,
         outcome=Outcome.FIRED if unstable else Outcome.NOT_TRIGGERED,
-        tier=Tier.B,
+        tier=Tier.BOUNDED,
         detail=(
             f"{'FAIL' if unstable else 'PASS'} — leaving out one σ cell moves the "
             f"exponent over a spread of {spread:.3f} (bar {tolerance:.2f}), "

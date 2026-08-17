@@ -801,7 +801,8 @@ exponential family keeps exactly the two terms section 2 said it could, with `α
 `ℓ₃ = −1`): `c₄ = −3/16 = −0.1875` exactly, against the fitted `−0.18980`. **They disagree
 by 1.2%**, which is 3.4 times the 0.36% jackknifed extraction spread and above the 1.03%
 basis-fit error. The derivation supersedes the fit, and the fit's residual error is now
-explained rather than absorbed: it was a Tier C extraction of a quantity whose true value
+explained rather than absorbed: it was a `COMPUTED` extraction of a quantity whose true
+value
 is a small rational.
 
 **The exact predictive is what makes it work, and this is the sharpest thing in the
