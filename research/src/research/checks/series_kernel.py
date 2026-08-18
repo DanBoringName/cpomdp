@@ -60,7 +60,7 @@ from functools import cache
 
 import sympy
 
-from cpomdp.warrant import (
+from warrantlib import (
     CheckReport,
     Outcome,
     SymbolicReduction,

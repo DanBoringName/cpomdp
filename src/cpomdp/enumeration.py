@@ -32,7 +32,11 @@ from jaxtyping import Array, Float64
 
 from cpomdp.efe import policy_efe, policy_efe_ffg
 from cpomdp.types import Belief, LinearGaussianModel
-from cpomdp.warrant import Warrant
+
+# `CompletenessCertificate` is an evidence kind of the warrant vocabulary, so it is
+# defined in `warrantlib` beside `SymbolicReduction`. It is re-exported below, because
+# this is where an enumeration produces one.
+from warrantlib import CompletenessCertificate, Warrant
 
 if TYPE_CHECKING:
     # Duck-typed at runtime (read for .goal/.precision via the efe kernels, and the
@@ -113,84 +117,6 @@ class FiniteActionSet:
     def action_dim(self) -> int:
         """The action dimension ``p``."""
         return int(self.actions.shape[1])
-
-
-@dataclass(frozen=True)
-class CompletenessCertificate:
-    """Evidence an enumeration was exhaustive: ``expected`` vs ``visited`` (ADR-030).
-
-    Two independent facts, and a ``PROVED`` warrant needs both. **Domain**:
-    ``expected == action_set_size ** horizon``, so the set quantified over is the
-    declared one. **Coverage**: ``visited == expected``, so it was enumerated in full.
-    They come apart wherever ``visited`` is a loop-carried counter rather than an
-    array's length, which is where a padding bug lives, and coverage alone is what
-    carries the Prover 3 · enumeration licence.
-
-    The certificate names its set. ``expected`` on its own conflates the base with the
-    exponent — 81 is ``9**2`` and ``3**4`` — so a bare count is not self-describing and
-    two certificates over different sets cannot be told apart. Carrying the size, the
-    horizon and the version fixes that at the type rather than in the surrounding prose
-    (standing prohibition 9).
-
-    A partial enumeration sampled its set, so its warrant is ``CORROBORATED``. Pairing
-    ``PROVED`` with a shortfall does not construct.
-
-    Args:
-        expected: the policy count the search was obliged to visit — ``|A|^H``,
-            supplied rather than derived, so the domain check compares two routes.
-        visited: how many it actually visited.
-        warrant: the prover class the enumeration earns.
-        action_set_size: the declared action count — ``|A|``.
-        horizon: the sequence length — ``H``.
-        action_set_version: the declared set's version tag.
-
-    Raises:
-        ValueError: if the warrant is ``PROVED`` and either precondition fails.
-    """
-
-    expected: int
-    visited: int
-    warrant: SearchWarrant
-    action_set_size: int
-    horizon: int
-    action_set_version: str
-
-    def __post_init__(self) -> None:
-        """Reject a ``PROVED`` certificate failing domain or coverage."""
-        if self.warrant is not Warrant.PROVED:
-            return
-        if not self.domain_declared:
-            raise ValueError(
-                f"a PROVED certificate must quantify over the declared set, got "
-                f"expected={self.expected} against |A|^H = "
-                f"{self.action_set_size}^{self.horizon} = "
-                f"{self.action_set_size**self.horizon} for set "
-                f"{self.action_set_version!r}. The count and the set have come apart."
-            )
-        if not self.complete:
-            raise ValueError(
-                f"a PROVED certificate must be complete, got expected="
-                f"{self.expected} against visited={self.visited}. A partial "
-                "enumeration sampled its set, so its warrant is CORROBORATED."
-            )
-
-    @property
-    def domain_declared(self) -> bool:
-        """Whether ``expected`` is the declared set's own ``|A|^H``."""
-        return self.expected == self.action_set_size**self.horizon
-
-    @property
-    def complete(self) -> bool:
-        """Whether every expected policy was visited."""
-        return self.expected == self.visited
-
-    def __str__(self) -> str:
-        """The certificate as a one-line warrant string in its own vocabulary."""
-        return (
-            f"{self.warrant.value} (set {self.action_set_version}, "
-            f"|A|^H = {self.action_set_size}^{self.horizon} = {self.expected}, "
-            f"visited {self.visited})"
-        )
 
 
 def _validate_spec(

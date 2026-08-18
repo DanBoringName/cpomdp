@@ -1,8 +1,8 @@
 # The inference gap under state-dependent noise: the hand derivation
 
 The analytic derivation the symbolic suites check themselves against. Every
-`SymbolicReduction` emitted by `research/checks/series_kernel.py`,
-`research/checks/log_ratio_series.py` and `research/checks/gap_series.py` names a step of
+`SymbolicReduction` emitted by `research.checks.series_kernel`,
+`research.checks.log_ratio_series` and `research.checks.gap_series` names a step of
 this document in its `correspondence` field. That field exists because a CAS establishes
 that one expression equals another and has nothing to say about whether those are the
 expressions the analytic claim is about. This is where that second question is answered.
@@ -37,7 +37,7 @@ W(x, y)  =  log N(y; x, R(x))  −  log N(y; x, R̄)
 
 Reverse KL, `R` frozen at the prior mean, and the average taken under the exact
 predictive. Those three conventions are pinned rather than rediscovered per caller, and
-`research/checks/gap_kernel.py` implements the same three in quadrature.
+`research.checks.gap_kernel` implements the same three in quadrature.
 
 Notation used throughout, matching the modules:
 

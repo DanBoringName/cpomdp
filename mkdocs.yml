@@ -50,7 +50,9 @@ plugins:
       default_handler: python
       handlers:
         python:
-          paths: [src]
+          # The warrant vocabulary is re-exported from `warrantlib`, so griffe needs
+          # that package's source to follow the alias behind `::: cpomdp.Warrant`.
+          paths: [src, packages/warrantlib/src]
           options:
             docstring_style: google
             docstring_section_style: table

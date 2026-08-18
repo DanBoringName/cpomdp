@@ -23,7 +23,7 @@ the true predictive. This module owns the question, not the integral.
 
 Two departures from the spec this was written against, both deliberate.
 
-**No PASS/FAIL/VOID outcome.** ``cpomdp.warrant.Outcome`` deliberately has no ``PASS``:
+**No PASS/FAIL/VOID outcome.** ``warrantlib.Outcome`` deliberately has no ``PASS``:
 a falsifier fires or it does not. Adding those members would undo a documented design.
 The mapping used instead, and printed in every summary:
 
@@ -35,7 +35,7 @@ above the floor      ``FIRED``               FAIL  1
 no measurement made  ``NOT_APPLICABLE``      VOID  2
 ===================  ======================  ====  ====
 
-**``VoidReason`` is local.** It does not exist in ``cpomdp.warrant``. It lives in
+**``VoidReason`` is local.** It does not exist in ``warrantlib``. It lives in
 ``gap_kernel`` rather than in the package, since a new export there needs a ``docs/api``
 page before anything can reference it, and these modules are not on the main suite yet.
 Its value goes into ``CheckReport.detail``, so no parallel result type is introduced.
@@ -54,6 +54,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 import numpy as np
+
 from research.checks.gap_kernel import (
     CONVERGENCE_BAR,
     FAMILIES,
@@ -69,8 +70,7 @@ from research.checks.gap_kernel import (
     plugin_noise_of,
     predictive_sd,
 )
-
-from cpomdp.warrant import CheckReport, Outcome, Tier, Warrant, check_summary
+from warrantlib import CheckReport, Outcome, Tier, Warrant, check_summary
 
 __all__ = [
     "TruncationReport",

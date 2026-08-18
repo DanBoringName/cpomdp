@@ -14,7 +14,7 @@ Warrant is a property of the check, not of the number. A grid sample over a cont
 
 `CERTIFIED` sits between the two. Validated numerics prove a universal over a compact domain, and the proof carries the bound it was computed with. Borrowing `PROVED` overclaims. Borrowing `CORROBORATED` throws the bound away.
 
-::: cpomdp.Warrant
+::: warrantlib.Warrant
 
 ## What a check emits
 
@@ -30,11 +30,13 @@ A `PROVED` report needs evidence, enforced at construction. There are two kinds,
 
 Those two are the only things the evidence tuple accepts. A path naming where the proof lives is the plausible substitute, and it satisfies a presence check exactly as well as a certificate does. So the constructor checks every item's kind. Checking only the first would let a claim over several enumerations carry one certificate and three references to a write-up. The weaker levels are held to the same rule. They need no evidence, so a tuple on one of them is something the report says it is carrying.
 
-::: cpomdp.Outcome
+::: warrantlib.Outcome
 
-::: cpomdp.Tier
+::: warrantlib.Tier
 
-::: cpomdp.CheckReport
+::: warrantlib.CompletenessCertificate
+
+::: warrantlib.CheckReport
 
 ## Evidence a symbolic claim carries
 
@@ -46,7 +48,7 @@ Blank means blank to a reader rather than empty to `str.strip()`, which strips t
 
 `assumptions` carries the scope. An identity contingent on smoothness, on positivity, or on an expansion being formal rather than convergent is a different claim from one that is not, and the difference belongs beside the evidence instead of in the algebra a reader would have to redo.
 
-::: cpomdp.SymbolicReduction
+::: warrantlib.SymbolicReduction
 
 ## Reading a run
 
@@ -59,4 +61,4 @@ Registering four falsifiers and testing two is a different claim from testing fo
    —             NOT RUN HERE    1
 ```
 
-::: cpomdp.check_summary
+::: warrantlib.check_summary

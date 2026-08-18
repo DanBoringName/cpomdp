@@ -29,11 +29,33 @@ That second line wires up the git hooks. You only do it once. After that the
 checks run automatically every time you commit, so you find problems before CI
 does rather than after.
 
+## The workspace
+
+This is a [uv workspace](https://docs.astral.sh/uv/concepts/projects/workspaces/)
+with three members, one lockfile and one `.venv`, all at the root:
+
+| member | what it is |
+| --- | --- |
+| `.` | `cpomdp`, the library. The workspace root. |
+| `packages/warrantlib` | the warrant vocabulary. Publishes to PyPI on its own, depends on the standard library alone. |
+| `research` | `research.checks`, the symbolic suites, plus the registrations they gate. Never published. |
+
+`uv sync` installs all three. You don't need `--all-packages`: the research member is
+a `dev` dependency of the root, so a plain `uv sync` or `uv run` cannot leave you with
+an environment where `python -m research.checks.gap_series` fails to import.
+
+If you use VSCode, open `cpomdp.code-workspace` (File > Open Workspace from File)
+rather than the directory. It puts the three members at the top of the explorer
+instead of buried, and points the Python extension at the root `.venv`. It's committed
+so a git worktree gets its own copy: check the worktree out, run `uv sync --locked` in
+it, open its `.code-workspace`, and it resolves against that worktree's venv.
+
 ## How the rules are enforced
 
 There's one source of truth for style and linting: the `[tool.ruff]` section of
-`pyproject.toml`. Editor settings aren't checked in on purpose, so nothing depends
-on which editor you use. The config is enforced in two places that both read it:
+`pyproject.toml`. Nothing depends on which editor you use — `.vscode/settings.json`
+is gitignored, and `cpomdp.code-workspace` is a convenience, not a gate. The config is
+enforced in two places that both read it:
 
 - **pre-commit**, locally, on every commit (see `.pre-commit-config.yaml`).
 - **CI**, on every push and PR, running the exact same hooks.
@@ -89,6 +111,18 @@ uv run pytest -m "not rxinfer"                # + the slow crossover gate (H*=7)
 uv run ty check                  # type checking
 uv run pre-commit run --all-files
 ```
+
+The symbolic suites aren't on the pytest path. Each is a module you run directly, and
+each exits non-zero if one of its checks fires:
+
+```bash
+uv run python -m research.checks.series_kernel --check
+uv run python -m research.checks.log_ratio_series --check
+uv run python -m research.checks.gap_series --check
+```
+
+CI pins the registered count each of them prints. A count that moves means a stage
+stopped running, so change one only with the diff that justifies it.
 
 The `rxinfer` tests boot a Julia runtime (the RxInfer backend is an independent
 oracle the native filter is checked against). They're slow and need the extra:

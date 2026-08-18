@@ -1,0 +1,69 @@
+{
+  // The uv workspace, as VSCode folders. cpomdp is the root package. warrantlib and
+  // the research suites are members of the same lockfile and the same `.venv`.
+  //
+  // Open this file rather than the directory (File > Open Workspace from File). It is
+  // committed, so a git worktree gets its own copy and opens against that worktree's
+  // `.venv`. Check one out, run `uv sync --locked` in it, then open its own copy.
+  "folders": [
+    {
+      "name": "cpomdp",
+      "path": "."
+    },
+    {
+      "name": "warrantlib",
+      "path": "packages/warrantlib"
+    },
+    {
+      "name": "research",
+      "path": "research"
+    }
+  ],
+  "settings": {
+    // The interpreter is the workspace `.venv` at the root, which is the only one uv
+    // creates. `.vscode/settings.json` is gitignored, so this file is where a shared
+    // editor setting has to live.
+    "python.defaultInterpreterPath": "${workspaceFolder:cpomdp}/.venv/bin/python",
+    "python.testing.pytestEnabled": true,
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestArgs": ["tests", "-m", "not rxinfer and not slow"],
+
+    // `ty` is the type gate (see CLAUDE.md). Pylance runs its own checker, which
+    // disagrees with `ty` in both directions and is not authoritative here, so its
+    // diagnostics are off and its completions are kept.
+    "python.analysis.typeCheckingMode": "off",
+
+    // Use the ruff pinned in the dev group, so the editor and pre-commit judge the
+    // same code the same way.
+    "ruff.importStrategy": "fromEnvironment",
+    "[python]": {
+      "editor.defaultFormatter": "charliermarsh.ruff",
+      "editor.formatOnSave": true,
+      "editor.codeActionsOnSave": {
+        "source.organizeImports.ruff": "explicit"
+      }
+    },
+
+    // `packages` and `research` have roots of their own above, so hide them from the
+    // cpomdp root's tree. Both patterns are top-level only and match nothing inside
+    // the member folders.
+    "files.exclude": {
+      "packages": true,
+      "research": true,
+      "**/__pycache__": true,
+      "**/*.egg-info": true,
+      ".pytest_cache": true,
+      ".ruff_cache": true,
+      "site": true
+    },
+    "search.exclude": {
+      ".venv": true,
+      "site": true,
+      "uv.lock": true
+    },
+
+    "files.trimTrailingWhitespace": true,
+    "files.insertFinalNewline": true,
+    "editor.rulers": [88]
+  }
+}

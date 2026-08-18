@@ -177,7 +177,7 @@ Most toolboxes let you build an agent and stop there. cpomdp also labels how wel
 
 Every check the suite runs carries three labels. A **warrant** says what established the claim: `PROVED` for a theorem, a symbolic identity, or a finite domain exhausted under a completeness certificate; `CERTIFIED` for validated numerics over a compact domain; `CORROBORATED` for a sample of a continuum, which settles existence and refutes a universal by counterexample and decides no universal at any sample count. A **tier** says how well the number itself is known: `EXACT`, `BOUNDED`, or `COMPUTED`. An **outcome** says what the falsifier did, and a falsifier does not pass — it fires or it does not. `PROVED` with nothing behind it does not construct.
 
-[research/warrant_ledger.md](research/warrant_ledger.md) is the canonical table, and every other document points at it. [warrant_numbers.md](warrant_numbers.md) records the declared numbers those claims are measured against. The vocabulary itself is [src/cpomdp/warrant.py](src/cpomdp/warrant.py), documented at [cpomdp.inferogenesis.com/api/warrant](https://cpomdp.inferogenesis.com/api/warrant/).
+[research/warrant_ledger.md](research/warrant_ledger.md) is the canonical table, and every other document points at it. [warrant_numbers.md](warrant_numbers.md) records the declared numbers those claims are measured against. The vocabulary itself is [packages/warrantlib](packages/warrantlib), published separately and re-exported as `cpomdp.warrant`, documented at [cpomdp.inferogenesis.com/api/warrant](https://cpomdp.inferogenesis.com/api/warrant/).
 
 Treat this as experimental. It may move out of cpomdp into a standalone inferogenesis tool before the 1.0 release, which is undecided.
 

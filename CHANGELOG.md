@@ -15,7 +15,10 @@ an exposure rather than a result.
 
 ### Added
 
-- `cpomdp.warrant` — the vocabulary every check labels itself from. `Warrant` carries the
+- `warrantlib` — the vocabulary every check labels itself from, published as its own
+  distribution and re-exported as `cpomdp.warrant` so existing import paths keep working.
+  It depends on the standard library alone, so a suite can label its findings without a
+  numerical stack; cpomdp depends on it and adds nothing to it (ADR-039). `Warrant` carries the
   prover class (`PROVED`, `CERTIFIED`, `CORROBORATED`), `Outcome` what a registered
   falsifier did, `Tier` what it was measured against (`EXACT`, `BOUNDED`, `COMPUTED`), and
   `CheckReport` all four with a reason. `CERTIFIED` is new: validated numerics prove a
@@ -68,6 +71,16 @@ an exposure rather than a result.
 
 ### Changed
 
+- The repository is a uv workspace. cpomdp stays the root; `packages/warrantlib` and
+  `research` are members, sharing one `uv.lock` and one `.venv`. `warrantlib` publishes to
+  PyPI beside cpomdp. `cpomdp-research` never publishes, and holds the check suites along
+  with the scipy and sympy they need, which have left cpomdp's `dev` group (ADR-039).
+- `CompletenessCertificate` is defined in `warrantlib` beside `SymbolicReduction`, the
+  other evidence kind, and re-exported from `cpomdp.enumeration` where an enumeration
+  produces one. It used to live in `cpomdp.enumeration`, which made the warrant module
+  import it at call time to run the `isinstance` guard behind `PROVED`.
+- The check suites moved to `research/src/research/checks/`. The `research.checks.<module>`
+  import path is unchanged, and so is every registered count.
 - `SearchWarrant` is an alias of `Warrant`. Every call site keeps its members and its
   return type, so `EFESelector.warrant` still reads `CORROBORATED` and
   `EnumeratedEfeSearch.warrant` still reads `PROVED`.

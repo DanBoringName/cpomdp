@@ -51,6 +51,7 @@ from collections.abc import Callable, Sequence
 from functools import cache
 
 import sympy
+
 from research.checks.series_kernel import (
     EXPANSION_SOURCE,
     L1,
@@ -70,8 +71,7 @@ from research.checks.series_kernel import (
     report_identity,
     truncate,
 )
-
-from cpomdp.warrant import CheckReport, Outcome, check_summary
+from warrantlib import CheckReport, Outcome, check_summary
 
 __all__ = [
     "averaged_gap",
