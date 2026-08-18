@@ -9,9 +9,10 @@ agent's Gaussian from a Kalman update with the plug-in `R̂ = R(μ)`, and `p*(y)
 predictive from the same joint.
 
 Three conventions are pinned here rather than being rediscovered per caller, since the
-scripts that produced the 28 fitted `c₄` cases are gone
-(``.remember/HANDOVER-gate-d4-groundwork.md`` lines 125-126) and prose was all that
-survived them:
+scripts that produced the 28 fitted `c₄` cases are gone and prose was all that survived
+them. The cases themselves are recorded in ``research/gate_d4_registration.md``, the
+RESULT of 2026-08-10: 28 cases across four `R` families (quadratic, exponential, `tanh`,
+`sin`). The conventions are:
 
 - **Direction.** Reverse, ``KL(q ‖ p)``, at :func:`gap`. The battery's decomposition
   (``research/fep_falsification_battery.md`` line 21) and the registration
