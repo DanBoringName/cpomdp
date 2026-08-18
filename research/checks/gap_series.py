@@ -37,6 +37,7 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Callable, Sequence
+from functools import cache
 
 import sympy
 from research.checks.series_kernel import (
@@ -49,6 +50,7 @@ from research.checks.series_kernel import (
     RBAR,
     SIGMA,
     cumulants,
+    exp_series,
     gaussian_expectation,
     log_ratio_in_sigma,
     predictive_expectation,
@@ -104,24 +106,10 @@ def _log_one_plus(small: sympy.Expr, order: int) -> sympy.Expr:
     return truncate(total, order)
 
 
-def _exponential(exponent: sympy.Expr, order: int) -> sympy.Expr:
-    """`e^x` for an `x` of positive order in `σ`, truncated.
-
-    Args:
-        exponent: `x`, carrying no `σ⁰` term.
-        order: the highest power of `σ` to keep, inclusive.
-
-    Returns:
-        The exponential's expansion.
-    """
-    term = sympy.Integer(1)
-    total = sympy.Integer(1)
-    for step in range(1, order + 1):
-        term = truncate(term * exponent, order) / step
-        total += term
-    return truncate(total, order)
-
-
+# Cached on the same terms as the kernel's expansions, keyed on the tilt and the working
+# order. The tilt symbols are built with identical assumptions at both call sites, so
+# sympy hands back the same object and the cache hits across them.
+@cache
 def cumulant_generating(tilt: sympy.Expr, order: int) -> sympy.Expr:
     """`Λ(t) = log E_q[e^{tW}]`, expanded in `σ`.
 
@@ -133,10 +121,11 @@ def cumulant_generating(tilt: sympy.Expr, order: int) -> sympy.Expr:
         The cumulant generating function's expansion.
     """
     log_ratio = log_ratio_in_sigma(order)
-    tilted = _exponential(truncate(tilt * log_ratio, order), order)
+    tilted = exp_series(truncate(tilt * log_ratio, order), order)
     return _log_one_plus(truncate(gaussian_expectation(tilted) - 1, order), order)
 
 
+@cache
 def gap_from_definition(order: int) -> sympy.Expr:
     """The gap at a fixed observation, straight from `log E_q[e^W] − E_q[W]`.
 
@@ -156,6 +145,7 @@ def gap_from_definition(order: int) -> sympy.Expr:
     )
 
 
+@cache
 def fixed_observation_gap(order: int) -> sympy.Expr:
     """The gap at a fixed observation, as half the variance of `W`.
 
@@ -172,6 +162,7 @@ def fixed_observation_gap(order: int) -> sympy.Expr:
     return truncate(cumulants(log_ratio_in_sigma(order), 2, order)[2] / 2, order)
 
 
+@cache
 def averaged_gap(order: int) -> sympy.Expr:
     """The gap averaged over the innovation, at leading order in the predictive.
 
@@ -209,7 +200,10 @@ def check_gap_is_half_the_variance() -> list[CheckReport]:
             claim=f"log E_q[e^W] − E_q[W] = ½·Var_q(W) through σ^{ORDER}",
             correspondence=CUMULANT_SOURCE,
             residual=definition - variance,
-            shown=f"gap = {sympy.factor(definition)}",
+            shown=(
+                f"definition = {sympy.factor(definition)}, "
+                f"½·Var = {sympy.factor(variance)}"
+            ),
         )
     ]
 

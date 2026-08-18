@@ -56,6 +56,7 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Sequence
+from functools import cache
 
 import sympy
 
@@ -71,9 +72,11 @@ from cpomdp.warrant import (
 __all__ = [
     "cumulants",
     "displacement_series",
+    "exp_series",
     "gain_series",
     "gaussian_expectation",
     "gaussian_moment",
+    "increment_series",
     "kalman_gain",
     "log_noise_increment",
     "log_ratio",
@@ -81,6 +84,8 @@ __all__ = [
     "posterior_sd",
     "posterior_sd_series",
     "predictive_expectation",
+    "report_condition",
+    "report_identity",
     "run_checks",
     "truncate",
 ]
@@ -188,6 +193,11 @@ def truncate(expression: sympy.Expr, order: int) -> sympy.Expr:
     return sympy.expand(kept)
 
 
+# The expansions below are keyed on the working order and nothing else, and sympy
+# expressions are immutable, so the caches return the same object rather than an equal
+# one. Every check that reads a coefficient rebuilds the whole series first, and the
+# rebuild cost grows steeply with the order.
+@cache
 def gain_series(order: int) -> sympy.Expr:
     """`K` as a polynomial in `σ`, by geometric expansion rather than by `series`.
 
@@ -208,6 +218,7 @@ def gain_series(order: int) -> sympy.Expr:
     )
 
 
+@cache
 def posterior_sd_series(order: int) -> sympy.Expr:
     """`√v_q` as a polynomial in `σ`, by binomial expansion.
 
@@ -229,6 +240,7 @@ def posterior_sd_series(order: int) -> sympy.Expr:
     )
 
 
+@cache
 def displacement_series(order: int) -> sympy.Expr:
     """`h = Kν + √v_q · z` as a polynomial in `σ`.
 
@@ -247,6 +259,7 @@ def displacement_series(order: int) -> sympy.Expr:
     return truncate(gain * NU + width * Z, order)
 
 
+@cache
 def log_noise_increment() -> sympy.Expr:
     """`δ = l(μ + h) − l(μ)` as a Taylor polynomial in `h`, to fourth order.
 
@@ -275,6 +288,7 @@ def log_noise_increment() -> sympy.Expr:
     return sympy.expand(taylor.subs(named))
 
 
+@cache
 def increment_series(order: int) -> sympy.Expr:
     """`δ` with `h` expanded, as a polynomial in `σ`.
 
@@ -312,14 +326,17 @@ def increment_series(order: int) -> sympy.Expr:
     return truncate(total, order)
 
 
-def exp_neg_series(increment: sympy.Expr, order: int) -> sympy.Expr:
-    """`e^{−δ}` as a polynomial in `σ`, by the exponential series.
+def exp_series(exponent: sympy.Expr, order: int) -> sympy.Expr:
+    """`e^x` as a polynomial in `σ`, by the exponential series.
 
-    `δ` is `O(σ)`, so the `j`-th term is `O(σ^j)` and the sum closes at `j = order`.
-    Each term is built from the last and truncated before the next multiplication.
+    The exponent carries its own sign, so `e^{−δ}` is ``exp_series(-increment, order)``.
+
+    `x` is `O(σ)` with no constant term, so the `j`-th term is `O(σ^j)` and the sum
+    closes at `j = order`. Each term is built from the last and truncated before the
+    next multiplication.
 
     Args:
-        increment: `δ`, already expanded in `σ`.
+        exponent: `x`, already expanded in `σ` and carrying no `σ⁰` term.
         order: the highest power of `σ` to keep, inclusive.
 
     Returns:
@@ -328,7 +345,7 @@ def exp_neg_series(increment: sympy.Expr, order: int) -> sympy.Expr:
     term = sympy.Integer(1)
     total = sympy.Integer(1)
     for step in range(1, order + 1):
-        term = truncate(term * (-increment), order) / step
+        term = truncate(term * exponent, order) / step
         total += term
     return truncate(total, order)
 
@@ -352,6 +369,7 @@ def log_ratio(increment: sympy.Expr, displacement: sympy.Expr) -> sympy.Expr:
     )
 
 
+@cache
 def log_ratio_in_sigma(order: int) -> sympy.Expr:
     """`W` with `h`, `δ` and `e^{−δ}` all expanded, as a polynomial in `σ`.
 
@@ -364,7 +382,7 @@ def log_ratio_in_sigma(order: int) -> sympy.Expr:
     displacement = displacement_series(order)
     increment = increment_series(order)
     residual = truncate((NU - displacement) ** 2, order)
-    relief = truncate(1 - exp_neg_series(increment, order), order)
+    relief = truncate(1 - exp_series(-increment, order), order)
     assembled = -increment / 2 + truncate(residual * relief, order) / (2 * RBAR)
     return truncate(assembled, order)
 
@@ -506,7 +524,9 @@ def _proved(name: str, claim: str, correspondence: str, shown: str) -> CheckRepo
     )
 
 
-def _refuted(name: str, claim: str, shown: str) -> CheckReport:
+def _refuted(
+    name: str, claim: str, shown: str, residual: str | None = None
+) -> CheckReport:
     """A failed identity. The refutation is the result, and it is corroborative.
 
     `CORROBORATED` rather than `PROVED`, and the asymmetry is the point. A residual the
@@ -519,16 +539,22 @@ def _refuted(name: str, claim: str, shown: str) -> CheckReport:
         name: the check's label.
         claim: what the identity was claimed to be.
         shown: what the symbolic computation actually returned.
+        residual: the difference that failed to vanish, where there was one. Most
+            identities here print one arm and leave the other in the claim, so without
+            this the message says two things disagree and not by how much.
 
     Returns:
         The report.
     """
+    detail = f"FAIL — claimed {claim}. got: {shown}"
+    if residual is not None:
+        detail += f". residual: {residual}"
     return CheckReport(
         name=name,
         warrant=Warrant.CORROBORATED,
         outcome=Outcome.FIRED,
         tier=Tier.EXACT,
-        detail=f"FAIL — claimed {claim}. got: {shown}",
+        detail=detail,
     )
 
 
@@ -542,7 +568,8 @@ def report_identity(
     """Report whether a residual vanishes, printing the result either way.
 
     A failing identity that prints nothing is a failing identity nobody can diagnose,
-    so `shown` is rendered before the verdict is read.
+    so `shown` is rendered before the verdict is read, and the residual joins it when it
+    fails to vanish.
 
     Args:
         name: the check's label.
@@ -554,9 +581,10 @@ def report_identity(
     Returns:
         A `PROVED` report when the residual vanishes, a refutation when it does not.
     """
-    if sympy.simplify(residual) == 0:
+    reduced = sympy.simplify(residual)
+    if reduced == 0:
         return _proved(name, claim, correspondence, str(shown))
-    return _refuted(name, claim, str(shown))
+    return _refuted(name, claim, str(shown), str(reduced))
 
 
 def report_condition(
@@ -710,7 +738,7 @@ def check_primitive_series() -> list[CheckReport]:
             claim="e^{−δ} built by the exponential series matches series(exp) to σ³",
             correspondence=correspondence,
             residual=(
-                exp_neg_series(L1 * SIGMA * Z, 3)
+                exp_series(-L1 * SIGMA * Z, 3)
                 - truncate(
                     sympy.expand(
                         sympy.exp(-L1 * SIGMA * Z).series(SIGMA, 0, 4).removeO()
@@ -718,7 +746,7 @@ def check_primitive_series() -> list[CheckReport]:
                     3,
                 )
             ),
-            shown=f"e^(−l₁σz) = {exp_neg_series(L1 * SIGMA * Z, 3)}",
+            shown=f"e^(−l₁σz) = {exp_series(-L1 * SIGMA * Z, 3)}",
         ),
     ]
 
