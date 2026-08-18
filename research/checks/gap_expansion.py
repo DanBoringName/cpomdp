@@ -593,7 +593,89 @@ def _check_residual_exponent(
             subtracted=subtracted,
         )
     )
+    reports.append(
+        _stability_report(
+            name=f"G4c exponent stability [{family.name}]",
+            sigmas=sigmas,
+            residual=residual,
+            tolerance=tolerance,
+        )
+    )
     return reports
+
+
+def _stability_report(
+    *,
+    name: str,
+    sigmas: np.ndarray,
+    residual: np.ndarray,
+    tolerance: float,
+) -> CheckReport:
+    """G4c: how far G4b's exponent moves when one `σ` cell is dropped.
+
+    A diagnostic, not a falsifier of the candidate. It asks whether the exponent G4b
+    read is a property of the residual or of the grid it was read on, by refitting once
+    per omitted cell and reporting the spread. Every refit uses the whole declared grid
+    minus one point, so no window is selected and nothing here revises G4b's outcome.
+
+    The rule and its readings were registered in `research/gate_d4_registration.md`
+    before this function existed. A spread above the same bar G4b uses means the
+    exponent is not stable on this grid for this family, and a fired G4b there is a
+    statement about the measurement rather than about the coefficient.
+
+    Args:
+        name: the check's name.
+        sigmas: the spreads measured at.
+        residual: what is left after the subtraction.
+        tolerance: the spread bar, shared with G4b so the two are commensurable.
+
+    Returns:
+        The diagnostic's report.
+    """
+    magnitudes = np.abs(residual)
+    # The registered readings were declared against EXPANSION_SIGMAS literally. On any
+    # other grid the spread is a number this document's rule does not interpret.
+    if tuple(np.round(sigmas, 12)) != tuple(np.round(sorted(EXPANSION_SIGMAS), 12)):
+        return CheckReport(
+            name=name,
+            warrant=None,
+            outcome=Outcome.NOT_APPLICABLE,
+            tier=Tier.BOUNDED,
+            detail=(
+                "VOID — the registered readings are declared against the grid "
+                f"{tuple(sorted(EXPANSION_SIGMAS))}, and this ran on "
+                f"{tuple(float(s) for s in sigmas)}"
+            ),
+        )
+    if len(sigmas) < 4 or float(np.min(magnitudes)) < QUADRATURE_FLOOR:
+        return CheckReport(
+            name=name,
+            warrant=None,
+            outcome=Outcome.NOT_APPLICABLE,
+            tier=Tier.BOUNDED,
+            detail=(
+                f"VOID — a leave-one-out spread needs four cells above the floor; "
+                f"{len(sigmas)} declared, minimum residual "
+                f"{float(np.min(magnitudes)):.1e}"
+            ),
+        )
+    slopes = [
+        _log_log_slope(np.delete(sigmas, index), np.delete(magnitudes, index))
+        for index in range(len(sigmas))
+    ]
+    spread = float(max(slopes) - min(slopes))
+    unstable = spread > tolerance
+    return CheckReport(
+        name=name,
+        warrant=Warrant.CORROBORATED,
+        outcome=Outcome.FIRED if unstable else Outcome.NOT_TRIGGERED,
+        tier=Tier.BOUNDED,
+        detail=(
+            f"{'FAIL' if unstable else 'PASS'} — leaving out one σ cell moves the "
+            f"exponent over a spread of {spread:.3f} (bar {tolerance:.2f}), "
+            f"range σ^{min(slopes):.3f} to σ^{max(slopes):.3f}"
+        ),
+    )
 
 
 def _exponent_report(
@@ -688,7 +770,54 @@ def run_checks(
         reports += _check_residual_exponent(
             family, cells, slope_tolerance, c4_candidate, c6_candidate
         )
+    if c4_candidate is not None:
+        reports.append(_control_report(reports, slope_tolerance))
     return reports
+
+
+def _control_report(reports: Sequence[CheckReport], tolerance: float) -> CheckReport:
+    """The registered control on G4c: whether any family's exponent was stable.
+
+    The pre-registration reads a `tanh` spread below the bar as a real deviation *only*
+    if the diagnostic discriminates at all. Its "uninformative on all four" branch fires
+    when every family is unstable, and until now that branch lived in prose with nothing
+    in code to evaluate it.
+
+    Args:
+        reports: the run's reports so far, G4c's among them.
+        tolerance: the spread bar G4c used.
+
+    Returns:
+        The control's report, one per run.
+    """
+    stability = [report for report in reports if report.name.startswith("G4c ")]
+    ran = [
+        report
+        for report in stability
+        if report.outcome in (Outcome.NOT_TRIGGERED, Outcome.FIRED)
+    ]
+    if not ran:
+        return CheckReport(
+            name="G4c control",
+            warrant=None,
+            outcome=Outcome.NOT_APPLICABLE,
+            tier=Tier.BOUNDED,
+            detail=f"VOID — no family produced a spread ({len(stability)} attempted)",
+        )
+    unstable = [report for report in ran if report.outcome is Outcome.FIRED]
+    return CheckReport(
+        name="G4c control",
+        warrant=Warrant.CORROBORATED,
+        outcome=Outcome.FIRED if len(unstable) == len(ran) else Outcome.NOT_TRIGGERED,
+        tier=Tier.BOUNDED,
+        detail=(
+            f"FAIL — every family read unstable at bar {tolerance:.2f}, so a spread "
+            "below it says nothing about any one of them"
+            if len(unstable) == len(ran)
+            else f"PASS — {len(ran) - len(unstable)} of {len(ran)} families read "
+            f"stable at bar {tolerance:.2f}, so the diagnostic discriminates"
+        ),
+    )
 
 
 def _print_table(measurements: Sequence[GapMeasurement]) -> None:
@@ -774,6 +903,15 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if arguments.c6 is not None and arguments.c4 is None:
         parser.error("--c6 needs --c4: a sextic candidate cannot be tested on its own")
+
+    # A wrong candidate fires G4b near σ^4 and gives G4c a spread of 0.000, which reads
+    # as a stable real deviation rather than as the mistyped command it is.
+    if arguments.c4 is not None and len(arguments.families) > 1:
+        parser.error(
+            f"--c4 takes one family, got {len(arguments.families)}: "
+            f"{', '.join(arguments.families)}. Each family has its own c₄. "
+            "Re-run with --families <one>."
+        )
 
     chosen = [FAMILIES[key] for key in arguments.families]
     if not arguments.check:

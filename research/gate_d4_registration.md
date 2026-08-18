@@ -736,6 +736,446 @@ it. `D` then does double duty.
 Also registered here: the two failure modes the battery already calls *boring* and excludes
 from the agreement criterion in advance.
 
+## 7. `c₄` in closed form (RESULT 2026-08-16), and the disclosure that it ran first
+
+### DISCLOSURE 2026-08-16: the derivation ran before this entry existed
+
+Recorded first, because it is the part a reader has to be able to audit and because the
+sequence cannot be repaired by describing it well.
+
+The symbolic pipeline (`research/checks/series_kernel.py`, `research/checks/gap_series.py`)
+was extended to `σ⁴` and run **before** any amendment registered what the run would
+produce or what would count as a failure. In order, on 2026-08-16:
+
+1. The exact predictive nesting was added to the kernel.
+2. `c₄` was computed symbolically at `σ⁴`, on free `ℓ₁..ℓ₄` and a symbolic `R̄`.
+3. It was evaluated at the declared operating point, giving `−3/16`.
+4. It was compared against the `−0.18980` of RESULT 2026-08-10.
+5. `gap_expansion --check --families quadratic --c4 -0.1875` was run, and did not refute.
+
+Steps 2 to 5 have no prior registration naming them. Everything below in this section that
+is labelled a *result* is therefore post-hoc in its scheduling, whatever its content, and
+should be read as such.
+
+### What was registered before it, and is therefore predicted rather than fitted
+
+Four statements were in this file with earlier dates, and the derivation was in a position
+to contradict every one of them:
+
+- **The seven-term dimensional basis** (section 2, 2026-08-07), with its parity argument
+  for completeness. The derivation had to land inside that span or refute it.
+- **The two coefficients consistent with zero** (RESULT 2026-08-10): `ℓ''''` at 0.1% and
+  `ℓ''/R` at 0.3% of the largest term, reported as consistent with zero rather than
+  deleted.
+- **The simple-fraction hypothesis** (RESULT 2026-08-10): `{7/16, −1/4, 1/8, 1/4, −3/4}`,
+  against which the fitted ratios were 0.991, 1.011, 1.056, 1.009 and 0.995. That entry
+  says in terms that the fractions are "close but not exact at this precision" and "not
+  established".
+- **The exponential-family reduction** (section 2): for `R = A·e^{bx}`, exactly two of the
+  seven terms may survive, `c₄ = α·b⁴ + ζ·b²/R(μ)`.
+
+### RESULT 2026-08-16: the closed form
+
+```text
+c₄  =  7ℓ₁⁴/16  −  ℓ₁²ℓ₂/4  +  ℓ₂²/8  +  ℓ₁ℓ₃/4  −  3ℓ₁²/(4R̄)
+```
+
+Against the seven-term basis and the fit of RESULT 2026-08-10:
+
+| term | fitted 2026-08-10 | derived 2026-08-16 | registered hypothesis |
+| --- | --- | --- | --- |
+| `ℓ'⁴` | +0.43231 | **7/16** = +0.4375 | 7/16 |
+| `ℓ'²ℓ''` | −0.25874 | **−1/4** | −1/4 |
+| `ℓ''²` | +0.12985 | **1/8** | 1/8 |
+| `ℓ'ℓ'''` | +0.24935 | **1/4** | 1/4 |
+| `ℓ''''` | −0.00068 | **0** | consistent with zero |
+| `ℓ'²/R` | −0.74537 | **−3/4** | −3/4 |
+| `ℓ''/R` | +0.00192 | **0** | consistent with zero |
+
+Every registered prediction holds. The five fractions are the hypothesised ones, the two
+zeros are identically zero, the span is the declared basis with nothing left over, and the
+exponential family keeps exactly the two terms section 2 said it could, with `α = 7/16` and
+`ζ = −3/4`.
+
+**At the declared operating point** (`κ = 1`, `μ* = 1`, so `R̄ = 2`, `ℓ₁ = 1`, `ℓ₂ = 0`,
+`ℓ₃ = −1`): `c₄ = −3/16 = −0.1875` exactly, against the fitted `−0.18980`. **They disagree
+by 1.2%**, which is 3.4 times the 0.36% jackknifed extraction spread and above the 1.03%
+basis-fit error. The derivation supersedes the fit, and the fit's residual error is now
+explained rather than absorbed: it was a `COMPUTED` extraction of a quantity whose true
+value
+is a small rational.
+
+**The exact predictive is what makes it work, and this is the sharpest thing in the
+section.** Averaging over a leading-order `N(0, R̄)` predictive instead of the exact
+`ν = σz₁ + √R̄·e^{δ/2}·z₂` gives
+
+```text
+c₄(leading order)  =  −3ℓ₁⁴/16  −  ℓ₁²ℓ₂/2  +  ℓ₂²/8  +  ℓ₁ℓ₃/4  −  5ℓ₁²/(4R̄)
+```
+
+which is `−1.0625` at the operating point, 5.7 times the derived value and of no
+resemblance to the fit. `predictive_truncation` had already recorded that `p*` is a scale
+mixture with exponential tails and that no Gaussian stands in for it at any variance. This
+is that finding biting a coefficient.
+
+**The refutation attempt that has been run.** `gap_expansion`'s G4b subtracts a candidate
+and reads the residual's exponent: a candidate wrong by any amount leaves the `σ⁴` term
+surviving and the exponent near 4. On the quadratic family it returned **σ^5.982** against
+a predicted `σ⁶`, bar 0.25, and did not fire. Without a candidate the same cells return
+σ^4.038.
+
+### Why a tuned derivation is not available as an explanation
+
+The claim a reviewer should test is not that we avoided looking at the fit. It is that the
+derivation could not have been aimed at it:
+
+- **The symbolic path contains no numbers.** `series_kernel.py` and `gap_series.py` carry
+  no floats, no family, and no value for `R̄`. `ℓ₁..ℓ₄` are free symbols throughout. There
+  is no quantity in either module that a fitted `−0.18980` could have been substituted
+  into. This is checkable by reading the two files, and by the checks that fail if `R̄` is
+  ever set to one.
+- **It disagrees with the fit.** A derivation steered toward `−0.18980` would arrive at
+  `−0.18980`. It arrives at `−3/16`, outside the fit's own tightest declared bar.
+- **It was refutable and was put at risk.** The two zeros, the basis span and the
+  exponential-family reduction were all registered earlier and could each have come out
+  wrong.
+- **The falsifier is independent of the derivation.** G4b reads a residual *exponent* from
+  quadrature and never sees the symbolic path.
+
+What none of that repairs is the scheduling in the disclosure above. The correct reading is
+that the content is strong and the ordering is weak, and the ordering is fixed for the
+remaining families below rather than argued away.
+
+### PRE-REGISTRATION 2026-08-16: the three families not yet run
+
+Registered **before** the runs, so what follows is a genuine out-of-sample test. The
+derived formula is evaluated on the other declared families of
+`research/checks/gap_kernel.py`, all at `μ = 1`. Only the quadratic row has been measured.
+
+| family | `ℓ₁` | `ℓ₂` | `ℓ₃` | `R̄` | predicted `c₂` | predicted `c₄` | status |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `1 + x²` | 1.000000 | 0.000000 | −1.000000 | 2.00000 | +0.2500000 | **−0.1875000** | run, not refuted |
+| `exp(x)` | 1.000000 | 0.000000 | 0.000000 | 2.71828 | +0.2500000 | **+0.1615904** | not run |
+| `1.5 + 0.5 tanh(x)` | 0.111648 | −0.182526 | 0.225000 | 1.88080 | +0.0031163 | **+0.0061107** | not run |
+| `1.5 + 0.5 sin(x)` | 0.140650 | −0.238832 | −0.042657 | 1.92074 | +0.0049456 | **−0.0007420** | not run |
+| `2 (fixed)` | 0 | 0 | 0 | 2.00000 | 0 | **0** | not run |
+
+**The prediction has teeth.** `c₄` changes sign between `1 + x²` and `exp(x)`, so a formula
+that merely fitted the quadratic family cannot survive the exponential one. `tanh` and
+`sin` sit three orders lower and also differ in sign from each other.
+
+**What counts as a pass, declared now.** G4b's residual exponent within 0.25 of 6, the bar
+already in `gap_expansion`. Anything at or below 5 on a family whose quartic is resolvable
+refutes the closed form.
+
+**What counts as VOID rather than a pass, also declared now.** For `1.5 + 0.5 sin(x)` the
+predicted `c₄` is 0.15% of `c₂`, so on the declared `σ` grid the quartic term sits near the
+quadrature floor and `c₆` may dominate the residual before the quartic does. If the
+measured residual is at or under the floor, that cell is **VOID on resolving power**, not a
+pass and not a refutation. The same escape is *not* available to `1 + x²` or `exp(x)`,
+where the quartic is percent-level.
+
+**The fixed-`R` row is a falsifier of the instrument, not of the formula.** The gap is
+identically zero there, so a non-zero `c₄` would be a bug in the pipeline.
+
+### RESULT 2026-08-16: the out-of-sample runs, three passing and one firing
+
+Run against the table registered above, with no value changed after it was written.
+
+| family | predicted `c₄` | G4a, no candidate | G4b, candidate subtracted | outcome |
+| --- | --- | --- | --- | --- |
+| `1 + x²` | −0.1875000 | σ^4.038 | **σ^5.982** | not refuted |
+| `exp(x)` | +0.1615904 | σ^3.976 | **σ^5.984** | not refuted |
+| `1.5 + 0.5 tanh(x)` | +0.0061107 | σ^4.000 | **σ^6.302** | **FIRED**, 0.302 against a 0.25 bar |
+| `1.5 + 0.5 sin(x)` | −0.0007420 | σ^3.965 | **σ^6.004** | not refuted |
+| `2 (fixed)` | 0 | — | — | gap identically zero, nothing to test |
+
+**The exponential is the load-bearing pass.** Its `c₄` has the opposite sign to the
+quadratic's, so a coefficient reverse-engineered from the quadratic family could not have
+produced it. It lands 0.016 from the predicted exponent.
+
+**`sin` did not need the escape it was granted.** The pre-registration allowed it to come
+back VOID on resolving power, its quartic being 1.4% of the quadratic at the top of the
+grid. It returned σ^6.004, the closest of the four, so the escape went unused.
+
+**`tanh` fires, and the registered outcome is that it fires.** The bar was declared at
+±0.25 and the cell returned 0.302. No VOID escape was declared for this family, and
+inventing one now is the move this section exists to prevent.
+
+Two things are true about it and neither is a defence. The deviation is in the
+**over-cancellation** direction: a wrong `ĉ₄` leaves the quartic surviving and pulls the
+exponent toward 4, and 6.302 is on the far side of 6, not the near side. And the
+pre-registration defined refutation as an exponent at or below 5, which this is not. So the
+closed form is not refuted by this cell, and the cell is also not a pass. It is a fired
+falsifier with an unexplained direction.
+
+### PRE-REGISTRATION 2026-08-16: the diagnostic for the `tanh` fire
+
+Declared before the diagnostic is written or run.
+
+**What this cannot do.** It cannot convert the fired cell into a pass. The tanh outcome
+above is fixed and stays fired whatever follows. A diagnostic that could revise its own
+target would be the window-shopping this whole section exists to refuse. What it can do is
+classify the fire as attributable or unexplained, which is a different claim and is recorded
+as one.
+
+**Why not the obvious test.** The natural move is to refit on the `σ` cells whose G3
+quadrature certification did not fire. On `tanh` that leaves two of six cells, and a
+two-point log-log slope has no residual and no power to say anything. Choosing the window
+after seeing the result is also the failure mode being guarded against. So the window is not
+touched.
+
+**The diagnostic: leave-one-out exponent stability (G4c).** Refit G4b's exponent six times,
+each time dropping one `σ` cell from the declared grid `(0.02, 0.025, 0.03, 0.035, 0.04,
+0.05)`. Report the spread, `max − min`, across the six refits. The full grid is used every
+time except for the single omission, so no window is selected.
+
+**Declared in advance, before the diagnostic exists:**
+
+- **Spread above 0.25 on `tanh`** — the exponent is not stable on this grid for this family,
+  and the fire is **attributed to grid instability**. The cell stays fired, and it is
+  recorded as a statement about the measurement rather than about the closed form.
+- **Spread at or below 0.25 on `tanh`** — the exponent is stable and the deviation is real.
+  The fire stands as an **unexplained discrepancy** against the closed form, and it is
+  carried as such into anything that quotes `c₄`, until a further registered test resolves
+  it.
+- **The control.** The same diagnostic runs on `1 + x²`, `exp(x)` and `1.5 + 0.5 sin(x)`. If
+  their spreads are also above 0.25, the diagnostic is measuring the grid rather than the
+  family and is **uninformative on all four**, including `tanh`. That outcome is registered
+  here as a real possibility rather than treated as a failure of the test.
+
+**One weakness in the record, stated rather than hidden.** This pre-registration and the
+result below land in the same commit, so a reader cannot confirm the ordering from the git
+history the way they can for the entries above. The ordering rests on this document's own
+account. Splitting the commit would fix that and was offered.
+
+### RESULT 2026-08-16: the diagnostic does not rescue the `tanh` cell
+
+`G4c` implements the rule above in `research/checks/gap_expansion.py`. It runs only when a
+candidate is supplied, so the no-candidate baseline is unchanged.
+
+| family | G4b exponent | G4c leave-one-out spread | range |
+| --- | --- | --- | --- |
+| `1 + x²` | σ^5.982 | 0.008 | σ^5.979 to σ^5.986 |
+| `exp(x)` | σ^5.984 | 0.007 | σ^5.981 to σ^5.988 |
+| `1.5 + 0.5 tanh(x)` | **σ^6.302** | **0.018** | σ^6.290 to σ^6.307 |
+| `1.5 + 0.5 sin(x)` | σ^6.004 | 0.005 | σ^6.001 to σ^6.007 |
+
+**The control holds, so the diagnostic is informative.** All four spreads sit far below the
+0.25 bar, so the exponent is a property of the residual rather than of the grid, and the
+registered "uninformative on all four" branch does not fire.
+
+**The registered reading, applied.** `tanh`'s spread is 0.018. That is the branch declared
+as *spread at or below 0.25*, so by the rule written before the diagnostic existed:
+
+> the exponent is stable and the deviation is real. The fire stands as an **unexplained
+> discrepancy** against the closed form, and it is carried as such into anything that
+> quotes `c₄`, until a further registered test resolves it.
+
+Dropping any single `σ` cell moves `tanh`'s exponent by at most 0.018 and never brings it
+within 0.25 of 6. The deviation is not an artefact of one cell, and it is not attributable
+to the four cells whose G3 certification fires on this family.
+
+**What `c₄` may now be claimed to be.** Derived in closed form, agreeing with the registered
+basis and both predicted zeros, and surviving three of four out-of-sample refutation
+attempts. On `1.5 + 0.5 tanh(x)` the residual after subtraction does not scale as the
+structure predicts, stably, and that is unexplained. Any write-up quoting `c₄` carries the
+three passes and this failure together, not a summary of them.
+
+**A hypothesis, registered as a hypothesis and not as an explanation.** An exponent above 6
+is over-cancellation, so `c₄` surviving at 4 is not the candidate. The residual after
+`c₂σ² + c₄σ⁴` is governed by `c₆`, and a `c₆` anomalously small for this family would let
+`c₈` compete inside the grid and lift the local slope. This is testable: `gap_expansion`
+already takes `--c6` and shifts the predicted exponent to 8 when given one, so deriving
+`c₆` at `σ⁶` and re-running would decide it. That derivation does not exist, this paragraph
+is not evidence, and the `tanh` cell stays fired until such a test is registered and run.
+
+### AMENDMENT 2026-08-17: the fired cell was measured with a rounded candidate
+
+The `tanh` row above reads `σ^6.302` with a leave-one-out spread of 0.018. Both numbers
+belong to a `--c4` of `0.0061107`, the five-significant-figure value this document tabled,
+not to the closed form the derivation produced. Re-measured on the same six cells with the
+same code:
+
+| `--c4` supplied for `tanh` | G4b exponent | G4c spread | smallest residual |
+| --- | --- | --- | --- |
+| `0.0061107` (the value tabled above) | σ^6.302 | 0.018 | 6.4× the quadrature floor |
+| `0.00611074` (six significant figures) | σ^6.133 | 0.069 | 7.7× the floor |
+| `0.0061107361819873` (the closed form) | σ^6.148 | 0.062 | 7.6× the floor |
+
+**The mechanism, and why it reaches this family alone.** The rounded candidate differs from
+the closed form by `3.6e-8`. Multiplied by `σ⁴` at the bottom cell that is `5.8e-15`, against
+a residual there of `3.8e-14`, so the rounding accounts for about 15% of the smallest
+residual on the grid. That cell carries the leverage in a log-log slope. It bites `tanh`
+because only there does the residual sit within an order of magnitude of the quadrature
+floor: at full precision the smallest residual is 7.6× the floor.
+
+**The exact candidates, so this cannot recur silently.** All four are the closed form
+evaluated at `μ = 1`, to seventeen significant figures:
+
+| family | `--c4` |
+| --- | --- |
+| `1 + x²` | `-0.18750000000000000` |
+| `exp(x)` | `0.16159041912141826` |
+| `1.5 + 0.5 tanh(x)` | `0.0061107361819873193` |
+| `1.5 + 0.5 sin(x)` | `-0.00074203206428907733` |
+
+One family per invocation, since a single `--c4` applied to a run of several mis-tests all
+but one:
+
+```text
+uv run --no-sync python -m research.checks.gap_expansion --check \
+    --families tanh --c4 0.0061107361819873193
+```
+
+**What this does and does not change.** The recorded outcome stands: the `tanh` cell fired,
+and it is not un-fired by re-running it with better inputs after seeing that it fired. That
+is the move this section exists to prevent, and it applies to a rounding the registrant made
+as much as to a threshold. What changes is what may be claimed about *why* it fired. The
+0.302 deviation is no longer attributable to the residual alone, because 0.154 of it is
+attributable to the candidate's precision. The remaining 0.148 at full precision sits inside
+the ±0.25 bar, so a run registered at full precision would not have fired this cell. That
+is a statement about a run nobody registered.
+
+Any write-up quoting the fire carries this amendment with it. Quoting `σ^6.302` without the
+candidate that produced it is quoting a number that cannot be reproduced from the closed
+form.
+
+### PRE-REGISTRATION 2026-08-17: candidate precision, before any exponent cell is read again
+
+Registered before the next exponent measurement of any kind, and before `c₆` exists.
+
+**The precondition.** A `--c4` or `--c6` candidate is supplied at no fewer than fifteen
+significant figures, and the digits used are recorded beside the cell they produced. A cell
+measured with a rounded candidate is **VOID**, not passed and not fired.
+
+**The rule that makes it checkable.** Before an exponent is read, the run states
+`|Δcandidate| · σ⁴` at the smallest `σ` on the grid against the residual there. Above 1% of
+that residual the candidate is not precise enough for the grid and the cell is VOID. This
+is arithmetic on numbers the run already has, and it is decidable before the exponent is
+looked at.
+
+**Why it is registered rather than applied now.** Applying it to the `tanh` cell would
+convert a fired falsifier into a VOID one on the strength of a defect found after the fire.
+The cell keeps its recorded outcome. The precondition binds what comes next.
+
+### AMENDMENT 2026-08-17: what the leave-one-out diagnostic licenses
+
+The RESULT above reads the diagnostic as showing "the exponent is a property of the residual
+rather than of the grid", and as showing the deviation "is not attributable to the four cells
+whose G3 certification fires on this family". Both are wider than the diagnostic supports.
+
+**Dropping one cell at a time tests one cell at a time.** Every refit still contains at
+least three of the four uncertified cells, so a joint effect of those four cannot appear in
+the spread. The pre-registration declined a two-cell refit for want of power, and the
+conclusion drawn is the one that refit would have supported.
+
+**A grid-wide effect is invisible to it, by construction.** An effect present in every
+cell, whether the grid's range, its spacing, or a bias shared across it, moves every refit
+together and reports as a small spread. From here that is indistinguishable from a stable real deviation.
+
+**Narrowed to what it licenses:** no single `σ` cell accounts for the deviation. The joint
+effect of the four uncertified cells is untested and stays open, and so does the grid as a
+whole. Deciding either needs a different grid or a multi-cell refit, neither of which is
+this diagnostic.
+
+### AMENDMENT 2026-08-17: the closed form is a reverse-KL coefficient
+
+The boxed `c₄` in RESULT 2026-08-16 carries no direction. It is the **reverse** direction,
+`KL(q ‖ p)`, which is the one section 2 specifies and the one the quadrature implements.
+
+`c₂` is direction-free, and that is checked at `σ²` and asserted no further, because `κ₃`
+separates the two directions above it. `c₄` is therefore direction-specific. Under forward
+KL the `ℓ₁⁴` term changes sign:
+
+```text
+reverse:  c₄  =   7ℓ₁⁴/16  −  ℓ₁²ℓ₂/4  +  ℓ₂²/8  +  ℓ₁ℓ₃/4  −  3ℓ₁²/(4R̄)
+forward:  c₄  =  −3ℓ₁⁴/16  +  ℓ₁²ℓ₂/4  +  ℓ₂²/8  +  ℓ₁ℓ₃/4  −  3ℓ₁²/(4R̄)
+```
+
+At the declared operating point that is `−3/16` reverse against `−13/16` forward. Every site
+stating the closed form carries the word "reverse" inside the box, so the two cannot be
+confused by a reader who arrives at the formula without the section around it.
+
+### AMENDMENT 2026-08-17: the anti-circularity claim, restated to what is true
+
+Section 7 says the symbolic modules contain "no floats, no family … `ℓ₁..ℓ₄` are free
+symbols throughout". The substance holds and the letter does not. `gap_series` hard-codes
+the five conjectured fractions in order to check against them, and `check_exponential_family`
+substitutes `ℓ₂ = ℓ₃ = ℓ₄ = 0` to specialise to `R = A·e^{bx}`. Both live in checks that
+read the derived coefficient, never in the path that computes it.
+
+**Restated, stronger and checkable:** no fitted number enters the path that computes `c₄`.
+That path is `averaged_gap`, `quartic_coefficient` and `basis_coefficients`, and a reader
+can confirm it by reading those three functions. Everything downstream of them compares the
+result against something. Nothing upstream of them has a number in it.
+
+**And the `R̄` sentence.** `R̄` is never given a **numeric value** anywhere in the symbolic
+path. It is reparameterised as `1/inverse` in two places for polynomial manipulation, which
+is a change of variable and not a value. That is the precise claim, and it is what makes a
+check that would still pass at `R̄ = 1` a check that has lost a variable.
+
+### AMENDMENT 2026-08-17: three guards on the instrument, and one disclosed late
+
+None of these revises a recorded outcome. The runs above used one family on the declared
+grid, which is what the guards now require, so all four reproduce unchanged: `σ^5.982`
+spread 0.008, `σ^5.984` spread 0.007, `σ^6.302` spread 0.018, `σ^6.004` spread 0.005. The
+guards make future misuse visible. They do not re-read anything.
+
+**One family per `--c4`.** `--families` defaults to all five and each has its own `c₄`, so
+a single candidate across a run tests one family and mis-tests the rest. The failure is
+not quiet in the harmless direction: the wrong candidate leaves the quartic surviving, G4b
+reads an exponent near 4 and fires, and G4c reports a spread near zero because every refit
+is wrong the same way. That prints as a stable real deviation. `gap_expansion` now refuses
+the combination at the parser.
+
+**G4c reports VOID off the declared grid.** The readings registered for this diagnostic
+were declared against `EXPANSION_SIGMAS` literally. `_stability_report` never saw that
+tuple and would happily interpret a spread from any `--sigmas`. It now returns
+`NOT_APPLICABLE` naming both grids, since the registered rule does not interpret a number
+from a grid it did not declare.
+
+**The control is now a report rather than a sentence.** The pre-registration's
+"uninformative on all four" branch existed only in prose, with no cross-family aggregation
+in code to evaluate it. `G4c control` emits once per run and fires when every family that
+produced a spread read unstable.
+
+**Disclosed late: the four-cell minimum.** `_stability_report` requires four cells above
+the quadrature floor before it will report a spread. That guard was written with the
+implementation, not before it, so it is a rule this document did not declare in advance.
+It is kept, because a leave-one-out spread over three cells is not a measurement, and it
+is recorded here as an undeclared guard rather than presented as a registered one. It did
+not bind on any run above: all four families supplied six cells.
+
+### AMENDMENT 2026-08-17: the commit record for section 7, and what a rebase did to it
+
+Section 7's entries assert their own ordering. Where that ordering is checkable from the
+git history, this is the map. Identities are as they stand on `65-gap-series-c4` after the
+rebase described below.
+
+| claim | first registered | measured or proved |
+| --- | --- | --- |
+| `c₄` closed form, and the disclosure that it ran first | `bfe98d8` 2026-08-16 | `bfe98d8` 2026-08-16 |
+| the three out-of-sample families, bar and VOID escape declared | `bfe98d8` 2026-08-16 | `bfe98d8` 2026-08-16 |
+| G4c's rule and its three readings | `8e29a0e` 2026-08-16 | `8e29a0e` 2026-08-16 |
+| the rounded-candidate disclosure | `ff1e622` 2026-08-17 | `ff1e622` 2026-08-17 |
+| candidate precision as a precondition | `ff1e622` 2026-08-17 | binds the next cell, unmeasured |
+| the three instrument guards | this commit | this commit |
+
+**Three rows register and measure in the same commit, which is the weakness already stated
+above for G4c.** It applies to the `c₄` result and the out-of-sample table as well. For
+those the ordering rests on this document's account rather than on the history, and the
+structural argument carries it instead: the symbolic path contains no fitted number, which
+a reader checks by reading it rather than by trusting a date.
+
+**A rebase changed the hashes and nothing else.** `65-gap-series-c4` was rebased onto the
+warrant-vocabulary work on 2026-08-17. Author dates survived it: `8e29a0e` is authored
+2026-08-16 and committed 2026-08-17, and every replayed commit carries the same split.
+Commit order survived it too. The ordering above rests on that sequence and those author
+dates, so nothing about what was known when is weakened by it. Only the identities moved,
+and the pre-rebase ones are reachable from no branch, so a hash taken from an earlier draft
+is re-read against the table above.
+
 ## Stop conditions (DECLARED 2026-08-07)
 
 Two branches, disjoint, split by which half of the instrument failed.
@@ -772,6 +1212,10 @@ it exists to close.
 | 2026-08-07 (fifth) | the `μ`-factor correction, `T` evaluated at the binding `κ`, and `D` as a bias argument | `c₄`, `β`, `f`, `D`, `k_min`, `T`, R6's signal, `δ_ref` |
 | 2026-08-07 (sixth) | `T = f·c₂²/\|c₄\|·10^(−2D)` with the "curvature" naming audited, the noise term set by `k` rather than by quadrature, `D` as an expression in `k`, and the dilute-versus-subtract rule | `c₄`, `X`, `β`, `f`, `D`, `k_min`, `T`, R6's signal, `δ_ref` |
 
+| 2026-08-15 | `c₂ = ℓ₁²/4` as a **symbolic identity** rather than a verified closed form, Prover 2 with a `SymbolicReduction` | `c₄`, `X`, `β`, `f`, `D`, `k_min`, `T`, R6's signal, `δ_ref` |
+| 2026-08-16 | `c₄` in closed form, all seven basis coefficients, and the quadratic family's refutation attempt. Recorded in section 7 **after** the run, which section 7 discloses | `X`, `β`, `f`, `D`, `k_min`, `T`, R6's signal, `δ_ref`, and the three unrun families |
+| 2026-08-16 (later) | the three out-of-sample families: `exp(x)` and `sin` do not refute, **`tanh` fires** at σ^6.302 against a 0.25 bar and the leave-one-out diagnostic shows the deviation is stable rather than a grid artefact | why `tanh` deviates. `c₆` is the registered hypothesis and is underived, so the cell stands unexplained |
+
 Every number GATE-D4 turns on was unknown on the date the family was declared, and `T`,
 R6's signal and `δ_ref` are unknown still. That is the claim this document exists to make
 checkable, and this file's git history is the evidence.
@@ -780,3 +1224,11 @@ Amendments are appended and dated rather than folded into the text they correct,
 reader can see what was believed when. Two stand so far: the prior mean was missing from
 the family, and the registered method for `c₂` and `c₄` computed a quantity that is zero by
 construction.
+
+**One entry is out of order, and it is marked.** Section 7's `c₄` was derived and tested on
+one family before anything registered it. The disclosure sits at the head of that section
+rather than in a footnote, the predictions it did satisfy are dated earlier in this file,
+and the families it has not been tested on are pre-registered with their expected values
+before those runs. A reader who wants to know whether this file was written to fit its
+results should start there, since it is the one place where the ordering has to be argued
+rather than read off the git history.

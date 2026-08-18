@@ -102,7 +102,7 @@ jobs:
           }
           run_suite series_kernel    "23 registered, 23 tested here, none fired"
           run_suite log_ratio_series "18 registered, 18 tested here, none fired"
-          run_suite gap_series       "12 registered, 12 tested here, none fired"
+          run_suite gap_series       "29 registered, 29 tested here, none fired"
           exit $status
 
   oracle:
