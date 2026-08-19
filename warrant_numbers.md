@@ -116,8 +116,8 @@ the check forbids.
 
 | Lock | Where | Measured |
 | --- | --- | --- |
-| Fixed-sensor `Σ⁺`/`Σ_post`/`S` are policy-independent | `test_sigma_policy_dependence.py` | 0.0 across 200 random policies; means separate by up to 21.5 |
-| Trace column sums equal `policy_efe`'s scalars | `test_policy_efe_trace.py` | 0 ULP across all 27 model/H combinations |
+| Fixed-sensor `Σ⁺`/`Σ_post`/`S` are policy-independent | `test_sigma_policy_dependence.py` | 0.0 across the two declared H=3 policies; means separate by 1.4 |
+| Trace column sums equal `policy_efe`'s scalars | `test_policy_efe_trace.py` | 0 ULP across all 9 model/H combinations (27 summed-column assertions) |
 | H=1 trace moments equal `_efe_step`'s fields | `test_policy_efe_trace.py` | 0 ULP on all three branches |
 | Enumerated policy set equals the itertools product | `test_enumeration.py` | exact; pure integer index-gather |
 
