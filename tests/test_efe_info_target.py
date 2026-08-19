@@ -2,7 +2,8 @@
 
 The epistemic term generalises from whole-state info gain (the observation-space
 ½(ln det S − ln det R) the kernel computes today) to info gain about a *chosen* latent's
-marginal, in state space: ½(ln det Σ⁺[target] − ln det Σ_post[target]). This file pins
+marginal, in state space: ½(ln det Σ⁺[info_block] − ln det Σ_post[info_block]).
+This file pins
 the kernel — first the full-state anchor (it must reproduce the observation-space
 number), then the node-restricted case.
 """
@@ -22,7 +23,7 @@ def _spd(rng, n):
 
 
 def test_full_state_info_gain_equals_observation_space_form():
-    # target = the WHOLE state: the state-space info gain must reproduce today's
+    # info_block = the WHOLE state: the state-space info gain must reproduce today's
     # observation-space epistemic ½(ln det S − ln det R), with S = C·Σ⁺·Cᵀ + R.
     rng = np.random.default_rng(0)
     n, m = 4, 2
@@ -36,28 +37,29 @@ def test_full_state_info_gain_equals_observation_space_form():
     _, logdet_r = np.linalg.slogdet(observation_noise)
     expected = 0.5 * (logdet_s - logdet_r)
 
-    # The new state-space route, restricted to the whole state (target = all indices).
+    # The new state-space route, restricted to the whole state (all indices).
     got = _state_info_gain(
-        sigma_pred, observation_matrix, observation_noise, target=range(n)
+        sigma_pred, observation_matrix, observation_noise, info_block=range(n)
     )
     np.testing.assert_allclose(float(got), expected, atol=1e-10)
 
 
 def test_node_info_gain_matches_independent_moment_update():
-    # Restrict target to ONE node's block, and check against Σ_post computed the *other*
+    # Restrict info_block to ONE node's block, then check against Σ_post computed
+    # the *other*
     # way — the Kalman moment update Σ_post = Σ⁺ − K·C·Σ⁺ (the function uses info form).
     rng = np.random.default_rng(1)
     n, m = 5, 2
     sigma_pred = _spd(rng, n)  # Σ⁺
     observation_matrix = rng.standard_normal((m, n))  # C
     observation_noise = _spd(rng, m)  # R
-    target = [1, 2]  # a node occupying state indices 1..2
+    info_block = [1, 2]  # a node occupying state indices 1..2
 
     # Independent (moment-form) posterior covariance, then the block log-det drop.
     s = observation_matrix @ sigma_pred @ observation_matrix.T + observation_noise
     gain = sigma_pred @ observation_matrix.T @ np.linalg.inv(s)  # K
     sigma_post = sigma_pred - gain @ observation_matrix @ sigma_pred
-    block = np.ix_(target, target)
+    block = np.ix_(info_block, info_block)
     _, logdet_pred = np.linalg.slogdet(sigma_pred[block])
     _, logdet_post = np.linalg.slogdet(sigma_post[block])
     expected = 0.5 * (logdet_pred - logdet_post)
@@ -66,7 +68,7 @@ def test_node_info_gain_matches_independent_moment_update():
         jnp.asarray(sigma_pred),
         jnp.asarray(observation_matrix),
         jnp.asarray(observation_noise),
-        target=target,
+        info_block=info_block,
     )
     np.testing.assert_allclose(float(got), expected, atol=1e-9)
 
@@ -98,13 +100,13 @@ def test_full_state_gain_matches_expected_free_energy_epistemic():
         jnp.asarray(sigma_pred),
         jnp.asarray(observation_matrix),
         jnp.asarray(observation_noise),
-        target=range(2),
+        info_block=range(2),
     )
     np.testing.assert_allclose(float(got), float(parts["epistemic"]), atol=1e-9)
 
 
 def test_ffg_efe_step_reduces_to_expected_free_energy():
-    # B2 (issue #26): with no structural couplings and target = the whole state, the
+    # B2 (issue #26): with no structural couplings and info_block = the whole state, the
     # FFG EFE step must reproduce expected_free_energy — same pragmatic, epistemic, G.
     dynamics = np.array([[1.0, 0.1], [0.0, 1.0]])  # A
     dynamics_noise = np.array([[0.1, 0.0], [0.0, 0.1]])  # Q
@@ -136,7 +138,7 @@ def test_ffg_efe_step_reduces_to_expected_free_energy():
         jnp.asarray(observation_noise),
         preference.goal,
         preference.precision,
-        target=range(2),
+        info_block=range(2),
     )
     np.testing.assert_allclose(float(g), float(g_ref), atol=1e-9)
     np.testing.assert_allclose(

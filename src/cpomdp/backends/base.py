@@ -98,7 +98,7 @@ class EfeBackend(InferenceBackend, Protocol):
         ...
 
     def block(self, node: int) -> range:
-        """The joint-state indices node ``node`` occupies (``info_target`` → block)."""
+        """The joint-state indices node ``node`` occupies (``info_node`` → block)."""
         ...
 
     def observation_noise_at(self, mean: ArrayLike) -> Float64[Array, "m m"]:

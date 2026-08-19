@@ -67,7 +67,7 @@ def _backend(graph, partition=None):
 
 def _selector(backend):
     return FfgEfeSelector(
-        backend, target=range(3), n_candidates=11, action_bounds=(-2.0, 2.0)
+        backend, info_block=range(3), n_candidates=11, action_bounds=(-2.0, 2.0)
     )
 
 

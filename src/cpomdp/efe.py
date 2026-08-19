@@ -362,18 +362,19 @@ def policy_efe_ffg(
     policy: Float64[Array, "H p"],
     preference: "Preference",
     *,
-    target: Sequence[int],
+    info_block: Sequence[int],
 ) -> tuple[Float64[Array, ""], dict[str, Float64[Array, ""]]]:
     """Summed EFE of a horizon-H ``policy`` over a branching FFG backend.
 
     The FFG counterpart of ``policy_efe``: instead of ``_efe_step`` on a flat model it
     drives ``_ffg_efe_step`` over the backend's predicted joint each step, aiming the
-    epistemic at ``target`` — a node's block (via ``backend.block``) or the whole state.
+    epistemic at ``info_block`` — a node's block (via ``backend.block``) or the whole
+    state.
     A ``lax.scan`` over the ``policy`` rows sums each step's ``G`` while propagating the
     joint belief predict-only between steps: the mean carries as the coupling-resolved
     ``μ⁺``, the covariance contracts by the Kalman update at ``R(μ⁺)``. At ``H = 1`` it
     reduces exactly to ``_ffg_efe_step``; with no couplings and a whole-state
-    ``target`` it reproduces ``policy_efe``.
+    ``info_block`` it reproduces ``policy_efe``.
 
     The ``backend`` is held as a closure constant (it is not a JAX pytree), so this
     composes under ``jit`` / ``vmap`` / ``grad`` over the array arguments — the way
@@ -386,7 +387,8 @@ def policy_efe_ffg(
         belief: The starting joint belief ``(μ, Σ)`` over the ``n_total``-D joint state.
         policy: The ``H`` actions to roll out, shape ``(H, p)``.
         preference: The OBSERVATION-space goal — ``goal`` (g) and ``precision`` (Λ).
-        target: The joint-state indices whose info gain is the per-step epistemic value.
+        info_block: The joint-state indices whose info gain is the per-step epistemic
+            value.
 
     Returns:
         ``(G, {"pragmatic": ..., "epistemic": ...})`` — the summed EFE and its summed
@@ -394,7 +396,7 @@ def policy_efe_ffg(
     """
     goal, precision = preference.goal, preference.precision
     policy = jnp.asarray(policy, dtype=float)
-    body = _ffg_rollout_body(backend, goal, precision, target)
+    body = _ffg_rollout_body(backend, goal, precision, info_block)
 
     # Lean projection: keep only the three scalars in the scan's ys, so a vmap over
     # candidate policies never stacks the H×n×n covariances (RFC-001, the H-step
@@ -422,7 +424,7 @@ def policy_efe_ffg_trace(
     policy: Float64[Array, "H p"],
     preference: "Preference",
     *,
-    target: Sequence[int],
+    info_block: Sequence[int],
 ) -> PolicyEfeTrace:
     """Per-step trace of the FFG rollout — the diagnostic sibling of ``policy_efe_ffg``.
 
@@ -430,7 +432,7 @@ def policy_efe_ffg_trace(
     but keeps the whole per-step record as its ``ys`` instead of summing it. Because the
     arithmetic is shared, ``jnp.sum`` of each returned scalar column equals the matching
     ``policy_efe_ffg`` scalar bit-for-bit. The ``epistemic`` column is the
-    node-restricted info gain about ``target`` — not the whole-state term the flat
+    node-restricted info gain about ``info_block`` — not the whole-state term the flat
     ``policy_efe_trace`` carries — and the moment columns are the coupling-resolved
     ``μ⁺``/``Σ⁺`` and the contracted ``Σ_post``. Composes under ``jit`` / ``vmap`` /
     ``grad`` with the backend held fixed.
@@ -441,7 +443,7 @@ def policy_efe_ffg_trace(
     """
     goal, precision = preference.goal, preference.precision
     policy = jnp.asarray(policy, dtype=float)
-    body = _ffg_rollout_body(backend, goal, precision, target)
+    body = _ffg_rollout_body(backend, goal, precision, info_block)
 
     _, trace = lax.scan(body, belief, policy)
     return trace
@@ -451,7 +453,7 @@ def _ffg_rollout_body(
     backend: "EfeBackend",
     goal: Float64[Array, "m"],
     precision: Float64[Array, "m m"],
-    target: Sequence[int],
+    info_block: Sequence[int],
 ) -> _FfgRolloutStep:
     """Build the shared ``lax.scan`` step for the FFG H-step rollout.
 
@@ -476,7 +478,7 @@ def _ffg_rollout_body(
             observation_noise,
             goal,
             precision,
-            target,
+            info_block,
         )
         # Predict-only contraction for the carry: mean stays μ⁺, cov contracts by the
         # Kalman update at (C, R(μ⁺)). ``_ffg_efe_step`` forms this posterior internally
@@ -530,30 +532,31 @@ def _state_info_gain(
     sigma_pred: Float64[Array, "n n"],
     observation_matrix: Float64[Array, "m n"],
     observation_noise: Float64[Array, "m m"],
-    target: Sequence[int],
+    info_block: Sequence[int],
 ) -> Float64[Array, ""]:
-    """Information gain about a target block of the state from one observation.
+    """Information gain about one block of the state from a single observation.
 
-    The entropy drop of the target latent's marginal — how much observing sharpens the
+    The entropy drop of the marginal at ``info_block`` — how much observing sharpens
     belief about *those* state indices (issue #26). Unlike the whole-state
     observation-space shortcut in ``_efe_step`` (``½(ln det S − ln det R)``), this forms
     the posterior covariance explicitly so a sub-block can be read out::
 
         Σ_post = (Σ⁺⁻¹ + Cᵀ·R⁻¹·C)⁻¹   # prior info + observation info, inverted back
-        gain   = ½·(ln det Σ⁺[target] − ln det Σ_post[target])
+        gain   = ½·(ln det Σ⁺[info_block] − ln det Σ_post[info_block])
 
-    With ``target`` the whole state this equals the observation-space epistemic (via
-    Sylvester's identity); restricting ``target`` to a node's indices gives info gain
+    With ``info_block`` the whole state this equals the observation-space epistemic (via
+    Sylvester's identity); restricting ``info_block`` to a node's indices gives info
+    gain
     about that latent — the factored epistemics ADR-014 finding #3 needs.
 
     Args:
         sigma_pred: Σ⁺, the predicted joint state covariance (n x n).
         observation_matrix: C, the observation matrix (m x n).
         observation_noise: R, the observation noise covariance (m x m).
-        target: the state indices whose marginal the info gain is about.
+        info_block: the state indices whose marginal the info gain is about.
 
     Returns:
-        The scalar information gain (nats), ≥ 0 for nested target/observation; NaN
+        The scalar information gain (nats), ≥ 0 for nested info_block/observation; NaN
         where ``R`` is not positive definite, matching ``_efe_step``.
     """
     prior_info = jnp.linalg.inv(sigma_pred)  # Σ⁺⁻¹
@@ -562,7 +565,7 @@ def _state_info_gain(
     )  # Cᵀ R⁻¹ C
     sigma_post = jnp.linalg.inv(prior_info + obs_info)
 
-    idx = jnp.asarray(list(target))
+    idx = jnp.asarray(list(info_block))
     gain = 0.5 * (
         _logdet_pd(sigma_pred[jnp.ix_(idx, idx)])
         - _logdet_pd(sigma_post[jnp.ix_(idx, idx)])
@@ -580,7 +583,7 @@ def _ffg_efe_step(
     observation_noise: Float64[Array, "m m"],
     goal: Float64[Array, "m"],
     precision: Float64[Array, "m m"],
-    target: Sequence[int],
+    info_block: Sequence[int],
 ) -> tuple[Float64[Array, ""], dict[str, Float64[Array, ""]]]:
     """One EFE step over the FFG's predicted joint, with a node-targeted epistemic.
 
@@ -590,10 +593,11 @@ def _ffg_efe_step(
     ``Σ⁺ = A·Σ·Aᵀ + Q`` from a flat model (that route mistakes the couplings for
     observations). The ``pragmatic`` term is identical to ``_efe_step``
     (observation-space cross-entropy); the ``epistemic`` term is the only change — info
-    gain about the ``target`` latent's marginal (``_state_info_gain``) instead of the
+    gain about the marginal at ``info_block`` (``_state_info_gain``) instead of the
     whole-state observation-space determinant.
 
-    With no couplings and ``target`` the whole state, this reproduces ``_efe_step`` /
+    With no couplings and ``info_block`` the whole state, this reproduces
+    ``_efe_step`` /
     ``expected_free_energy`` exactly; a node's block targets the epistemic at that
     latent — the factored analogue of the T-Maze cue (ADR-014 finding #3). Pure
     ``jnp``, so it rides ``jit``/``vmap`` over a grid of candidate actions (which vary
@@ -607,7 +611,7 @@ def _ffg_efe_step(
         observation_noise: R, the observation noise covariance (m x m).
         goal: g, the preferred observation (m-D).
         precision: Λ, how sharply the goal is preferred (m x m).
-        target: the state indices whose info gain is the epistemic value (a node's
+        info_block: the state indices whose info gain is the epistemic value (a node's
             block, or the whole state).
 
     Returns:
@@ -623,7 +627,7 @@ def _ffg_efe_step(
     pragmatic = 0.5 * residual @ precision @ residual + 0.5 * jnp.trace(precision @ s)
 
     epistemic = _state_info_gain(
-        sigma_plus, observation_matrix, observation_noise, target
+        sigma_plus, observation_matrix, observation_noise, info_block
     )
 
     return pragmatic - epistemic, {"pragmatic": pragmatic, "epistemic": epistemic}

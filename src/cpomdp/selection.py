@@ -227,8 +227,8 @@ class FfgEfeSelector:
     ``_efe_step`` on a flat model it ``vmap``s ``_ffg_efe_step`` over the candidate
     action grid, reading ``μ⁺``/``Σ⁺``
     from the backend's ``predicted_belief`` (structural couplings folded in) and aiming
-    the epistemic term at ``target`` — a joint-state block (a node's block via
-    ``backend.block`` for ``info_target``, or the whole state). One-step
+    the epistemic term at ``info_block`` — a joint-state block (a node's block via
+    ``backend.block`` for ``info_node``, or the whole state). One-step
     (``horizon = 1``); the H-step FFG rollout is a later seam. Conforms to
     [`ActionSelector`][cpomdp.ActionSelector].
     """
@@ -237,7 +237,7 @@ class FfgEfeSelector:
         self,
         backend: EfeBackend,
         *,
-        target: Sequence[int],
+        info_block: Sequence[int],
         n_candidates: int,
         action_bounds: tuple[float, float],
     ) -> None:
@@ -263,12 +263,12 @@ class FfgEfeSelector:
                 "still pass. Keep the edge's endpoints in one cluster, or unflag it if "
                 "a severed-mass check shows the cut is safe."
             )
-        # Front-load (ADR-002): the candidate grid, the target block, the constant C.
+        # Front-load (ADR-002): the candidate grid, the info block, the constant C.
         # R is *not* front-loaded — it may be state-dependent, so it is read per
         # candidate at μ⁺ via ``observation_noise_at`` (issue #27); a fixed sensor
         # returns the same constant each time.
         self._backend = backend
-        self._target = tuple(target)
+        self._target = tuple(info_block)
         self._observation_matrix, _ = backend.observation_model  # C (constant)
         self._candidates = jnp.linspace(lo, hi, n_candidates)[:, None]
 
@@ -374,7 +374,7 @@ class ObservationGoal:
     The complete spec for the information-seeking path - the preferred observation,
     how sharply it is preferred (``precision``), and the action-search config the
     EFESelector front-loads: ``action_bounds`` is the action box, ``n_candidates``
-    its resolution, ``horizon`` its lookahead depth. ``info_target`` optionally aims the
+    its resolution, ``horizon`` its lookahead depth. ``info_node`` optionally aims the
     epistemic term at a single latent *node* (info gain about that node's marginal, the
     factored-EFE regime on a branching backend, issue #26); ``None`` = whole-state info
     gain (the default, unchanged behaviour). The Agent dispatches an ObservationGoal to
@@ -387,7 +387,7 @@ class ObservationGoal:
     action_bounds: tuple[float, float]
     n_candidates: int
     horizon: int
-    info_target: int | None
+    info_node: int | None
 
     def __init__(
         self,
@@ -397,7 +397,7 @@ class ObservationGoal:
         precision=None,
         n_candidates=21,
         horizon=1,
-        info_target=None,
+        info_node=None,
     ) -> None:
         target = jnp.asarray(target, dtype=float)
         object.__setattr__(self, "target", target)
@@ -411,7 +411,7 @@ class ObservationGoal:
         object.__setattr__(self, "n_candidates", n_candidates)
         object.__setattr__(self, "horizon", horizon)
         object.__setattr__(
-            self, "info_target", None if info_target is None else int(info_target)
+            self, "info_node", None if info_node is None else int(info_node)
         )
         self._validate()
 
@@ -438,8 +438,8 @@ class ObservationGoal:
             )
         if self.horizon < 1:
             raise ValueError(f"horizon must be >= 1, got {self.horizon}")
-        if self.info_target is not None and self.info_target < 0:
+        if self.info_node is not None and self.info_node < 0:
             raise ValueError(
-                f"info_target must be a non-negative node index or None, "
-                f"got {self.info_target}"
+                f"info_node must be a non-negative node index or None, "
+                f"got {self.info_node}"
             )

@@ -132,9 +132,11 @@ def test_epistemic_can_target_the_hidden_hub():
     prior = Belief(mean=np.zeros(5), cov=np.eye(5))
     sigma_pred = backend.predicted_belief(prior).cov  # Σ⁺
 
-    def info_gain(target):
+    def info_gain(info_block):
         return float(
-            _state_info_gain(sigma_pred, observation_matrix, observation_noise, target)
+            _state_info_gain(
+                sigma_pred, observation_matrix, observation_noise, info_block
+            )
         )
 
     assert CHEA not in backend.graph.observations  # the hub is a hidden latent

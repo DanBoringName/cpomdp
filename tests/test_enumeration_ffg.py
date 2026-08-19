@@ -6,7 +6,8 @@ aimed at a node's block. The enumeration, the certificate, and the cost are shar
 only the per-policy scoring changes.
 
 The oracle mirrors the rollout's: on a coupling-free single-node backend with the
-whole-state target the FFG search reduces to the flat search, both under a fixed sensor
+whole-state info block the FFG search reduces to the flat search, both under a fixed
+sensor
 and under ``R(x)`` — same argmin policy, same ``G`` vector at ``allclose`` (the FFG path
 predicts through the precision form, the flat through ``AΣAᵀ + Q``). A coupled-tree
 smoke confirms it runs where the flat search cannot.
@@ -92,7 +93,7 @@ def _pref():
     return Preference(goal=[1.0], precision=[[2.0]])
 
 
-# --- oracle: no couplings + whole-state target reduces to the flat search ----------
+# --- oracle: no couplings + whole-state info block reduces to the flat search ------
 class TestOverBackendReducesToFlat:
     def _check(self, *, state_dependent):
         backend, model = _single_node_pair(state_dependent=state_dependent)
@@ -100,7 +101,7 @@ class TestOverBackendReducesToFlat:
         for h in (2, 3):
             flat = EnumeratedEfeSearch(model, action_set, horizon=h)
             ffg = EnumeratedEfeSearch.over_backend(
-                backend, action_set, target=range(2), horizon=h
+                backend, action_set, info_block=range(2), horizon=h
             )
             r_flat = flat.evaluate(belief, pref)
             r_ffg = ffg.evaluate(belief, pref)
@@ -121,7 +122,7 @@ class TestOverBackendSharedAccounting:
     def test_certificate_cost_and_warrant(self):
         backend, _ = _single_node_pair(state_dependent=False)
         ffg = EnumeratedEfeSearch.over_backend(
-            backend, _action_set(), target=range(2), horizon=2
+            backend, _action_set(), info_block=range(2), horizon=2
         )
         assert ffg.warrant is SearchWarrant.PROVED
         assert ffg.certificate.complete
@@ -132,7 +133,9 @@ class TestOverBackendSharedAccounting:
         backend, _ = _single_node_pair(state_dependent=False)  # p = 1
         wrong = FiniteActionSet([[-1.0, 0.0], [1.0, 0.0]], version="v1")  # p = 2
         with np.testing.assert_raises(ValueError):
-            EnumeratedEfeSearch.over_backend(backend, wrong, target=range(2), horizon=2)
+            EnumeratedEfeSearch.over_backend(
+                backend, wrong, info_block=range(2), horizon=2
+            )
 
 
 # --- it runs on the coupled tree, where the flat search cannot ---------------------
@@ -141,9 +144,9 @@ class TestOverBackendOnCoupledTree:
         backend = _coupled_backend()
         belief = Belief(mean=[0.2, -0.1], cov=[[0.7, 0.1], [0.1, 0.4]])
         pref = Preference(goal=[0.5], precision=[[2.0]])
-        target = tuple(backend.block(0))
+        info_block = tuple(backend.block(0))
         ffg = EnumeratedEfeSearch.over_backend(
-            backend, _action_set(), target=target, horizon=2
+            backend, _action_set(), info_block=info_block, horizon=2
         )
         result = ffg.evaluate(belief, pref)
         assert result.best_policy.shape == (2, 1)

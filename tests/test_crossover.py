@@ -35,7 +35,9 @@ from cpomdp.selection import Preference
 PULL_ANCHOR = 1.723213  # Δε(1), node-restricted (CONTEXT marginal)
 GRADIENT_ANCHOR = 4.491010  # Δc(1)
 CROSSOVER_ANCHOR = 2.767797  # ΔG(1) = gradient − pull > 0 (reach wins at H=1)
-WHOLE_STATE_PULL = 2.416572  # the same contrast with a whole-state target (not 1.72)
+WHOLE_STATE_PULL = (
+    2.416572  # the same contrast with a whole-state info block (not 1.72)
+)
 ANCHOR_TOL = 1e-4
 
 # The reach/walk pair as declared members of a coarse, versioned action set (a
@@ -53,8 +55,8 @@ def _setup():
         goal=[0.0, 0.0],
         precision=[[demo.GOAL_PRECISION, 0.0], [0.0, demo.INFO_PRECISION]],
     )
-    target = tuple(backend.block(demo.CONTEXT))
-    return backend, belief, pref, target
+    info_block = tuple(backend.block(demo.CONTEXT))
+    return backend, belief, pref, info_block
 
 
 def _anchor_actions():
@@ -72,7 +74,7 @@ def _constant(action, horizon):
 # --- the H=1 reduction to Paper 1's anchors ----------------------------------------
 class TestH1CollapsesToAnchors:
     def test_reduces_to_pull_and_gradient(self):
-        backend, belief, pref, target = _setup()
+        backend, belief, pref, info_block = _setup()
         a_sense, a_myopic = _anchor_actions()
         stat = crossover_statistic(
             backend,
@@ -80,7 +82,7 @@ class TestH1CollapsesToAnchors:
             _constant(a_sense, 1),
             _constant(a_myopic, 1),
             pref,
-            target=target,
+            info_block=info_block,
         )
         assert stat.horizon == 1
         got = (float(stat.delta_epsilon), float(stat.delta_c), float(stat.delta_g))
@@ -99,7 +101,7 @@ class TestH1CollapsesToAnchors:
             _constant(a_sense, 1),
             _constant(a_myopic, 1),
             pref,
-            target=whole,
+            info_block=whole,
         )
         np.testing.assert_allclose(
             float(stat.delta_epsilon), WHOLE_STATE_PULL, atol=ANCHOR_TOL
@@ -111,7 +113,7 @@ class TestSignConvention:
     def test_reach_wins_at_h1(self):
         # ΔG(1) > 0: at the opening step the pragmatic gradient outweighs the pull, so
         # the planner still prefers the reach. This is what makes H* > 1.
-        backend, belief, pref, target = _setup()
+        backend, belief, pref, info_block = _setup()
         a_sense, a_myopic = _anchor_actions()
         stat = crossover_statistic(
             backend,
@@ -119,7 +121,7 @@ class TestSignConvention:
             _constant(a_sense, 1),
             _constant(a_myopic, 1),
             pref,
-            target=target,
+            info_block=info_block,
         )
         assert float(stat.delta_g) > 0
         assert not stat.walk_wins
@@ -127,7 +129,7 @@ class TestSignConvention:
     def test_pull_and_gradient_are_both_positive(self):
         # Moving to the cue both buys information (Δε > 0) and costs goal-distance
         # (Δc > 0). The crossover is a race between two positive quantities.
-        backend, belief, pref, target = _setup()
+        backend, belief, pref, info_block = _setup()
         a_sense, a_myopic = _anchor_actions()
         stat = crossover_statistic(
             backend,
@@ -135,7 +137,7 @@ class TestSignConvention:
             _constant(a_sense, 1),
             _constant(a_myopic, 1),
             pref,
-            target=target,
+            info_block=info_block,
         )
         assert float(stat.delta_epsilon) > 0
         assert float(stat.delta_c) > 0
@@ -143,7 +145,7 @@ class TestSignConvention:
     def test_delta_g_is_gradient_minus_pull_exactly(self):
         # The sign convention, structurally: ΔG = Δc − Δε (pragmatic a cost, epistemic a
         # value). Byte-exact, since ΔG is defined that way.
-        backend, belief, pref, target = _setup()
+        backend, belief, pref, info_block = _setup()
         a_sense, a_myopic = _anchor_actions()
         stat = crossover_statistic(
             backend,
@@ -151,7 +153,7 @@ class TestSignConvention:
             _constant(a_sense, 2),
             _constant(a_myopic, 2),
             pref,
-            target=target,
+            info_block=info_block,
         )
         np.testing.assert_array_equal(stat.delta_g, stat.delta_c - stat.delta_epsilon)
 
@@ -168,7 +170,7 @@ class TestReachWalkDeclaredMembers:
         # Over the coarse declared set (not just the fine grid), argmax ε still picks
         # the cue-ward sense action and argmin G still picks the prior-ward myopic
         # action. So the pair is stable under this set refinement (a D3 falsifier).
-        backend, belief, pref, target = _setup()
+        backend, belief, pref, info_block = _setup()
         a_sense, a_myopic = _anchor_actions()
         from cpomdp.efe import _ffg_efe_step
 
@@ -184,7 +186,7 @@ class TestReachWalkDeclaredMembers:
                 noise,
                 pref.goal,
                 pref.precision,
-                target,
+                info_block,
             )
             eps.append(float(parts["epistemic"]))
             gees.append(float(g))
@@ -198,19 +200,19 @@ class TestCrossoverHorizon:
     def test_no_crossover_when_walk_equals_reach(self):
         # A control on the finder: identical policies give ΔG(H) = 0 for all H (never
         # < 0), so there is no crossover and the finder returns None, not a spurious H*.
-        backend, belief, pref, target = _setup()
+        backend, belief, pref, info_block = _setup()
         a_sense, _ = _anchor_actions()
 
         def same(h):
             return _constant(a_sense, h)
 
         h_star = crossover_horizon(
-            backend, belief, same, same, pref, target=target, max_horizon=3
+            backend, belief, same, same, pref, info_block=info_block, max_horizon=3
         )
         assert h_star is None
 
     def test_mismatched_horizons_are_rejected(self):
-        backend, belief, pref, target = _setup()
+        backend, belief, pref, info_block = _setup()
         a_sense, a_myopic = _anchor_actions()
         with np.testing.assert_raises(ValueError):
             crossover_statistic(
@@ -219,7 +221,7 @@ class TestCrossoverHorizon:
                 _constant(a_sense, 2),
                 _constant(a_myopic, 1),
                 pref,
-                target=target,
+                info_block=info_block,
             )
 
 
@@ -228,7 +230,7 @@ class TestReproducibility:
     def test_anchors_are_deterministic(self):
         # The anchor scan carries no observation draw, so recomputing the statistic
         # gives bit-identical Δε, Δc, ΔG, not a noise-gated coincidence.
-        backend, belief, pref, target = _setup()
+        backend, belief, pref, info_block = _setup()
         a_sense, a_myopic = _anchor_actions()
         first = crossover_statistic(
             backend,
@@ -236,7 +238,7 @@ class TestReproducibility:
             _constant(a_sense, 1),
             _constant(a_myopic, 1),
             pref,
-            target=target,
+            info_block=info_block,
         )
         second = crossover_statistic(
             backend,
@@ -244,7 +246,7 @@ class TestReproducibility:
             _constant(a_sense, 1),
             _constant(a_myopic, 1),
             pref,
-            target=target,
+            info_block=info_block,
         )
         np.testing.assert_array_equal(first.delta_epsilon, second.delta_epsilon)
         np.testing.assert_array_equal(first.delta_c, second.delta_c)
@@ -252,7 +254,7 @@ class TestReproducibility:
 
 
 def test_crossover_statistic_is_a_value():
-    backend, belief, pref, target = _setup()
+    backend, belief, pref, info_block = _setup()
     a_sense, a_myopic = _anchor_actions()
     stat = crossover_statistic(
         backend,
@@ -260,6 +262,6 @@ def test_crossover_statistic_is_a_value():
         _constant(a_sense, 1),
         _constant(a_myopic, 1),
         pref,
-        target=target,
+        info_block=info_block,
     )
     assert isinstance(stat, CrossoverStatistic)

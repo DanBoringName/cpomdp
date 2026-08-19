@@ -757,7 +757,7 @@ class CouplingGraphBackend:
         """The state indices node ``node`` occupies in the joint (a public ``_block``).
 
         Lets a caller (e.g. the EFE selector) turn a node index into the joint-state
-        block the epistemic term targets — ``info_target`` node → ``block`` (issue #26).
+        block the epistemic term targets — ``info_node`` node → ``block`` (issue #26).
         """
         return range(self._offsets[node], self._offsets[node + 1])
 
