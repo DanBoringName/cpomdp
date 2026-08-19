@@ -72,17 +72,17 @@ observation = 1 x position + 0 x velocity
 It's one reading this time, so it's a single row, looking across both state variables position and velocity.
 
 ```python
-sensor_model = [[1, 0]]
+observation_matrix = [[1, 0]]
 ```
 
 Notice the 0. The agent can never measure its velocity, it can only *infer* it based on its position over time.
 
 ### Noise
 
-The last piece we need is the noise of the world. In this case we have two noises. Dynamic noise, and sensor noise. Let's use our bacteria in a petri-dish example again.
+The last piece we need is the noise of the world. In this case we have two noises. Dynamic noise, and observation noise. Let's use our bacteria in a petri-dish example again.
 
 - **Dynamic noise** can be thought of as the random pelting you would take from neighbouring particles in the jelly and vibrations in the dish. This makes your idea of where you are much harder to read.
-- **Sensor noise** is the uncertainty of what you are sensing with your tiny microbial sensor. The blurriness of what you "see" if you will.
+- **Observation noise** is the uncertainty of what you are sensing with your tiny microbial sensor. The blurriness of what you "see" if you will.
 
 Now represent these terms as scalar values. The `dynamics_noise` (the wobble) affects position and velocity. Say we give it the value of **1e-6**. Dynamics has two properties that get pelted so `dynamics_noise` is a 2x2 matrix.
 
@@ -99,13 +99,13 @@ dynamics_noise = jnp.eye(2) * 1e-6
 
 Broken down this is saying "multiply a 2x2 identity matrix by 1e-6" which comes out exactly as written above in full matrix form.
 
-The sensor only gives one reading, so `sensor_noise` is a 1x1 matrix.
+The sensor only gives one reading, so `observation_noise` is a 1x1 matrix.
 
 ```python
-sensor_noise   = [[1e-2]]            # one reading, one wobble
+observation_noise   = [[1e-2]]            # one reading, one wobble
 ```
 
->Note: `sensor_noise` looks the same written down as it does in Python, so there's no separate "in Python this is written as…" step.
+>Note: `observation_noise` looks the same written down as it does in Python, so there's no separate "in Python this is written as…" step.
 
 ### The Prior
 
@@ -135,7 +135,7 @@ Notice that the uncertainty here in `cov` (1) is much larger than our `dynamics_
 
 ### The whole model
 
-Five pieces, one object. `LinearGaussianModel` takes each by name — and since you built every piece as a named variable, the assembly reads almost like a list of what you've made: dynamics=dynamics, sensor_model=sensor_model, and so on. This is the moment the world (how it moves, what's seen, how fuzzy it all is) and the agent's starting belief (the prior) fuse into a single thing you can hand to an agent and run. One piece is deliberately missing — a way to **act** — but a thing that only perceives doesn't need it yet; we'll add it the moment we start steering.
+Five pieces, one object. `LinearGaussianModel` takes each by name — and since you built every piece as a named variable, the assembly reads almost like a list of what you've made: dynamics=dynamics, observation_matrix=observation_matrix, and so on. This is the moment the world (how it moves, what's seen, how fuzzy it all is) and the agent's starting belief (the prior) fuse into a single thing you can hand to an agent and run. One piece is deliberately missing — a way to **act** — but a thing that only perceives doesn't need it yet; we'll add it the moment we start steering.
 
 The full code picture so far should look like this:
 
@@ -149,10 +149,10 @@ dt = 0.1
 dynamics = [[1, dt],
             [0, 1]]          # how the state drifts on its own (Newtonian kinematics)
 
-sensor_model = [[1, 0]]     # what the agent senses: position only (the 0 hides velocity)
+observation_matrix = [[1, 0]]     # what the agent senses: position only (the 0 hides velocity)
 
 dynamics_noise = jnp.eye(2) * 1e-6   # the world's own wobble
-sensor_noise   = [[1e-2]]            # the sensor's wobble
+observation_noise   = [[1e-2]]            # the sensor's wobble
 
 # --- the agent's starting belief ---
 prior = Belief(mean=[0, 0],
@@ -161,9 +161,9 @@ prior = Belief(mean=[0, 0],
 # --- snap the world and the belief into one object ---
 model = LinearGaussianModel(
     dynamics=dynamics,
-    sensor_model=sensor_model,
+    observation_matrix=observation_matrix,
     dynamics_noise=dynamics_noise,
-    sensor_noise=sensor_noise,
+    observation_noise=observation_noise,
     prior=prior,
 )
 # the world is built — nothing has happened yet; that starts when we perceive and act
@@ -281,9 +281,9 @@ Now re-run the model definition with `control` added — the one new line that t
 model = LinearGaussianModel(
     dynamics=dynamics,
     control=control,          # <-- the new piece
-    sensor_model=sensor_model,
+    observation_matrix=observation_matrix,
     dynamics_noise=dynamics_noise,
-    sensor_noise=sensor_noise,
+    observation_noise=observation_noise,
     prior=prior,
 )
 ```
@@ -321,7 +321,7 @@ To run it we play two parts — the **world** (moving the real bug) and the **ag
 real = jnp.array([0.0, 0.0])      # the bug's REAL position & velocity — the agent never sees this directly
 
 for _ in range(100):
-    obs    = model.sensor_model @ real                    # the world shows the agent a reading
+    obs    = model.observation_matrix @ real                    # the world shows the agent a reading
                                                           # '@' is matrix multiplication in python notation
     agent.infer_states(obs)                               # PERCEIVE: fold it in, sharpen the belief
     action = agent.sample_action()                        # ACT: how hard to wiggle the flagellum toward the food
@@ -354,16 +354,16 @@ dt = 0.1
 model = LinearGaussianModel(
     dynamics=[[1, dt], [0, 1]],
     control=[[0], [dt]],
-    sensor_model=[[1, 0]],
+    observation_matrix=[[1, 0]],
     dynamics_noise=jnp.eye(2) * 1e-6,
-    sensor_noise=[[1e-2]],
+    observation_noise=[[1e-2]],
     prior=Belief(mean=[0, 0], cov=jnp.eye(2)),
 )
 agent = Agent(model, StateGoal([1.0, 0.0]))
 
 true = jnp.array([0.0, 0.0])
 for _ in range(100):
-    obs = model.sensor_model @ true     # what the agent gets to see
+    obs = model.observation_matrix @ true     # what the agent gets to see
     agent.infer_states(obs)             # perceive
     action = agent.sample_action()      # act
     true = model.dynamics @ true + model.control @ action

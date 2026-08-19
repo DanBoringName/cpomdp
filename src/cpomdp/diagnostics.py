@@ -137,7 +137,9 @@ def logdet_pd(matrix: ArrayLike) -> float:
 
 
 def epistemic_value(
-    predicted_cov: ArrayLike, sensor_model: ArrayLike, sensor_noise: ArrayLike
+    predicted_cov: ArrayLike,
+    observation_matrix: ArrayLike,
+    observation_noise: ArrayLike,
 ) -> float:
     """The per-step epistemic value ``½(ln det S − ln det R)``, in nats.
 
@@ -149,8 +151,8 @@ def epistemic_value(
     ``S`` returns NaN and an undefined value stays visibly undefined.
     """
     cov = np.asarray(predicted_cov, dtype=float)
-    c = np.asarray(sensor_model, dtype=float)
-    r = np.asarray(sensor_noise, dtype=float)
+    c = np.asarray(observation_matrix, dtype=float)
+    r = np.asarray(observation_noise, dtype=float)
     s = c @ cov @ c.T + r
     return 0.5 * (logdet_pd(s) - logdet_pd(r))
 
@@ -240,7 +242,7 @@ class SensorReport:
 
 
 def _linearizations(
-    observation, sensor_model: np.ndarray, means: np.ndarray
+    observation, observation_matrix: np.ndarray, means: np.ndarray
 ) -> list[np.ndarray]:
     """Each mean's noise covariance, read through whatever the caller supplied."""
     if observation is None:  # a fixed sensor carries no per-state noise
@@ -282,7 +284,7 @@ def probe_model(
 
     if hasattr(model, "predicted_belief"):  # a graph backend
         backend = cast("ProbeBackend", model)
-        sensor_model = np.asarray(backend.observation_model[0], dtype=float)
+        observation_matrix = np.asarray(backend.observation_model[0], dtype=float)
         predicted = [backend.predicted_belief(belief, np.asarray(a)) for a in actions]
         means = np.asarray([np.asarray(p.mean, dtype=float) for p in predicted])
         covs = [np.asarray(p.cov, dtype=float) for p in predicted]
@@ -290,7 +292,7 @@ def probe_model(
             np.asarray(backend.observation_noise_at(mu), dtype=float) for mu in means
         ]
     else:  # a flat LinearGaussianModel
-        sensor_model = np.asarray(model.sensor_model, dtype=float)
+        observation_matrix = np.asarray(model.observation_matrix, dtype=float)
         dynamics = np.asarray(model.dynamics, dtype=float)
         prior_mean = np.asarray(belief.mean, dtype=float)
         prior_cov = np.asarray(belief.cov, dtype=float)
@@ -310,13 +312,13 @@ def probe_model(
             model.dynamics_noise, dtype=float
         )
         covs = [cov] * len(actions)
-        fixed = np.asarray(model.sensor_noise, dtype=float)
-        noises = _linearizations(model.observation, sensor_model, means) or [
+        fixed = np.asarray(model.observation_noise, dtype=float)
+        noises = _linearizations(model.observation, observation_matrix, means) or [
             fixed
         ] * len(actions)
 
-    rank = int(np.linalg.matrix_rank(sensor_model))
-    n_obs = int(sensor_model.shape[0])
+    rank = int(np.linalg.matrix_rank(observation_matrix))
+    n_obs = int(observation_matrix.shape[0])
 
     indefinite = tuple(
         tuple(float(v) for v in mu)
@@ -330,7 +332,7 @@ def probe_model(
             spread = max(spread, float(np.max(np.abs(noises[i] - noises[j]))))
 
     epistemics = [
-        epistemic_value(cov, sensor_model, r)
+        epistemic_value(cov, observation_matrix, r)
         for cov, r in zip(covs, noises, strict=True)
     ]
     finite = [e for e in epistemics if np.isfinite(e)]

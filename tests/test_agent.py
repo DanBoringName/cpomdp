@@ -22,9 +22,9 @@ GOAL = np.array([1.0, 0.0])  # reach position 1, at rest
 def _reaching_model() -> LinearGaussianModel:
     return LinearGaussianModel(
         dynamics=DYNAMICS,
-        sensor_model=SENSOR_MODEL,
+        observation_matrix=SENSOR_MODEL,
         dynamics_noise=[[1e-6, 0.0], [0.0, 1e-6]],
-        sensor_noise=[[1e-2]],
+        observation_noise=[[1e-2]],
         prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
         control=CONTROL,
     )
@@ -52,9 +52,9 @@ GOAL_2D = np.array([1.0, -1.0, 0.0, 0.0])  # reach (+1, -1), at rest
 def _reaching_model_2d() -> LinearGaussianModel:
     return LinearGaussianModel(
         dynamics=DYNAMICS_2D,
-        sensor_model=SENSOR_MODEL_2D,
+        observation_matrix=SENSOR_MODEL_2D,
         dynamics_noise=np.eye(4) * 1e-6,
-        sensor_noise=np.eye(2) * 1e-2,
+        observation_noise=np.eye(2) * 1e-2,
         prior=Belief(mean=[0.0, 0.0, 0.0, 0.0], cov=np.eye(4)),
         control=CONTROL_2D,
     )
@@ -70,7 +70,7 @@ def _run_closed_loop(agent, true_state, steps, rng=None):
     The plant matrices are read off the agent's own model, so this drives a
     p=1 single-force point mass and a p=2 multi-actuator plant identically.
     """
-    A, B, C = agent.model.dynamics, agent.model.control, agent.model.sensor_model
+    A, B, C = agent.model.dynamics, agent.model.control, agent.model.observation_matrix
     true_state = np.asarray(true_state, dtype=float)
     for _ in range(steps):
         obs = C @ true_state
@@ -125,9 +125,9 @@ def test_perceive_only_agent_cannot_act():
     # A goal-less agent on a control-free model: a pure tracker.
     model = LinearGaussianModel(
         dynamics=[[1.0, DT], [0.0, 1.0]],
-        sensor_model=SENSOR_MODEL,
+        observation_matrix=SENSOR_MODEL,
         dynamics_noise=[[1e-6, 0.0], [0.0, 1e-6]],
-        sensor_noise=[[1e-2]],
+        observation_noise=[[1e-2]],
         prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
         # no control= → no action channel
     )
@@ -180,14 +180,14 @@ def _corridor_model(*, fixed, control=True):
         None
         if fixed
         else CallableSensor(
-            sensor_model=[[1.0]], noise_fn=_well_noise, noise_params=_WELL_PARAMS
+            observation_matrix=[[1.0]], noise_fn=_well_noise, noise_params=_WELL_PARAMS
         )
     )
     return LinearGaussianModel(
         dynamics=[[1.0]],
-        sensor_model=[[1.0]],
+        observation_matrix=[[1.0]],
         dynamics_noise=[[0.05]],
-        sensor_noise=[[0.3]],
+        observation_noise=[[0.3]],
         prior=Belief(mean=[0.0], cov=[[0.5]]),
         control=[[1.0]] if control else None,
         observation=sensor,
@@ -315,7 +315,7 @@ def _run_recording(agent, start_pos, steps):
     model = agent.model
     a_mat = np.asarray(model.dynamics)
     b_mat = None if model.control is None else np.asarray(model.control)
-    c_mat = np.asarray(model.sensor_model)
+    c_mat = np.asarray(model.observation_matrix)
     p = 0 if b_mat is None else b_mat.shape[1]
     true = np.asarray(start_pos, dtype=float)
     last_action = np.zeros(p)
@@ -341,7 +341,7 @@ def _replay_cov_trace(model, mu_minus, noise_fn, params):
     the covariance a path would accumulate under the state-dependent noise.
     """
     a_mat = np.asarray(model.dynamics)
-    c_mat = np.asarray(model.sensor_model)
+    c_mat = np.asarray(model.observation_matrix)
     q_mat = np.asarray(model.dynamics_noise)
     n = a_mat.shape[0]
     cov = np.asarray(model.prior.cov, dtype=float)

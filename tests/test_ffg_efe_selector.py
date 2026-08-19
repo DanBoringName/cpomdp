@@ -51,24 +51,24 @@ def test_ffg_selector_reduces_to_efe_selector_single_node():
     # grid action as EFESelector on the equivalent flat LinearGaussianModel.
     dynamics = np.array([[1.0, 0.1], [0.0, 1.0]])  # A
     dynamics_noise = np.array([[0.1, 0.0], [0.0, 0.1]])  # Q
-    sensor_model = np.array([[1.0, 0.0]])  # C
-    sensor_noise = np.array([[0.5]])  # R
+    observation_matrix = np.array([[1.0, 0.0]])  # C
+    observation_noise = np.array([[0.5]])  # R
     control = np.array([[1.0], [0.0]])  # B — drives observed state[0], so G is non-flat
 
     graph = CouplingGraph(
         root=0,
         dims=(2,),
         couplings=(),
-        observations={0: GaussianObservation(sensor_model, sensor_noise)},
+        observations={0: GaussianObservation(observation_matrix, observation_noise)},
     )
     backend = CouplingGraphBackend(
         graph, (GaussianTransition(dynamics, dynamics_noise),), control=control
     )
     model = LinearGaussianModel(
         dynamics=dynamics,
-        sensor_model=sensor_model,
+        observation_matrix=observation_matrix,
         dynamics_noise=dynamics_noise,
-        sensor_noise=sensor_noise,
+        observation_noise=observation_noise,
         prior=Belief(mean=np.zeros(2), cov=np.eye(2)),
         control=control,
     )
@@ -134,9 +134,9 @@ def test_info_target_on_flat_backend_raises():
     # info_target aims at an FFG node; it is meaningless without a branching backend.
     model = LinearGaussianModel(
         dynamics=[[1.0]],
-        sensor_model=[[1.0]],
+        observation_matrix=[[1.0]],
         dynamics_noise=[[0.1]],
-        sensor_noise=[[0.2]],
+        observation_noise=[[0.2]],
         prior=Belief(mean=[0.0], cov=[[1.0]]),
         control=[[1.0]],
     )
@@ -150,15 +150,15 @@ def test_ffg_agent_matches_kalman_efe_agent_end_to_end():
     # Agent step for step. The non-negotiable "v0.3 behaviour is not broken" check.
     dynamics = np.array([[1.0, 0.1], [0.0, 1.0]])  # A
     dynamics_noise = np.array([[0.1, 0.0], [0.0, 0.1]])  # Q
-    sensor_model = np.array([[1.0, 0.0]])  # C
-    sensor_noise = np.array([[0.5]])  # R
+    observation_matrix = np.array([[1.0, 0.0]])  # C
+    observation_noise = np.array([[0.5]])  # R
     control = np.array([[1.0], [0.0]])  # B — drives the observed state[0]
     prior = Belief(mean=np.zeros(2), cov=np.eye(2))
     model = LinearGaussianModel(
         dynamics=dynamics,
-        sensor_model=sensor_model,
+        observation_matrix=observation_matrix,
         dynamics_noise=dynamics_noise,
-        sensor_noise=sensor_noise,
+        observation_noise=observation_noise,
         prior=prior,
         control=control,
     )
@@ -166,7 +166,7 @@ def test_ffg_agent_matches_kalman_efe_agent_end_to_end():
         root=0,
         dims=(2,),
         couplings=(),
-        observations={0: GaussianObservation(sensor_model, sensor_noise)},
+        observations={0: GaussianObservation(observation_matrix, observation_noise)},
     )
     backend = CouplingGraphBackend(
         graph, (GaussianTransition(dynamics, dynamics_noise),), control=control
@@ -204,16 +204,16 @@ def _score_components(backend, belief, preference, candidates, target):
     ``_ffg_efe_step``) but returns the two ``G`` components, so a test can compare the
     full-``G`` argmin against a pragmatic-only one at the *same* ``R(μ⁺)``.
     """
-    sensor_model, _ = backend.observation_model  # C (constant)
+    observation_matrix, _ = backend.observation_model  # C (constant)
 
     def comp(action):
         predicted = backend.predicted_belief(belief, action)  # μ⁺, Σ⁺
-        sensor_noise = backend.observation_noise_at(predicted.mean)  # R(μ⁺)
+        observation_noise = backend.observation_noise_at(predicted.mean)  # R(μ⁺)
         _, parts = _ffg_efe_step(
             predicted.mean,
             predicted.cov,
-            sensor_model,
-            sensor_noise,
+            observation_matrix,
+            observation_noise,
             preference.goal,
             preference.precision,
             target,
@@ -271,9 +271,9 @@ class TestStateDependentSelection:
         rx, A, Q, C, B = _single_node_rx_backend(params)
         model = LinearGaussianModel(
             dynamics=A,
-            sensor_model=C,
+            observation_matrix=C,
             dynamics_noise=Q,
-            sensor_noise=params["R0"],  # placeholder; overridden by observation
+            observation_noise=params["R0"],  # placeholder; overridden by observation
             prior=Belief(mean=np.zeros(2), cov=np.eye(2)),
             control=B,
             observation=CallableSensor(C, _rx_noise, params),

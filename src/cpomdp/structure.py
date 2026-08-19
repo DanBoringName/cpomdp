@@ -186,7 +186,7 @@ class ModelStructure:
             self.channels, n_observations, "channel", require_cover=False
         )
         a_mat = np.asarray(model.dynamics)
-        c_mat = np.asarray(model.sensor_model)
+        c_mat = np.asarray(model.observation_matrix)
         # fixed Q only — a state-dependent Q(x) has no single matrix to check (skip it).
         q_mat = (
             None

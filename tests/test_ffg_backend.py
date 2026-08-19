@@ -854,9 +854,9 @@ class TestStateDependentSensing:
         rx = _build_rx((2,), [], {0: (C, _rx_noise, params)}, [(A, Q)], control=B)
         model = LinearGaussianModel(
             dynamics=A,
-            sensor_model=C,
+            observation_matrix=C,
             dynamics_noise=Q,
-            sensor_noise=params["R0"],  # placeholder; overridden by observation
+            observation_noise=params["R0"],  # placeholder; overridden by observation
             prior=Belief(mean=np.zeros(2), cov=np.eye(2)),
             control=B,
             observation=CallableSensor(C, _rx_noise, params),

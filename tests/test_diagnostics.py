@@ -45,9 +45,9 @@ def ignores_the_state(x, params):
 def chain(noise_fn, *, control=1.0):
     model = LinearGaussianModel(
         dynamics=[[1.0]],
-        sensor_model=[[1.0]],
+        observation_matrix=[[1.0]],
         dynamics_noise=[[1.0]],
-        sensor_noise=[[1.0]],
+        observation_noise=[[1.0]],
         prior=Belief([0.0], [[1.0]]),
         control=[[control]],
         observation=CallableSensor([[1.0]], noise_fn, None),
@@ -135,9 +135,9 @@ class TestProbeFlatModel:
     def test_fixed_sensor_flattens(self):
         model = LinearGaussianModel(
             dynamics=[[1.0]],
-            sensor_model=[[1.0]],
+            observation_matrix=[[1.0]],
             dynamics_noise=[[1.0]],
-            sensor_noise=[[1.0]],
+            observation_noise=[[1.0]],
             prior=Belief([0.0], [[1.0]]),
             control=[[1.0]],
         )

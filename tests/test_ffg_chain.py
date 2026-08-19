@@ -46,9 +46,9 @@ def _spd(rng, n):
 def _scalar_model():
     return LinearGaussianModel(
         dynamics=[[A]],
-        sensor_model=[[C]],
+        observation_matrix=[[C]],
         dynamics_noise=[[Q]],
-        sensor_noise=[[R]],
+        observation_noise=[[R]],
         prior=Belief(mean=[PRIOR_MEAN], cov=[[PRIOR_VAR]]),
     )
 
@@ -58,9 +58,9 @@ def _random_chain_model(rng, n, m, *, with_control=False):
     control = rng.standard_normal((n, 1)) if with_control else None
     return LinearGaussianModel(
         dynamics=0.5 * rng.standard_normal((n, n)),
-        sensor_model=rng.standard_normal((m, n)),
+        observation_matrix=rng.standard_normal((m, n)),
         dynamics_noise=_spd(rng, n),
-        sensor_noise=_spd(rng, m),
+        observation_noise=_spd(rng, m),
         prior=Belief(mean=rng.standard_normal(n), cov=_spd(rng, n)),
         control=control,
     )
@@ -167,9 +167,9 @@ class TestChainBackendScope:
         # Q = 0 has no information form (the transition factor inverts Q).
         model = LinearGaussianModel(
             dynamics=[[A]],
-            sensor_model=[[C]],
+            observation_matrix=[[C]],
             dynamics_noise=[[0.0]],
-            sensor_noise=[[R]],
+            observation_noise=[[R]],
             prior=Belief(mean=[0.0], cov=[[1.0]]),
         )
         with pytest.raises(ValueError, match="positive-definite"):
@@ -201,13 +201,13 @@ _QPROC = {"base": jnp.array([[0.05]]), "scale": jnp.array(0.4)}
 def _callable_sensor_scalar_model(*, control=None):
     return LinearGaussianModel(
         dynamics=[[A]],
-        sensor_model=[[C]],
+        observation_matrix=[[C]],
         dynamics_noise=[[Q]],
-        sensor_noise=[[R]],
+        observation_noise=[[R]],
         prior=Belief(mean=[PRIOR_MEAN], cov=[[PRIOR_VAR]]),
         control=control,
         observation=CallableSensor(
-            sensor_model=[[C]], noise_fn=_quad_noise, noise_params=_QUAD
+            observation_matrix=[[C]], noise_fn=_quad_noise, noise_params=_QUAD
         ),
     )
 
@@ -215,9 +215,9 @@ def _callable_sensor_scalar_model(*, control=None):
 def _callable_process_scalar_model(*, control=None):
     return LinearGaussianModel(
         dynamics=[[A]],
-        sensor_model=[[C]],
+        observation_matrix=[[C]],
         dynamics_noise=[[Q]],
-        sensor_noise=[[R]],
+        observation_noise=[[R]],
         prior=Belief(mean=[PRIOR_MEAN], cov=[[PRIOR_VAR]]),
         control=control,
         process_noise=CallableProcessNoise(_quad_process, _QPROC),
@@ -227,18 +227,18 @@ def _callable_process_scalar_model(*, control=None):
 class TestChainCallableSensorParity:
     def test_constant_callable_reduces_to_fixed_chain(self):
         # Safety net, green before and after: a CallableSensor whose R ignores x and
-        # equals the model's fixed sensor_noise must filter exactly like the
+        # equals the model's fixed observation_noise must filter exactly like the
         # fixed-sensor model. Guards the gating and the fixed hot path.
         r0 = [[R]]
         fixed = _scalar_model()
         callable_model = LinearGaussianModel(
             dynamics=[[A]],
-            sensor_model=[[C]],
+            observation_matrix=[[C]],
             dynamics_noise=[[Q]],
-            sensor_noise=r0,
+            observation_noise=r0,
             prior=Belief(mean=[PRIOR_MEAN], cov=[[PRIOR_VAR]]),
             observation=CallableSensor(
-                sensor_model=[[C]],
+                observation_matrix=[[C]],
                 noise_fn=lambda x, p: jnp.array(r0),
                 noise_params=None,
             ),
@@ -266,12 +266,14 @@ class TestChainCallableSensorParity:
         # can't, with R varying through the position component.
         model = LinearGaussianModel(
             dynamics=[[1.0, 1.0], [0.0, 1.0]],
-            sensor_model=[[1.0, 0.0]],
+            observation_matrix=[[1.0, 0.0]],
             dynamics_noise=[[1e-3, 0.0], [0.0, 1e-3]],
-            sensor_noise=[[1.0]],
+            observation_noise=[[1.0]],
             prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
             observation=CallableSensor(
-                sensor_model=[[1.0, 0.0]], noise_fn=_quad_noise, noise_params=_QUAD
+                observation_matrix=[[1.0, 0.0]],
+                noise_fn=_quad_noise,
+                noise_params=_QUAD,
             ),
         )
         kalman, chain = KalmanBackend(model), ChainBackend(model)
@@ -300,9 +302,9 @@ class TestChainCallableProcessNoiseParity:
         fixed = _scalar_model()
         callable_model = LinearGaussianModel(
             dynamics=[[A]],
-            sensor_model=[[C]],
+            observation_matrix=[[C]],
             dynamics_noise=q0,
-            sensor_noise=[[R]],
+            observation_noise=[[R]],
             prior=Belief(mean=[PRIOR_MEAN], cov=[[PRIOR_VAR]]),
             process_noise=CallableProcessNoise(lambda x, p: jnp.array(q0), None),
         )
@@ -329,9 +331,9 @@ class TestChainCallableProcessNoiseParity:
         q2d = {"base": jnp.eye(2) * 0.05, "scale": jnp.array(0.4)}
         model = LinearGaussianModel(
             dynamics=[[1.0, 1.0], [0.0, 1.0]],
-            sensor_model=[[1.0, 0.0]],
+            observation_matrix=[[1.0, 0.0]],
             dynamics_noise=[[1e-3, 0.0], [0.0, 1e-3]],
-            sensor_noise=[[1.0]],
+            observation_noise=[[1.0]],
             prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
             process_noise=CallableProcessNoise(_quad_process, q2d),
         )
@@ -377,14 +379,14 @@ def _cross_block_model(*, control=None):
     on A alone — the shape ADR-013's displacement channel needs."""
     c_disp = jnp.array([[-1.0, 0.0, 1.0, 0.0], [0.0, -1.0, 0.0, 1.0]])
     sensor = CallableSensor(
-        sensor_model=c_disp, noise_fn=_cross_block_noise, noise_params=_CROSS
+        observation_matrix=c_disp, noise_fn=_cross_block_noise, noise_params=_CROSS
     )
     return LinearGaussianModel(
         dynamics=jnp.eye(4),
         control=control,
-        sensor_model=c_disp,
+        observation_matrix=c_disp,
         dynamics_noise=jnp.diag(jnp.array([0.5, 0.5, 1e-3, 1e-3])),
-        sensor_noise=jnp.eye(2),
+        observation_noise=jnp.eye(2),
         prior=Belief(mean=jnp.array([0.0, 0.0, 1.0, 1.0]), cov=jnp.eye(4)),
         observation=sensor,
     )

@@ -39,32 +39,32 @@ def predicted_cov(prior_cov, dynamics, process_noise):
     )
 
 
-def posterior_cov(pred_cov, sensor_model, sensor_noise):
+def posterior_cov(pred_cov, observation_matrix, observation_noise):
     """Σ⁺ = Σ⁻ − Σ⁻ Cᵀ S⁻¹ C Σ⁻, with S = C Σ⁻ Cᵀ + R."""
     cov = np.asarray(pred_cov, dtype=float)
-    c = np.asarray(sensor_model, dtype=float)
-    r = np.asarray(sensor_noise, dtype=float)
+    c = np.asarray(observation_matrix, dtype=float)
+    r = np.asarray(observation_noise, dtype=float)
     s = c @ cov @ c.T + r
     return cov - cov @ c.T @ np.linalg.solve(s, c @ cov)
 
 
-def epistemic(pred_cov, sensor_model, sensor_noise):
+def epistemic(pred_cov, observation_matrix, observation_noise):
     """½ ln det S − ½ ln det R, in nats."""
     cov = np.asarray(pred_cov, dtype=float)
-    c = np.asarray(sensor_model, dtype=float)
-    r = np.asarray(sensor_noise, dtype=float)
+    c = np.asarray(observation_matrix, dtype=float)
+    r = np.asarray(observation_noise, dtype=float)
     s = c @ cov @ c.T + r
     return 0.5 * (np.linalg.slogdet(s)[1] - np.linalg.slogdet(r)[1])
 
 
-def pin_noise(pred_cov, sensor_model, post_cov):
+def pin_noise(pred_cov, observation_matrix, post_cov):
     """The noise covariance a posterior implies, recovered through the observation map.
 
     Equal posteriors are equal precisions, so `Cᵀ R⁻¹ C = Λ⁺ − Λ⁻`. Multiplying by `C`
     on the left and `Cᵀ` on the right turns that into `(C Cᵀ) R⁻¹ (C Cᵀ)`, which
     inverts whenever `C` has full row rank — and then `R` is determined.
     """
-    c = np.asarray(sensor_model, dtype=float)
+    c = np.asarray(observation_matrix, dtype=float)
     info = np.linalg.inv(post_cov) - np.linalg.inv(pred_cov)  # Cᵀ R⁻¹ C
     gram_inv = np.linalg.inv(c @ c.T)
     return np.linalg.inv(gram_inv @ c @ info @ c.T @ gram_inv)
@@ -84,9 +84,9 @@ def scalar_chain(*, dynamics=1.0, control=1.0, process=1.0, prior_var=1.0, mean=
     """The scalar chain the worked example uses: A = B = C = Q = 1, R(x) = 1 + x²."""
     model = LinearGaussianModel(
         dynamics=[[dynamics]],
-        sensor_model=[[1.0]],
+        observation_matrix=[[1.0]],
         dynamics_noise=[[process]],
-        sensor_noise=[[1.0]],
+        observation_noise=[[1.0]],
         prior=Belief([mean], [[prior_var]]),
         control=[[control]],
         observation=CallableSensor([[1.0]], range_noise, RANGE_NOISE_PARAMS),
@@ -153,9 +153,9 @@ class TestCollapse:
     def test_fixed_sensor_epistemic_is_action_invariant(self):
         model = LinearGaussianModel(
             dynamics=[[1.0]],
-            sensor_model=[[1.0]],
+            observation_matrix=[[1.0]],
             dynamics_noise=[[1.0]],
-            sensor_noise=[[1.0]],
+            observation_noise=[[1.0]],
             prior=Belief([0.0], [[1.0]]),
             control=[[1.0]],
         )
@@ -325,9 +325,9 @@ class TestPlanningReductionEquivalence:
     def test_fixed_noise_leaves_the_covariance_policy_independent(self):
         model = LinearGaussianModel(
             dynamics=[[1.0]],
-            sensor_model=[[1.0]],
+            observation_matrix=[[1.0]],
             dynamics_noise=[[1.0]],
-            sensor_noise=[[1.0]],
+            observation_noise=[[1.0]],
             prior=Belief([0.0], [[1.0]]),
             control=[[1.0]],
         )

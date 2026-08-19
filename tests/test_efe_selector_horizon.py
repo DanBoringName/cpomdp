@@ -40,7 +40,7 @@ def _well_noise(x, params):
 def _model():
     # 1-D single integrator with an R(x) beacon at 1.5 (the corridor; p = 1).
     sensor = CallableSensor(
-        sensor_model=[[1.0]],
+        observation_matrix=[[1.0]],
         noise_fn=_well_noise,
         noise_params={
             "beacon": jnp.array(1.5),
@@ -51,9 +51,9 @@ def _model():
     )
     return LinearGaussianModel(
         dynamics=[[1.0]],
-        sensor_model=[[1.0]],
+        observation_matrix=[[1.0]],
         dynamics_noise=[[0.05]],
-        sensor_noise=[[0.3]],
+        observation_noise=[[0.3]],
         prior=Belief(mean=[0.0], cov=[[0.5]]),
         control=[[1.0]],
         observation=sensor,
@@ -180,9 +180,9 @@ class TestEFESelectorValidation:
         # EFESelector's grid is 1-D; p>1 must error clearly, not crash cryptically.
         m2 = LinearGaussianModel(
             dynamics=[[1.0, 0.0], [0.0, 1.0]],
-            sensor_model=[[1.0, 0.0]],
+            observation_matrix=[[1.0, 0.0]],
             dynamics_noise=[[0.1, 0.0], [0.0, 0.1]],
-            sensor_noise=[[0.3]],
+            observation_noise=[[0.3]],
             prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
             control=[[1.0, 0.0], [0.0, 1.0]],  # p = 2
         )
@@ -198,9 +198,9 @@ class TestEFESelectorValidation:
         belief = Belief(mean=[0.0], cov=[[0.5]])
         model = LinearGaussianModel(
             dynamics=[[1.0]],
-            sensor_model=[[1.0]],
+            observation_matrix=[[1.0]],
             dynamics_noise=[[0.05]],
-            sensor_noise=[[0.3]],
+            observation_noise=[[0.3]],
             prior=belief,
             control=[[1.0]],
             observation=CallableSensor([[1.0]], half_neg, {}),

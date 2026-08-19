@@ -71,6 +71,23 @@ an exposure rather than a result.
 
 ### Changed
 
+- **Breaking:** `sensor_model` is now `observation_matrix`, on the same classes plus
+  `_JointObservation` and `epistemic_value`. C is the *observation matrix* in the same
+  literature that gives R its name, so the two halves of the measurement equation now
+  read from one vocabulary. It cannot be called `observation_model`: that name is taken
+  by `InferenceBackend.observation_model()`, which returns the `(C, R)` pair rather than
+  C alone. The 2026-06-13 sketch wanted plain `observation` for C, which the state-
+  dependent sensor field later claimed. The `.C` alias is unchanged, and no numerical
+  behaviour moved.
+- **Breaking:** `sensor_noise` is now `observation_noise`, on `LinearGaussianModel`,
+  `FixedSensor`, `CallableSensor`, the FFG observation factors and `epistemic_value`.
+  R is the *observation noise covariance* in the state-space literature this library
+  writes in, and it is the noun in "state-dependent observation noise", the phrase the
+  `R(x)` work is published under. The backends already said it. `observation_noise_at`
+  has always been the state-dependent accessor, so the model was the one place still
+  calling R a sensor quantity. The 2026-06-13 naming sketch in `DECISIONS.md` proposed
+  `observation_noise` at the outset. The code drifted. The `.R` alias is unchanged, and
+  no numerical behaviour moved.
 - The repository is a uv workspace. cpomdp stays the root; `packages/warrantlib` and
   `research` are members, sharing one `uv.lock` and one `.venv`. `warrantlib` publishes to
   PyPI beside cpomdp. `cpomdp-research` never publishes, and holds the check suites along

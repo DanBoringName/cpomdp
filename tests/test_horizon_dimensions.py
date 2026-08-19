@@ -64,7 +64,7 @@ MAX_H = 4  # the finder's scan bracket. Each horizon is a fresh trace, so keep i
 # actually build.
 _cue_noise = cue_maze.cue_noise
 _CUE_PARAMS = cue_maze.sensor_params(N_DIMS, CUE)
-_ARENA_C = cue_maze.sensor_model(N_DIMS)
+_ARENA_C = cue_maze.observation_matrix(N_DIMS)
 
 
 def _coupled_backend():
@@ -135,9 +135,11 @@ def _flat_pair():
     backend = CouplingGraphBackend(graph, (GaussianTransition(a, q),), control=b)
     model = LinearGaussianModel(
         dynamics=a,
-        sensor_model=_ARENA_C,
+        observation_matrix=_ARENA_C,
         dynamics_noise=q,
-        sensor_noise=np.eye(3),  # placeholder under a callable sensor, ignored there
+        observation_noise=np.eye(
+            3
+        ),  # placeholder under a callable sensor, ignored there
         prior=Belief(mean=np.zeros(4), cov=np.eye(4)),
         control=b,
         observation=CallableSensor(_ARENA_C, _cue_noise, _CUE_PARAMS),
@@ -179,11 +181,11 @@ class TestFfgRolloutAtMultiDimAction:
         g, parts = policy_efe_ffg(backend, belief, policy, pref, target=target)
 
         predicted = backend.predicted_belief(belief, policy[0])
-        sensor_model, _ = backend.observation_model
+        observation_matrix, _ = backend.observation_model
         g_ref, parts_ref = _ffg_efe_step(
             predicted.mean,
             predicted.cov,
-            sensor_model,
+            observation_matrix,
             backend.observation_noise_at(predicted.mean),
             pref.goal,
             pref.precision,

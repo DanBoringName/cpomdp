@@ -55,11 +55,11 @@ class _JointObservation:
 
     def __init__(
         self,
-        sensor_model: jax.Array,
+        observation_matrix: jax.Array,
         factors: tuple[ObservationFactor, ...],
         blocks: tuple[tuple[int, int], ...],
     ) -> None:
-        self.sensor_model = sensor_model
+        self.observation_matrix = observation_matrix
         self.factors = factors
         self.blocks = blocks
         self.is_fixed = all(f.is_fixed for f in factors)
@@ -74,8 +74,8 @@ class _JointObservation:
             for factor, (lo, hi) in zip(self.factors, self.blocks, strict=True)
         ]
         if not blocks:
-            return self.sensor_model, jnp.zeros((0, 0))
-        return self.sensor_model, jax.scipy.linalg.block_diag(*blocks)
+            return self.observation_matrix, jnp.zeros((0, 0))
+        return self.observation_matrix, jax.scipy.linalg.block_diag(*blocks)
 
     def gaussianize(
         self, x: ArrayLike, sigma: Float64[jax.Array, "n n"]
@@ -84,23 +84,23 @@ class _JointObservation:
     ]:
         """Linear ingredients ``(C·x, C·Σ·Cᵀ + R(x), R(x))``."""
         x = jnp.asarray(x, dtype=float)
-        sensor_model, sensor_noise = self.linearize(x)
+        observation_matrix, observation_noise = self.linearize(x)
         return (
-            sensor_model @ x,
-            sensor_model @ sigma @ sensor_model.T + sensor_noise,
-            sensor_noise,
+            observation_matrix @ x,
+            observation_matrix @ sigma @ observation_matrix.T + observation_noise,
+            observation_noise,
         )
 
     def tree_flatten(self):
         """Children: ``(C, factors)``; aux: the column spans."""
-        return (self.sensor_model, self.factors), self.blocks
+        return (self.observation_matrix, self.factors), self.blocks
 
     @classmethod
     def tree_unflatten(cls, aux_data, children) -> "_JointObservation":
         """Rebuild without re-deriving ``is_fixed`` from traced leaves."""
-        sensor_model, factors = children
+        observation_matrix, factors = children
         obj = object.__new__(cls)
-        obj.sensor_model = sensor_model
+        obj.observation_matrix = observation_matrix
         obj.factors = factors
         obj.blocks = aux_data
         obj.is_fixed = all(getattr(f, "is_fixed", True) for f in factors)
@@ -265,7 +265,7 @@ class CouplingGraphBackend:
         """
         layout, cursor = [], 0
         for node in sorted(self.graph.observations):
-            width = self.graph.observations[node].sensor_model.shape[0]
+            width = self.graph.observations[node].observation_matrix.shape[0]
             layout.append((node, cursor, cursor + width))
             cursor += width
         return tuple(layout), cursor
@@ -284,8 +284,8 @@ class CouplingGraphBackend:
         rows, noise_blocks = [], []
         for node, _lo, _hi in self._obs_layout:
             obs = self.graph.observations[node]
-            embedded = jnp.zeros((obs.sensor_model.shape[0], self.n_total))
-            embedded = embedded.at[:, self._block(node)].set(obs.sensor_model)
+            embedded = jnp.zeros((obs.observation_matrix.shape[0], self.n_total))
+            embedded = embedded.at[:, self._block(node)].set(obs.observation_matrix)
             rows.append(embedded)
             noise_blocks.append(self._representative_noise(obs))
         return rows, noise_blocks
@@ -299,7 +299,7 @@ class CouplingGraphBackend:
         never as a filter value (the filter linearizes ``R`` at μ⁺ per step). Reads it
         through the shared ``linearize`` seam, so no per-type branch.
         """
-        node_dim = obs.sensor_model.shape[1]
+        node_dim = obs.observation_matrix.shape[1]
         return obs.linearize(jnp.zeros(node_dim))[1]  # R (fixed) or R(0) (state-dep.)
 
     def _build_validation_model(self) -> LinearGaussianModel:
@@ -313,14 +313,14 @@ class CouplingGraphBackend:
 
         A graph with any state-dependent sensor also gets a ``_JointObservation``, so
         the model's ``R`` follows the state rather than sitting frozen at the
-        representative value the ``sensor_noise`` block carries for shape.
+        representative value the ``observation_noise`` block carries for shape.
         """
         rows, noise_blocks = self._real_observation_blocks()
-        sensor_model = jnp.vstack(rows) if rows else jnp.zeros((0, self.n_total))
+        observation_matrix = jnp.vstack(rows) if rows else jnp.zeros((0, self.n_total))
         if noise_blocks:
-            sensor_noise = jax.scipy.linalg.block_diag(*noise_blocks)
+            observation_noise = jax.scipy.linalg.block_diag(*noise_blocks)
         else:
-            sensor_noise = jnp.zeros((0, 0))
+            observation_noise = jnp.zeros((0, 0))
         factors = tuple(
             self.graph.observations[node] for node, _lo, _hi in self._obs_layout
         )
@@ -331,13 +331,13 @@ class CouplingGraphBackend:
         observation = (
             None
             if all(f.is_fixed for f in factors)
-            else _JointObservation(sensor_model, factors, spans)
+            else _JointObservation(observation_matrix, factors, spans)
         )
         return LinearGaussianModel(
             dynamics=self._transition.dynamics,
-            sensor_model=sensor_model,
+            observation_matrix=observation_matrix,
             dynamics_noise=self._transition.dynamics_noise,
-            sensor_noise=sensor_noise,
+            observation_noise=observation_noise,
             prior=Belief(jnp.zeros(self.n_total), jnp.eye(self.n_total)),
             control=self._control,
             observation=observation,
@@ -799,7 +799,7 @@ class CouplingGraphBackend:
         observations ``to_flat_model`` adds; the EFE pragmatic and epistemic terms
         both read them.
         """
-        return self._flat_model.sensor_model, self._flat_model.sensor_noise
+        return self._flat_model.observation_matrix, self._flat_model.observation_noise
 
     def predicted_belief(
         self, prior: Belief, action: ArrayLike | None = None
@@ -867,9 +867,9 @@ class CouplingGraphBackend:
             noise_blocks.append(edge.factor.coupling_noise)
         return LinearGaussianModel(
             dynamics=self._transition.dynamics,
-            sensor_model=jnp.vstack(rows),
+            observation_matrix=jnp.vstack(rows),
             dynamics_noise=self._transition.dynamics_noise,
-            sensor_noise=jax.scipy.linalg.block_diag(*noise_blocks),
+            observation_noise=jax.scipy.linalg.block_diag(*noise_blocks),
             prior=Belief(jnp.zeros(self.n_total), jnp.eye(self.n_total)),
             control=self._control,
             observation=observation,

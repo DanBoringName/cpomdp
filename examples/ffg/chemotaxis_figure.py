@@ -60,7 +60,7 @@ def _topology(graph) -> tuple[dict[int, tuple[int, float, float]], dict[int, flo
         for c in graph.couplings
     }
     obs_r = {
-        node: float(np.asarray(o.sensor_noise)[0, 0])
+        node: float(np.asarray(o.observation_noise)[0, 0])
         for node, o in graph.observations.items()
     }
     return edges, obs_r
@@ -97,9 +97,9 @@ def _infer_flattened(edges, obs_r) -> Belief:
     y = np.array([READINGS[node] for node in nodes])
     model = LinearGaussianModel(
         dynamics=np.eye(N_NODES),
-        sensor_model=c,
+        observation_matrix=c,
         dynamics_noise=np.zeros((N_NODES, N_NODES)),
-        sensor_noise=r,
+        observation_noise=r,
         prior=Belief(mean=mean, cov=cov),
     )
     posterior = KalmanBackend(model).infer_states(y, Belief(mean, cov))

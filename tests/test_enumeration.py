@@ -60,24 +60,25 @@ def _model():
     """A plain fixed-sensor model, p = 1."""
     return LinearGaussianModel(
         dynamics=[[1.0, 0.1], [0.0, 1.0]],
-        sensor_model=[[1.0, 0.0]],
+        observation_matrix=[[1.0, 0.0]],
         dynamics_noise=[[0.1, 0.0], [0.0, 0.1]],
-        sensor_noise=[[0.5]],
+        observation_noise=[[0.5]],
         prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
         control=[[0.0], [1.0]],
     )
 
 
 def _beacon_model():
-    """1-D R(x): the action moves position directly, sensor noise is low near +2.
+    """1-D R(x): the action moves position directly, observation noise is low near +2.
 
     Action maps straight to position (control [[1.0]], sensor [[1.0]]), so every action
-    reaches an observation. Sensor noise falls near the beacon at +2, so reaching that
+    reaches an observation. Observation noise falls near the beacon at +2, so
+    reaching that
     low-noise region buys epistemic value the goal-observation at 0 does not. The
     optimum is to get to the beacon and hold, which no single held action can do.
     """
     sensor = CallableSensor(
-        sensor_model=[[1.0]],
+        observation_matrix=[[1.0]],
         noise_fn=lambda x, p: jnp.array(
             [[p["base"] + p["sharp"] * (x[0] - p["beacon"]) ** 2]]
         ),
@@ -89,9 +90,9 @@ def _beacon_model():
     )
     return LinearGaussianModel(
         dynamics=[[1.0]],
-        sensor_model=[[1.0]],
+        observation_matrix=[[1.0]],
         dynamics_noise=[[0.05]],
-        sensor_noise=[[0.5]],
+        observation_noise=[[0.5]],
         prior=Belief(mean=[0.0], cov=[[1.0]]),
         control=[[1.0]],
         observation=sensor,
@@ -290,9 +291,9 @@ class TestCostAndTransforms:
         # p = 2 — a set the grid EFESelector rejects (it is 1-D only).
         model = LinearGaussianModel(
             dynamics=[[1.0, 0.0], [0.0, 1.0]],
-            sensor_model=[[1.0, 0.0]],
+            observation_matrix=[[1.0, 0.0]],
             dynamics_noise=[[0.1, 0.0], [0.0, 0.1]],
-            sensor_noise=[[0.5]],
+            observation_noise=[[0.5]],
             prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
             control=[[1.0, 0.0], [0.0, 1.0]],  # (n=2, p=2)
         )
@@ -310,9 +311,9 @@ class TestValidation:
     def test_rejects_control_free_model(self):
         model = LinearGaussianModel(
             dynamics=[[1.0]],
-            sensor_model=[[1.0]],
+            observation_matrix=[[1.0]],
             dynamics_noise=[[0.1]],
-            sensor_noise=[[0.5]],
+            observation_noise=[[0.5]],
             prior=Belief(mean=[0.0], cov=[[1.0]]),
             control=None,
         )

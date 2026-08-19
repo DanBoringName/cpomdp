@@ -21,13 +21,13 @@ The whole change, before -> after, in one picture (ADR-013)::
 
     # v0.3: the channel reads the agent's OWN position, and the noise it carries
     # is keyed on that SAME position -- self-revealing.
-    sensor_model = I                       # C: o = agent_xy
+    observation_matrix = I                       # C: o = agent_xy
     noise_fn(x, p) = beacon_noise(x, p)    # R(x): keyed on the channel's own block
 
     # v0.4 (here): the channel reads a DIFFERENT block (food - agent), but the
     # noise is keyed on the SAME agent-position block as before -- the beacon
     # mechanic itself is UNCHANGED, only what it is wired to reveal.
-    sensor_model = [-I, I]                  # C: o = food_xy - agent_xy
+    observation_matrix = [-I, I]                  # C: o = food_xy - agent_xy
     noise_fn(x, p) = beacon_noise(x[:2], p)  # R(x): still keyed on agent_xy only
 
 State is now 4-D: ``[agent_xy, food_xy]``. The sensor still has the agent read its
@@ -186,7 +186,8 @@ def _beacon_params() -> dict[str, float]:
 def build_model() -> LinearGaussianModel:
     """The 4-D ``[agent_xy, food_xy]`` model: two sensor channels, one beacon.
 
-    ``sensor_model`` (C) is 4x4: rows 0-1 read the agent block directly (``o_self``);
+    ``observation_matrix`` (C) is 4x4: rows 0-1 read the agent block directly
+    (``o_self``);
     rows 2-3 read ``food_xy - agent_xy`` (``o_disp``). ``noise_fn`` returns a 4x4
     block-diagonal R(x): a FIXED ``R_SELF`` block (proprioception never sharpens or
     dulls) and the existing ``beacon_noise`` block, evaluated on ``x[:2]`` — the
@@ -195,7 +196,7 @@ def build_model() -> LinearGaussianModel:
     """
     c_self = jnp.array([[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0]])
     c_disp = jnp.array([[-1.0, 0.0, 1.0, 0.0], [0.0, -1.0, 0.0, 1.0]])
-    sensor_model = jnp.concatenate([c_self, c_disp], axis=0)  # (4, 4)
+    observation_matrix = jnp.concatenate([c_self, c_disp], axis=0)  # (4, 4)
 
     beacon_params = _beacon_params()
 
@@ -205,7 +206,9 @@ def build_model() -> LinearGaussianModel:
         return jax.scipy.linalg.block_diag(r_self, r_disp)
 
     sensor = CallableSensor(
-        sensor_model=sensor_model, noise_fn=noise_fn, noise_params=beacon_params
+        observation_matrix=observation_matrix,
+        noise_fn=noise_fn,
+        noise_params=beacon_params,
     )
 
     dynamics = jnp.eye(4)  # agent: single integrator; food: stationary
@@ -222,9 +225,10 @@ def build_model() -> LinearGaussianModel:
     return LinearGaussianModel(
         dynamics=dynamics,
         control=control,
-        sensor_model=sensor_model,
+        observation_matrix=observation_matrix,
         dynamics_noise=dynamics_noise,
-        sensor_noise=R_SELF * jnp.eye(4),  # nominal; the live R comes from `sensor`
+        observation_noise=R_SELF
+        * jnp.eye(4),  # nominal; the live R comes from `sensor`
         prior=Belief(mean=prior_mean, cov=prior_cov),
         observation=sensor,
     )

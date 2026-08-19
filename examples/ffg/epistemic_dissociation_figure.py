@@ -138,11 +138,11 @@ def build_backend(
     ``cue_x`` relocates the cue along the corridor. It defaults to ``CUE_X`` (the
     prior arm) for the headline run; Result 4 moves it off the pragmatic path.
     """
-    sensor_model = [[-1.0, 1.0], [-1.0, 1.0]]  # C: both channels read o = f - x
+    observation_matrix = [[-1.0, 1.0], [-1.0, 1.0]]  # C: both channels read o = f - x
     cue = (
-        CallableGaussianObservation(sensor_model, cue_noise, _cue_params(cue_x))
+        CallableGaussianObservation(observation_matrix, cue_noise, _cue_params(cue_x))
         if epistemic_alive
-        else GaussianObservation(sensor_model, _fixed_noise_at_prior(cue_x))
+        else GaussianObservation(observation_matrix, _fixed_noise_at_prior(cue_x))
     )
     context_to_arm = Coupling(
         parent=CONTEXT,
@@ -257,7 +257,7 @@ def _boundary_scan(alive: bool, cue_x: float = CUE_X) -> dict:
     from cpomdp.efe import _ffg_efe_step
 
     backend = build_backend(epistemic_alive=alive, cue_x=cue_x)
-    sensor_model, _ = backend.observation_model
+    observation_matrix, _ = backend.observation_model
     arm_block = list(backend.block(ARM_NODE))  # node 1's joint indices: [position, arm]
     goal = jnp.array([0.0, 0.0])
     precision = jnp.array([[GOAL_PRECISION, 0.0], [0.0, INFO_PRECISION]])
@@ -270,7 +270,7 @@ def _boundary_scan(alive: bool, cue_x: float = CUE_X) -> dict:
         efe, parts = _ffg_efe_step(
             predicted.mean,
             predicted.cov,
-            sensor_model,
+            observation_matrix,
             noise,
             goal,
             precision,

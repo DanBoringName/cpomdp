@@ -25,9 +25,9 @@ OBSERVATIONS = [1.2, 0.8, 1.5, 2.1, 1.9, 2.4, 2.0, 1.7]
 def _scalar_model():
     return LinearGaussianModel(
         dynamics=[[0.9]],
-        sensor_model=[[1.0]],
+        observation_matrix=[[1.0]],
         dynamics_noise=[[0.5]],
-        sensor_noise=[[1.0]],
+        observation_noise=[[1.0]],
         prior=Belief(mean=[0.0], cov=[[10.0]]),
     )
 
@@ -35,9 +35,9 @@ def _scalar_model():
 def _pos_vel_model():
     return LinearGaussianModel(
         dynamics=[[1.0, 1.0], [0.0, 1.0]],
-        sensor_model=[[1.0, 0.0]],
+        observation_matrix=[[1.0, 0.0]],
         dynamics_noise=[[0.01, 0.0], [0.0, 0.01]],
-        sensor_noise=[[1.0]],
+        observation_noise=[[1.0]],
         prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
     )
 
@@ -45,9 +45,9 @@ def _pos_vel_model():
 def _control_model():
     return LinearGaussianModel(
         dynamics=[[1.0]],
-        sensor_model=[[1.0]],
+        observation_matrix=[[1.0]],
         dynamics_noise=[[0.5]],
-        sensor_noise=[[1.0]],
+        observation_noise=[[1.0]],
         prior=Belief(mean=[0.0], cov=[[10.0]]),
         control=[[1.0]],
     )

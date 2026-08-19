@@ -28,9 +28,9 @@ def _kwargs(**over):
     """
     kwargs = {
         "dynamics": [[1.0, 0.1], [0.0, 1.0]],
-        "sensor_model": [[1.0, 0.0]],
+        "observation_matrix": [[1.0, 0.0]],
         "dynamics_noise": [[0.1, 0.0], [0.0, 0.1]],
-        "sensor_noise": [[1.0]],
+        "observation_noise": [[1.0]],
         "prior": Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
     }
     kwargs.update(over)
@@ -58,9 +58,9 @@ def _block_kwargs(**over):
             [0.0, 0.0, 0.8, 0.2],
             [0.0, 0.0, 0.0, 0.8],
         ],
-        "sensor_model": [[1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]],
+        "observation_matrix": [[1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]],
         "dynamics_noise": 0.1 * jnp.eye(4),
-        "sensor_noise": jnp.eye(2),
+        "observation_noise": jnp.eye(2),
         "prior": Belief(mean=[0.0, 0.0, 0.0, 0.0], cov=jnp.eye(4)),
         "structure": ModelStructure.from_dicts(
             factors={"f0": [0, 1], "f1": [2, 3]}, channels={"y0": [0], "y1": [1]}
@@ -297,7 +297,9 @@ class TestValidateSparsity:
             s.validate(bad)
 
     def test_channel_cross_contamination_fails(self):
-        bad = _block_model(sensor_model=[[1.0, 0.0, 0.5, 0.0], [0.0, 0.0, 1.0, 0.0]])
+        bad = _block_model(
+            observation_matrix=[[1.0, 0.0, 0.5, 0.0], [0.0, 0.0, 1.0, 0.0]]
+        )
         s = bad.structure
         assert s is not None
         with pytest.raises(ValueError, match="single factor"):

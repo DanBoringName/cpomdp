@@ -42,7 +42,7 @@ def _spd(rng, n):
 
 
 def _constant_noise(x, params):
-    """R(x) = R0 for every x — the reduction back to a fixed sensor noise."""
+    """R(x) = R0 for every x — the reduction back to a fixed observation noise."""
     return params["R0"]
 
 
@@ -64,16 +64,16 @@ def _belief_as_canonical(mean, cov):
 class TestGaussianObservation:
     def test_stores_coerced_arrays(self):
         fac = GaussianObservation([[1.0, 0.0]], [[2.0]])
-        assert isinstance(fac.sensor_model, jax.Array)
-        np.testing.assert_array_equal(fac.sensor_model, [[1.0, 0.0]])
-        np.testing.assert_array_equal(fac.sensor_noise, [[2.0]])
+        assert isinstance(fac.observation_matrix, jax.Array)
+        np.testing.assert_array_equal(fac.observation_matrix, [[1.0, 0.0]])
+        np.testing.assert_array_equal(fac.observation_noise, [[2.0]])
 
-    def test_rejects_singular_sensor_noise(self):
+    def test_rejects_singular_observation_noise(self):
         # R is inverted in the message, so a singular R is rejected at construction.
         with pytest.raises(ValueError, match="positive-definite"):
             GaussianObservation([[1.0]], [[0.0]])
 
-    def test_rejects_sensor_noise_shape_mismatch(self):
+    def test_rejects_observation_noise_shape_mismatch(self):
         # C is 1xn (m=1) but R is 2x2 — R must be m x m.
         with pytest.raises(ValueError, match="match"):
             GaussianObservation([[1.0, 0.0]], [[1.0, 0.0], [0.0, 1.0]])
@@ -133,8 +133,8 @@ class TestCallableGaussianObservation:
     def test_stores_coerced_arrays(self):
         params = {"R0": jnp.array([[2.0]]), "gain": 0.5}
         fac = CallableGaussianObservation([[1.0, 0.0]], _scaled_noise, params)
-        assert isinstance(fac.sensor_model, jax.Array)
-        np.testing.assert_array_equal(fac.sensor_model, [[1.0, 0.0]])
+        assert isinstance(fac.observation_matrix, jax.Array)
+        np.testing.assert_array_equal(fac.observation_matrix, [[1.0, 0.0]])
         assert fac.noise_fn is _scaled_noise
 
     def test_rejects_non_pd_noise_at_probe(self):
@@ -236,7 +236,9 @@ class TestCallableGaussianObservation:
         assert any(np.asarray(leaf).shape == (1, 1) for leaf in leaves)  # R0 is a leaf
         rebuilt = jax.tree_util.tree_unflatten(treedef, leaves)
         assert rebuilt.noise_fn is _scaled_noise
-        np.testing.assert_array_equal(rebuilt.sensor_model, fac.sensor_model)
+        np.testing.assert_array_equal(
+            rebuilt.observation_matrix, fac.observation_matrix
+        )
 
     def test_jit_and_grad_through_message(self):
         params = {"R0": jnp.array([[1.0]]), "gain": 0.5}

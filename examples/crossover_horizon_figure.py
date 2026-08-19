@@ -149,7 +149,7 @@ CONTEXT_DIMS = 2  # the plane
 STATE_DIMS = 2 * CONTEXT_DIMS  # (position, goal)
 
 
-def sensor_model() -> np.ndarray:
+def observation_matrix() -> np.ndarray:
     """`C`: a commit row per axis reading `p − g`, then a row per axis reading `g`.
 
     Square and invertible, so the sensor carries no redundant channel. Position stays
@@ -207,7 +207,7 @@ def build_model(*, frozen_noise: float | None = None) -> LinearGaussianModel:
     process_noise = np.diag(  # Q
         [Q_POSITION] * CONTEXT_DIMS + [Q_GOAL] * CONTEXT_DIMS
     )
-    observed = sensor_model()  # C
+    observed = observation_matrix()  # C
     _require_full_row_rank(observed)
     pinned = R_DULL if frozen_noise is None else frozen_noise
     fixed_noise = np.diag([R_DULL] * CONTEXT_DIMS + [pinned] * CONTEXT_DIMS)
@@ -215,9 +215,9 @@ def build_model(*, frozen_noise: float | None = None) -> LinearGaussianModel:
     observation = None if frozen_noise is not None else live_sensor
     return LinearGaussianModel(
         dynamics=dynamics.tolist(),
-        sensor_model=observed.tolist(),
+        observation_matrix=observed.tolist(),
         dynamics_noise=process_noise.tolist(),
-        sensor_noise=fixed_noise.tolist(),
+        observation_noise=fixed_noise.tolist(),
         prior=start_belief(),
         control=control.tolist(),
         observation=observation,
@@ -437,7 +437,7 @@ def simulate(horizon: int, *, seed: int, n_steps: int = 12) -> dict:
         state = jnp.asarray(np.concatenate([position, truth]))
         noise = np.asarray(beacon_noise(state, sensor_params()))
         draw = np.linalg.cholesky(noise) @ rng.standard_normal(STATE_DIMS)
-        observation = sensor_model() @ np.concatenate([position, truth]) + draw
+        observation = observation_matrix() @ np.concatenate([position, truth]) + draw
         belief = backend.infer_states(
             jnp.asarray(observation), belief, action=jnp.asarray(action)
         )

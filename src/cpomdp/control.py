@@ -71,7 +71,7 @@ class LQRController:
 
     The two cost matrices are named for the preference they encode, not by LQR's
     traditional ``Q``/``R`` — those letters already mean the noise covariances on
-    the model (``dynamics_noise``/``sensor_noise``), the exact collision ADR-003
+    the model (``dynamics_noise``/``observation_noise``), the exact collision ADR-003
     warns about. The names are the same across the whole library: an ``Agent``
     hands these straight through to its controller.
 

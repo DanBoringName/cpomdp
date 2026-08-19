@@ -26,9 +26,9 @@ def _model(observation=None):
     # 2-state, 1-observation, 1-action, controllable.
     return LinearGaussianModel(
         dynamics=[[1.0, 0.1], [0.0, 1.0]],
-        sensor_model=[[1.0, 0.0]],
+        observation_matrix=[[1.0, 0.0]],
         dynamics_noise=[[0.1, 0.0], [0.0, 0.1]],
-        sensor_noise=[[0.5]],
+        observation_noise=[[0.5]],
         prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
         control=[[0.0], [1.0]],
         observation=observation,
@@ -53,8 +53,8 @@ def _numpy_efe(model, belief, action, goal, precision):
     A = np.asarray(model.dynamics)
     B = np.asarray(model.control)
     Q = np.asarray(model.dynamics_noise)
-    C = np.asarray(model.sensor_model)
-    R = np.asarray(model.sensor_noise)
+    C = np.asarray(model.observation_matrix)
+    R = np.asarray(model.observation_noise)
     mu = np.asarray(belief.mean)
     sigma = np.asarray(belief.cov)
     a = np.asarray(action, dtype=float)
@@ -97,9 +97,9 @@ class TestAgainstNumpyOracle:
     def test_raises_without_control(self):
         control_free = LinearGaussianModel(
             dynamics=[[1.0]],
-            sensor_model=[[1.0]],
+            observation_matrix=[[1.0]],
             dynamics_noise=[[0.1]],
-            sensor_noise=[[0.5]],
+            observation_noise=[[0.5]],
             prior=Belief(mean=[0.0], cov=[[1.0]]),
         )
         pref = Preference(goal=[0.0], precision=[[1.0]])
@@ -180,7 +180,7 @@ def _state_noise(x, params):
 
 def _callable_model():
     sensor = CallableSensor(
-        sensor_model=[[1.0, 0.0]],
+        observation_matrix=[[1.0, 0.0]],
         noise_fn=_state_noise,
         noise_params={"base": jnp.array(0.2), "slope": jnp.array(0.5)},
     )
@@ -249,9 +249,9 @@ class TestPrecisionControlsBalance:
         model = LinearGaussianModel(
             dynamics=[[1.0]],
             control=[[1.0]],
-            sensor_model=[[1.0]],
+            observation_matrix=[[1.0]],
             dynamics_noise=[[0.05]],
-            sensor_noise=[[0.3]],
+            observation_noise=[[0.3]],
             prior=Belief(mean=[0.0], cov=[[0.5]]),
             observation=CallableSensor([[1.0]], beacon_noise, {}),
         )
@@ -309,15 +309,15 @@ def _ramp_noise(x, params):
 def _ramp_model():
     # Single integrator: μ⁺ = μ + a, o⁺ = position, so a=±1 gives a TIED mean term.
     sensor = CallableSensor(
-        sensor_model=[[1.0]],
+        observation_matrix=[[1.0]],
         noise_fn=_ramp_noise,
         noise_params={"base": jnp.array(0.5), "rate": jnp.array(0.4)},
     )
     return LinearGaussianModel(
         dynamics=[[1.0]],
-        sensor_model=[[1.0]],
+        observation_matrix=[[1.0]],
         dynamics_noise=[[0.1]],
-        sensor_noise=[[0.5]],
+        observation_noise=[[0.5]],
         prior=Belief(mean=[0.0], cov=[[0.4]]),
         control=[[1.0]],
         observation=sensor,
@@ -429,9 +429,9 @@ def _internal_q_model():
     )
     return LinearGaussianModel(
         dynamics=[[1.0]],
-        sensor_model=[[1.0]],
+        observation_matrix=[[1.0]],
         dynamics_noise=[[0.1]],
-        sensor_noise=[[0.3]],  # R is FIXED (observation=None)
+        observation_noise=[[0.3]],  # R is FIXED (observation=None)
         prior=Belief(mean=[0.0], cov=[[0.2]]),
         control=[[1.0]],
         process_noise=pn,
@@ -486,9 +486,9 @@ class TestInternalProcessNoise:
         # process_noise=None must give a byte-identical Σ⁺/G to the matrix path.
         base = LinearGaussianModel(
             dynamics=[[1.0]],
-            sensor_model=[[1.0]],
+            observation_matrix=[[1.0]],
             dynamics_noise=[[0.1]],
-            sensor_noise=[[0.3]],
+            observation_noise=[[0.3]],
             prior=Belief(mean=[0.0], cov=[[0.2]]),
             control=[[1.0]],
         )
@@ -512,9 +512,9 @@ class TestInternalProcessNoise:
             pn = CallableProcessNoise(_q_well, params)
             model = LinearGaussianModel(
                 dynamics=[[1.0]],
-                sensor_model=[[1.0]],
+                observation_matrix=[[1.0]],
                 dynamics_noise=[[0.1]],
-                sensor_noise=[[0.3]],
+                observation_noise=[[0.3]],
                 prior=Belief(mean=[0.0], cov=[[0.2]]),
                 control=[[1.0]],
                 process_noise=pn,
@@ -543,9 +543,9 @@ def _flip_model():
     )
     return LinearGaussianModel(
         dynamics=[[1.0]],
-        sensor_model=[[1.0]],
+        observation_matrix=[[1.0]],
         dynamics_noise=[[0.1]],
-        sensor_noise=[[0.2]],
+        observation_noise=[[0.2]],
         prior=Belief(mean=[0.0], cov=[[0.1]]),
         control=[[1.0]],
         process_noise=pn,

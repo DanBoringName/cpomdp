@@ -172,7 +172,7 @@ class TestReachWalkDeclaredMembers:
         a_sense, a_myopic = _anchor_actions()
         from cpomdp.efe import _ffg_efe_step
 
-        sensor_model, _ = backend.observation_model
+        observation_matrix, _ = backend.observation_model
         eps, gees = [], []
         for action in np.asarray(CROSSOVER_ACTION_SET.actions):
             predicted = backend.predicted_belief(belief, jnp.asarray(action))
@@ -180,7 +180,7 @@ class TestReachWalkDeclaredMembers:
             g, parts = _ffg_efe_step(
                 predicted.mean,
                 predicted.cov,
-                sensor_model,
+                observation_matrix,
                 noise,
                 pref.goal,
                 pref.precision,

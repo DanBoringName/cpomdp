@@ -86,9 +86,9 @@ def _precision_well_noise(x, params):
 def _model(observation=None):
     return LinearGaussianModel(
         dynamics=DYNAMICS,
-        sensor_model=SENSOR,
+        observation_matrix=SENSOR,
         dynamics_noise=PROCESS_NOISE,
-        sensor_noise=FIXED_NOISE,
+        observation_noise=FIXED_NOISE,
         prior=BELIEF,
         control=CONTROL,
         observation=observation,

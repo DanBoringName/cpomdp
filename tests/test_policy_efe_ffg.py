@@ -74,9 +74,9 @@ def _single_node_pair(*, state_dependent):
     backend = CouplingGraphBackend(graph, (GaussianTransition(a, q),), control=b)
     model = LinearGaussianModel(
         dynamics=a,
-        sensor_model=c,
+        observation_matrix=c,
         dynamics_noise=q,
-        sensor_noise=r0,  # placeholder under a callable sensor; ignored there
+        observation_noise=r0,  # placeholder under a callable sensor; ignored there
         prior=Belief(mean=np.zeros(2), cov=np.eye(2)),
         control=b,
         observation=obs_flat,
@@ -140,13 +140,13 @@ class TestFfgH1ReducesToFfgEfeStep:
         g, parts = policy_efe_ffg(backend, belief, policy, pref, target=target)
 
         predicted = backend.predicted_belief(belief, policy[0])
-        sensor_noise = backend.observation_noise_at(predicted.mean)
-        sensor_model, _ = backend.observation_model
+        observation_noise = backend.observation_noise_at(predicted.mean)
+        observation_matrix, _ = backend.observation_model
         g_ref, parts_ref = _ffg_efe_step(
             predicted.mean,
             predicted.cov,
-            sensor_model,
-            sensor_noise,
+            observation_matrix,
+            observation_noise,
             pref.goal,
             pref.precision,
             target,

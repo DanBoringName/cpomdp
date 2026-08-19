@@ -28,9 +28,9 @@ def _point_mass_model():
     # LQR solve at all — control selection reads only dynamics + control.
     return LinearGaussianModel(
         dynamics=DYNAMICS,
-        sensor_model=[[1.0, 0.0]],  # observe position
+        observation_matrix=[[1.0, 0.0]],  # observe position
         dynamics_noise=[[1e-4, 0.0], [0.0, 1e-4]],
-        sensor_noise=[[1e-2]],
+        observation_noise=[[1e-2]],
         prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
         control=CONTROL,
     )
@@ -126,9 +126,9 @@ class TestLQRValidation:
     def test_rejects_model_without_control(self):
         model = LinearGaussianModel(
             dynamics=DYNAMICS,
-            sensor_model=[[1.0, 0.0]],
+            observation_matrix=[[1.0, 0.0]],
             dynamics_noise=[[1e-4, 0.0], [0.0, 1e-4]],
-            sensor_noise=[[1e-2]],
+            observation_noise=[[1e-2]],
             prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
         )  # no control matrix
         with pytest.raises(ValueError, match="control matrix"):

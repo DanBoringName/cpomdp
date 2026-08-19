@@ -12,9 +12,9 @@ def validate_covariance(
 ) -> None:
     """Square (2-D, n x n) + symmetric + positive-(semi-)definite check.
 
-    Shared by ``Belief.cov``, ``dynamics_noise``, ``sensor_noise`` and
+    Shared by ``Belief.cov``, ``dynamics_noise``, ``observation_noise`` and
     ``Preference.precision``. ``require_definite=True`` demands positive-*definite*
-    (``sensor_noise``: the EFE/Kalman epistemic term inverts it, and a noiseless
+    (``observation_noise``: the EFE/Kalman epistemic term inverts it, and a noiseless
     ``R=0`` sends the information gain to ``+inf``); the default is
     positive-*semi*-definite, where a degenerate zero-variance direction is a
     legitimate (if sharp) belief / deterministic noise. Enforced once here at the
