@@ -8,7 +8,11 @@ The code here follows Martin Fowler's refactoring practices and the SOLID
 principles. Test Driven Development is encouraged. If you develop something in
 the linear-Gaussian space try to also use an exact oracle. Naming conventions
 ideally spell out their function with a comment of their single letter
-counter-part (if they have one) e.g. `sensor_model` followed by `C`.
+counter-part (if they have one) e.g. `observation_matrix` followed by `C`.
+Where a few variables are parts of one thing, prefix them all with the name of
+that thing: `observation_matrix` and `observation_noise` are both parts of the
+observation channel, and while they're flat fields the prefix is the only thing
+saying so. That's the default rather than a hard rule. If it doesn't fit, it doesn't fit, no problem. This is as much a note to myself as anyone else.
 
 A PR has to clear the same bar. Code that is obviously machine-generated and
 dumped in without consideration of the previous points will be rejected.
