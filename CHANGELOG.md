@@ -71,6 +71,15 @@ an exposure rather than a result.
 
 ### Changed
 
+- **Breaking:** `sensor_noise` is now `observation_noise`, on `LinearGaussianModel`,
+  `FixedSensor`, `CallableSensor`, the FFG observation factors and `epistemic_value`.
+  R is the *observation noise covariance* in the state-space literature this library
+  writes in, and it is the noun in "state-dependent observation noise", the phrase the
+  `R(x)` work is published under. The backends already said it. `observation_noise_at`
+  has always been the state-dependent accessor, so the model was the one place still
+  calling R a sensor quantity. The 2026-06-13 naming sketch in `DECISIONS.md` proposed
+  `observation_noise` at the outset. The code drifted. The `.R` alias is unchanged, and
+  no numerical behaviour moved.
 - The repository is a uv workspace. cpomdp stays the root; `packages/warrantlib` and
   `research` are members, sharing one `uv.lock` and one `.venv`. `warrantlib` publishes to
   PyPI beside cpomdp. `cpomdp-research` never publishes, and holds the check suites along
