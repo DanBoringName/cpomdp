@@ -98,7 +98,7 @@ class VoidReason(Enum):
     registration records this as a precondition after a linear family silently produced
     the log of a negative number.
 
-    Local to ``research/checks`` rather than added to ``cpomdp.warrant``: a new export
+    Local to ``research.checks`` rather than added to ``warrantlib``: a new export
     there needs a ``docs/api`` page before anything can reference it, and these modules
     are not on the main suite. The value goes into ``CheckReport.detail``, so no
     parallel result type is introduced.

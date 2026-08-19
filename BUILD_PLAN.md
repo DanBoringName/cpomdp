@@ -104,7 +104,8 @@ over an infinite domain, so it samples. A *policy enumeration* over a declared f
 enumerates.
 v0.4.4 already encodes this: `EFESelector` prints `CORROBORATED`, `EnumeratedEfeSearch`
 prints `PROVED`. PR-1 extended the vocabulary to checks, added the missing third level,
-and shipped it as `cpomdp.warrant` (ADR-035). Import it; do not restate it.
+and shipped it as `warrantlib`, re-exported as `cpomdp.warrant` (ADR-035, ADR-039).
+Import it; do not restate it.
 
 ---
 
@@ -637,8 +638,8 @@ what makes the timing checkable.
       redefine `σ_max` against `c₆` or keep `f` as a bound that subtraction makes slack.
       Registered as open, since choosing now is choosing with the refit's outcome in view.
 
-**The checks that back it live in `research/checks/`.** Standalone modules run with
-`--check`, not on the `pytest` path, and each prints under `cpomdp.warrant`'s vocabulary.
+**The checks that back it live in `research.checks`.** Standalone modules run with
+`--check`, not on the `pytest` path, and each prints under `warrantlib`'s vocabulary.
 They exist because the scripts that produced the original 28 `c₄` cases were lost and only
 prose survived them, which is a failure mode worth not repeating.
 

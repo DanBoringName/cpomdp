@@ -55,6 +55,7 @@ import sys
 from collections.abc import Callable, Sequence
 
 import sympy
+
 from research.checks.series_kernel import (
     CONSTRUCTION_SOURCE,
     DELTA,
@@ -78,8 +79,7 @@ from research.checks.series_kernel import (
     report_condition,
     report_identity,
 )
-
-from cpomdp.warrant import CheckReport, Outcome, check_summary
+from warrantlib import CheckReport, Outcome, check_summary
 
 __all__ = ["run_checks"]
 

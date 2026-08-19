@@ -18,7 +18,7 @@ Two axes, and both must be stated to fix a claim's status. **Warrant** says how 
 | `CERTIFIED` | validated numerics over a compact domain (Prover 3 · validated) | the proved bound, quoted with the claim |
 | `CORROBORATED` | sampling a continuum (Prover 3 · sample) | none. Settles existence, refutes a universal by counterexample, decides no universal at any sample count |
 
-`cpomdp.warrant` enforces that table at construction, so the evidence column is a precondition rather than a convention. `CheckReport` refuses `PROVED` with an empty evidence tuple, and refuses any item in that tuple that is not one of the two kinds.
+`warrantlib` enforces that table at construction, so the evidence column is a precondition rather than a convention. `CheckReport` refuses `PROVED` with an empty evidence tuple, and refuses any item in that tuple that is not one of the two kinds.
 
 Neither kind substitutes for the other. A completeness certificate says a finite domain was enumerated in full, at `expected == |A|^H` and `visited == expected` over a named action set. A reduction decides by argument and enumerates nothing, so a certificate is the wrong evidence for it rather than a missing one. A claim resting on an identity asserted over an enumerated family carries both.
 

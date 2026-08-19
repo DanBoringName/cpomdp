@@ -8,6 +8,13 @@ resolution-markers = [
     "python_full_version < '3.11'",
 ]
 
+[manifest]
+members = [
+    "cpomdp",
+    "cpomdp-research",
+    "warrantlib",
+]
+
 [[package]]
 name = "babel"
 version = "2.18.0"
@@ -460,6 +467,7 @@ dependencies = [
     { name = "jaxtyping", version = "0.3.11", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "warrantlib" },
 ]
 
 [package.optional-dependencies]
@@ -474,13 +482,11 @@ rxinfer = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "cpomdp-research" },
     { name = "pre-commit" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
-    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-    { name = "sympy" },
     { name = "ty" },
 ]
 docs = [
@@ -497,23 +503,44 @@ requires-dist = [
     { name = "matplotlib", marker = "extra == 'examples'", specifier = ">=3.5" },
     { name = "numpy", specifier = ">=1.24" },
     { name = "pillow", marker = "extra == 'examples'", specifier = ">=9" },
+    { name = "warrantlib", editable = "packages/warrantlib" },
 ]
 provides-extras = ["rxinfer", "examples"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "cpomdp-research", editable = "research" },
     { name = "pre-commit", specifier = ">=4.0" },
     { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-cov", specifier = ">=5.0" },
     { name = "ruff", specifier = ">=0.6" },
-    { name = "scipy", specifier = ">=1.15.3" },
-    { name = "sympy", specifier = ">=1.13" },
     { name = "ty", specifier = ">=0.0.1a1" },
 ]
 docs = [
     { name = "mkdocs-bibtex", specifier = ">=2.0" },
     { name = "mkdocs-material", specifier = ">=9.5" },
     { name = "mkdocstrings", extras = ["python"], specifier = ">=0.26" },
+]
+
+[[package]]
+name = "cpomdp-research"
+version = "0.0.0"
+source = { editable = "research" }
+dependencies = [
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "sympy" },
+    { name = "warrantlib" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "numpy", specifier = ">=1.24" },
+    { name = "scipy", specifier = ">=1.15.3" },
+    { name = "sympy", specifier = ">=1.13" },
+    { name = "warrantlib", editable = "packages/warrantlib" },
 ]
 
 [[package]]
@@ -2296,6 +2323,11 @@ sdist = { url = "https://files.pythonhosted.org/packages/1e/67/cbae4bf7683a64755
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8d/96/04e7b441807b26b794da5b11e59ed7f83b2cf8af202bd7eba8ad2fa6046e/wadler_lindig-0.1.7-py3-none-any.whl", hash = "sha256:e3ec83835570fd0a9509f969162aeb9c65618f998b1f42918cfc8d45122fe953", size = 20516, upload-time = "2025-06-18T07:00:41.684Z" },
 ]
+
+[[package]]
+name = "warrantlib"
+version = "0.1.0"
+source = { editable = "packages/warrantlib" }
 
 [[package]]
 name = "watchdog"

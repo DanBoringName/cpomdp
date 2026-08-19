@@ -1,17 +1,18 @@
 """The shared `Warrant` vocabulary and the check report that carries it.
 
 `SearchWarrant` had two levels: `PROVED` (exhaustive enumeration) and `CORROBORATED`
-(a grid sample). `Warrant` adds `CERTIFIED` (validated numerics over a compact
-domain) and moves to `cpomdp.warrant`, where checks can reach it too. `SearchWarrant`
-stays as an alias, so existing call sites keep their members and their return type.
+(a grid sample). `Warrant` adds `CERTIFIED` (validated numerics over a compact domain)
+and lives in `warrantlib`, where a check suite can reach it without cpomdp.
+`SearchWarrant` stays as an alias, so existing call sites keep their members and their
+return type.
 
 `CheckReport` is what a registered falsifier emits: a warrant, an `Outcome`, a `Tier`,
 and a reason. A falsifier does not pass, so `PASS` is not in the vocabulary at all. The
 prover column disambiguates warrant, never the outcome. A check that never ran carries
 no warrant, because attributing one claims evidence it did not produce.
 
-Imports `cpomdp.warrant`, so until it lands this module is collection-red — the
-`ModuleNotFoundError` naming it is the build cue.
+The imports come through `cpomdp.warrant` rather than `warrantlib`, so the re-export
+path a caller may already be using is exercised by every case below.
 """
 
 import dataclasses

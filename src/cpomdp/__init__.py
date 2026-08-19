@@ -62,7 +62,7 @@ from cpomdp.selection import (
 )
 from cpomdp.structure import ModelStructure
 from cpomdp.types import Belief, LinearGaussianModel
-from cpomdp.warrant import (
+from warrantlib import (
     CheckReport,
     Outcome,
     SymbolicReduction,

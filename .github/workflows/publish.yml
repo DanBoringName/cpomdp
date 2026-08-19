@@ -10,6 +10,12 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      # Whether warrantlib's version differs from what PyPI already holds. Both
+      # distributions build from this tree on one `release` event, and warrantlib
+      # changes far less often than cpomdp, so publishing it unconditionally would
+      # churn its version for nothing.
+      warrantlib-is-new: ${{ steps.warrantlib.outputs.is-new }}
     steps:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v8.2.0
@@ -19,13 +25,36 @@ jobs:
       - run: uv sync --locked
       # Don't ship a red build.
       - run: uv run pytest -m "not rxinfer"
-      - run: uv build
+      # Each distribution gets its own directory. A Trusted Publisher token is scoped
+      # to one project, so the two uploads are two jobs and cannot share a `dist/`.
+      - run: uv build --package cpomdp -o dist/cpomdp
+      - name: has warrantlib's version moved?
+        id: warrantlib
+        run: |
+          set -euo pipefail
+          local=$(uv version --package warrantlib --short)
+          released=$(curl -fsSL "https://pypi.org/pypi/warrantlib/json" \
+            | python -c 'import json,sys; print(json.load(sys.stdin)["info"]["version"])' \
+            || echo "none")
+          echo "local=$local released=$released"
+          if [ "$local" = "$released" ]; then
+            echo "is-new=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "is-new=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.warrantlib.outputs.is-new == 'true'
+        run: uv build --package warrantlib -o dist/warrantlib
       - uses: actions/upload-artifact@v4
         with:
-          name: dist
-          path: dist/
+          name: dist-cpomdp
+          path: dist/cpomdp/
+      - if: steps.warrantlib.outputs.is-new == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-warrantlib
+          path: dist/warrantlib/
 
-  publish:
+  publish-cpomdp:
     needs: build
     runs-on: ubuntu-latest
     environment:
@@ -36,6 +65,22 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: dist
+          name: dist-cpomdp
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  publish-warrantlib:
+    needs: build
+    if: needs.build.outputs.warrantlib-is-new == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi-warrantlib
+      url: https://pypi.org/p/warrantlib
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-warrantlib
           path: dist/
       - uses: pypa/gh-action-pypi-publish@release/v1

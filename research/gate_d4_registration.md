@@ -1176,6 +1176,19 @@ dates, so nothing about what was known when is weakened by it. Only the identiti
 and the pre-rebase ones are reachable from no branch, so a hash taken from an earlier draft
 is re-read against the table above.
 
+### AMENDMENT 2026-08-18: where the check modules live on disk
+
+The suites moved to `research/src/research/checks/`. This section cites four of them by
+filesystem path: `series_kernel.py` and `gap_series.py` under section 7's symbolic
+pipeline, `gap_kernel.py` under the quadrature rows, and `gap_expansion.py` under G4c.
+Those paths were written against `research/checks/` and are read through this entry.
+
+The import path is unchanged. Every one of them still runs as
+`python -m research.checks.<module> --check`, which is the form CI pins and the form a
+reader should use. Nothing about a registered count, a bar, a tolerance or a measured
+number is touched by the move: `research/` became a package of its own so the modules are
+type-checked and installed rather than resolved off `sys.path` (ADR-039).
+
 ## Stop conditions (DECLARED 2026-08-07)
 
 Two branches, disjoint, split by which half of the instrument failed.

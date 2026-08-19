@@ -56,10 +56,14 @@ jobs:
       # rxinfer-marked tests deselect cleanly when the optional extra is absent.
       # `slow` (the exhaustive crossover enumeration) is deselected here to keep PR
       # feedback fast; it gates on merge-to-main (docs.yml) and release (publish.yml).
+      # `warrantlib` is measured alongside cpomdp. Its lines are exercised by this
+      # suite, so leaving it out of the denominator would drop a published package off
+      # the gate rather than reflect anything about how well it is tested.
       - name: pytest + coverage gate
         run: >-
           uv run pytest -m "not rxinfer and not slow"
-          --cov=cpomdp --cov-report=term-missing --cov-fail-under=80
+          --cov=cpomdp --cov=warrantlib
+          --cov-report=term-missing --cov-fail-under=80
 
   symbolic:
     name: symbolic suites (c₂ gate)
@@ -70,11 +74,13 @@ jobs:
         with:
           enable-cache: true
           python-version: "3.12"
-      # sympy rides in the default `dev` group; nothing under `src/cpomdp` imports it.
+      # `cpomdp-research` is a workspace member in the default `dev` group, so a plain
+      # sync installs it along with sympy and scipy. Nothing under `src/cpomdp` imports
+      # either of those.
       - run: uv sync --locked
-      # `research/` is covered by neither `ty` (pyproject `[tool.ty.src] include`) nor
-      # `pytest` (`testpaths = ["tests"]`), so without this job a broken check module
-      # reaches main and is found by hand or not at all.
+      # `ty` covers `research/src` and `pytest` still does not (`testpaths = ["tests"]`),
+      # so without this job a check that imports cleanly but no longer runs reaches main
+      # and is found by hand or not at all.
       #
       # Each module already exits non-zero when an identity fires. The counts are pinned
       # on top of that, because a stage quietly dropped from `run_checks` removes its

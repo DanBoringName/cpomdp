@@ -52,6 +52,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 import numpy as np
+
 from research.checks.gap_kernel import (
     FAMILIES,
     QUADRATURE_FLOOR,
@@ -63,8 +64,7 @@ from research.checks.gap_kernel import (
     core_and_tail,
     plugin_noise_of,
 )
-
-from cpomdp.warrant import CheckReport, Outcome, Tier, Warrant, check_summary
+from warrantlib import CheckReport, Outcome, Tier, Warrant, check_summary
 
 __all__ = [
     "EXPANSION_SIGMAS",

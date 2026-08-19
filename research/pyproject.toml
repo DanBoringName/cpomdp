@@ -1,0 +1,26 @@
+[project]
+name = "cpomdp-research"
+version = "0.0.0"
+description = "Programme registrations and symbolic check suites. Not for distribution."
+requires-python = ">=3.10"
+# PyPI rejects an upload carrying this, which is the point. The package is a workspace
+# member so the checks are linted, typed and importable like the rest of the tree.
+classifiers = ["Private :: Do Not Upload"]
+dependencies = [
+    "warrantlib",
+    "numpy>=1.24",
+    "scipy>=1.15.3",
+    "sympy>=1.13",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# The src layout cpomdp itself uses, so the import path stays `research.checks.<module>`.
+# CI, the registrations and the build tracker all reference it by that name.
+[tool.hatch.build.targets.wheel]
+packages = ["src/research"]
+
+[tool.uv.sources]
+warrantlib = { workspace = true }

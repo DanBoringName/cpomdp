@@ -2372,3 +2372,100 @@ ADR-030 and ADR-035 for that reason, and the map above is what translates them.
   and this decision does not close it.
 
 ---
+
+## ADR-039 — the warrant vocabulary becomes its own distribution, in a uv workspace
+
+**Date:** 2026-08-18
+**Status:** Accepted
+**Phase:** v0.4.5 (certifiable active inference, Paper 2 groundwork)
+**Extends:** ADR-035 (the warrant vocabulary ships), ADR-038 (it drops its letters)
+
+### The question
+
+The vocabulary has two audiences and one of them does not want cpomdp. A check suite
+labelling its findings needs `Warrant`, `Outcome`, `Tier` and `CheckReport`. Installing
+those meant installing JAX, jaxtyping and NumPy, because they shipped inside a library
+whose reason for existing is continuous active inference.
+
+The coupling ran the other way too, and worse. `CompletenessCertificate` lived in
+`cpomdp.enumeration`, which imports `cpomdp.warrant`. So the warrant module could not
+import the certificate at module scope, and did it inside a function called on every
+`CheckReport` construction that carried evidence. The module docstring described that
+back-reference as annotation-only. It was not: the `isinstance` guard behind `PROVED`
+ran a real import on a real path. A cycle documented as absent is worse than one
+documented as present.
+
+### Decision
+
+**`warrantlib` is a separate distribution, developed in this repository.** It publishes
+to PyPI beside cpomdp, at `0.1.0`, from `packages/warrantlib`. Its dependency list is
+empty and stays empty. cpomdp depends on it and adds nothing to it.
+
+`warrant` was taken on PyPI. The import name had to differ from it regardless of the
+distribution name, because two installed packages answering to `import warrant` produce
+a silent wrong-module bug rather than an error.
+
+**`CompletenessCertificate` moves into `warrantlib`.** It is an evidence kind of the
+warrant vocabulary, tabulated in the ledger beside `SymbolicReduction`, and a frozen
+dataclass over `int, int, Warrant, int, int, str` that touches nothing numerical. It
+lived in `cpomdp.enumeration` by history, and that history is what created the cycle.
+`cpomdp.enumeration` re-exports it, so every call site is unchanged and the two names
+remain one object.
+
+With both evidence kinds in one module the deferred import goes, the `Evidence` union
+leaves `if TYPE_CHECKING:` and becomes a real alias, and the guard reads a module-scope
+tuple.
+
+**A `@runtime_checkable` Protocol was rejected.** It would have let the certificate stay
+where it was. `isinstance` against a data Protocol checks attribute *presence*, not
+types and not invariants, so any object with the right field names would pass a guard
+whose entire purpose is refusing evidence that does not construct. Weakening the check
+to preserve a directory boundary is the wrong trade.
+
+**`cpomdp.warrant` stays, as a re-export.** Eight lines, no `DeprecationWarning`. cpomdp
+is `Development Status :: 2 - Pre-Alpha` and a warning on every import of a name the
+project itself moved is noise. Revisit at warrantlib 1.0.
+
+**The repository becomes a uv workspace, and does not split.** cpomdp stays the root
+package, so `src/cpomdp/` does not move and existing CI keeps working. `warrantlib` and
+`cpomdp-research` are members. One `uv.lock`, one `.venv`.
+
+**`research` becomes a member too**, at `research/src/research/`, carrying the scipy and
+sympy the check suites need. Those leave cpomdp's `dev` group, where they were listed
+under a comment explaining that nothing in the library imports them. The `*.md`
+registrations do not move.
+
+**`cpomdp-research` is a `dev` dependency of the root, rather than a member reached
+through `uv sync --all-packages`.** `--all-packages` is the documented way and it is a
+trap here: a bare `uv run` re-syncs to the root's own environment and takes the member
+back out again, so `python -m research.checks.X` fails with a `ModuleNotFoundError`
+naming a module that is right there on disk. Declaring the dependency makes the default
+environment the correct one, and no workflow file needs a flag it can forget.
+
+**Extraction into its own repository is not this decision.** The module boundary is now
+real, so a later `git subtree split` is a topology change rather than a rewrite. Two
+things would trigger it: a second consumer of the vocabulary that is not this project,
+or a contributor who needs to edit registrations without a JAX and Julia toolchain.
+
+### Consequences
+
+- `pip install warrantlib` gets the vocabulary and nothing else, on Python 3.10 and up.
+- The published cpomdp wheel carries `Requires-Dist: warrantlib>=0.1`. The workspace
+  source is stripped at build time, so no `file://` reaches the metadata.
+- A second PyPI Trusted Publisher must be configured by hand for `warrantlib` before the
+  first publish run, along with a `pypi-warrantlib` GitHub environment. Nothing in this
+  repository can do that.
+- `publish.yml` builds each distribution explicitly. A bare `uv build` in a workspace
+  builds the root alone, so the old single command would have silently stopped shipping
+  anything new. warrantlib publishes only when its version differs from PyPI's, so a
+  cpomdp release does not churn it.
+- ADR-038 recorded that `research/` was covered by neither `ty` nor `pytest`. Half of
+  that gap closes here: `ty` now checks `research/src`. `pytest` still does not, and the
+  `symbolic` CI job with its pinned counts is still what runs the suites.
+- The `research.checks.<module>` import path is unchanged, which is why the member uses
+  a src layout with the package name repeated. CI, the registrations and the build
+  tracker all name that path.
+- A permanent test asserts that importing `warrantlib` in a clean interpreter pulls in
+  no `cpomdp` module. That is what stops the cycle growing back.
+
+---

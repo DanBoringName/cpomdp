@@ -62,7 +62,7 @@ repos:
       - id: cspell
         name: cspell (src docstrings)
         types: [python]
-        files: ^src/
+        files: ^(src|packages/warrantlib/src)/
 
   # Enforce Conventional Commit messages (feat:, fix:, docs:, ...), matching the
   # style already used in the git history. Runs at the commit-msg stage.
