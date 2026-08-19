@@ -26,24 +26,52 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          fetch-depth: 1
+          # Full history: the review reads `git log` and diffs against its base,
+          # and on a stacked PR that base is another branch a shallow clone has
+          # never fetched. The repo is ~24 MB, so this costs seconds.
+          fetch-depth: 0
       - uses: anthropics/claude-code-action@v1
-        # Advisory, never a merge gate. A turn-budget overrun or an API hiccup
-        # must not red-check an otherwise good PR.
-        continue-on-error: true
+        # A failed review shows red. It gates nothing: `main` has no required
+        # status checks, and this job is skipped outright on forks (see `if`
+        # above), so a contributor without the secret never sees a failure.
+        # Silent success was worse. Four reviews died on the turn budget and
+        # reported green.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
-            Review this PR. Prioritise correctness bugs, broken invariants,
-            and API-contract changes. Skip formatting and naming nits —
-            those are handled by lint. Assert that the code changes
-            reflect the checklist in any present `BUILD_PLAN.md` file.
+            Review this PR against its merge base.
 
-            Post the review with `gh pr comment`.
-          # Read/Grep/Glob let the review read surrounding code, not just the
-          # diff hunks. That costs turns, hence the raised budget.
+            Report every issue you find. Do not filter by severity while
+            searching, and tag each finding [BLOCKER] or [NIT]. A severity
+            floor applied during the search reads as an instruction to look
+            less hard. Filter at output instead.
+
+            Every finding cites path:line and the concrete call or input that
+            goes wrong. If you cannot give both, drop it.
+
+            Renames are the failure mode this repo actually hits. Check that no
+            call site, docstring, error message or docs example is left on the
+            old name.
+
+            Check any item a present `BUILD_PLAN.md` claims this PR closes
+            against the diff. Say so if the file is absent.
+
+            Don't report formatting, naming style, import order or type-checker
+            output. Lint and `ty` own those.
+
+            Post one comment with `gh pr comment`: a tally line, blockers in
+            full, nits as one-liners capped at five with "plus K similar". Lead
+            with "no blockers" when there are none. Don't summarise what the PR
+            does, the author knows. Add no attribution footer and no links off
+            this repository.
+          # Read/Grep/Glob let the review read surrounding code beyond the
+          # diff hunks. The read-only git and shell forms are here because a
+          # blocked call still costs a turn. Reviews were spending 9 to 18 of
+          # their 40 turns on denials, dying before they could post.
           claude_args: >-
-            --max-turns 40 --allowed-tools "Read,Grep,Glob,Bash(gh pr
-            diff:*),Bash(gh pr view:*),Bash(gh pr comment:*)"
+            --model claude-opus-5 --max-turns 40 --allowed-tools
+            "Read,Grep,Glob,Bash(git
+            diff:*),Bash(git log:*),Bash(git show:*),Bash(ls:*),Bash(cat:*),Bash(grep:*),Bash(gh
+            pr diff:*),Bash(gh pr view:*),Bash(gh pr comment:*)"
