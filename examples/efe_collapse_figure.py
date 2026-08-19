@@ -146,7 +146,12 @@ def check() -> None:
     # epistemic term to a constant (ADR-003), whatever the action.
     r_frozen = float(_precision_well_noise(jnp.asarray(BELIEF.mean), WELL_PARAMS)[0, 0])
     frozen = LinearGaussianModel(
-        DYNAMICS, SENSOR, PROCESS_NOISE, [[r_frozen]], BELIEF, CONTROL
+        DYNAMICS,
+        observation_matrix=SENSOR,
+        dynamics_noise=PROCESS_NOISE,
+        observation_noise=[[r_frozen]],
+        prior=BELIEF,
+        control=CONTROL,
     )
 
     a_mat, b_mat = np.asarray(DYNAMICS), np.asarray(CONTROL)

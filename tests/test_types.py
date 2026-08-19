@@ -89,6 +89,22 @@ class TestLinearGaussianModels:
         np.testing.assert_array_equal(m.B, [[0.0], [1.0]])
         assert m.n_controls == 1
 
+    def test_matrices_after_dynamics_are_keyword_only(self):
+        # Two same-shaped matrices in adjacent positional slots is the shape that builds
+        # a wrong model in silence: only the covariances are content-checked, so a
+        # transposed pair passes whenever the maps are square and symmetric. Keywords
+        # close the route instead of trying to detect the mistake after the fact.
+        k = _valid_kwargs()
+        with pytest.raises(TypeError, match="positional"):
+            # Making the call wrongly is the point, so ty's arity errors are expected.
+            LinearGaussianModel(  # ty: ignore[missing-argument]
+                k["dynamics"],
+                k["observation_matrix"],  # ty: ignore[too-many-positional-arguments]
+                k["dynamics_noise"],
+                k["observation_noise"],
+                k["prior"],
+            )
+
     def test_letter_aliases_map_to_role_names(self):
         m = LinearGaussianModel(**_valid_kwargs())
         np.testing.assert_array_equal(m.A, m.dynamics)

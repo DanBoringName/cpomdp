@@ -71,6 +71,16 @@ an exposure rather than a result.
 
 ### Changed
 
+- **Breaking:** every `LinearGaussianModel` argument after `dynamics` is keyword-only.
+  The four matrices are two maps and two covariances of the same rank, and only the
+  covariances are content-checked, so a transposed pair constructed in silence whenever
+  the maps were square and symmetric. `LinearGaussianModel(Q, C, A, R, prior)` built a
+  model and returned a posterior of `[0.900, -0.444]` where the answer is
+  `[0.896, -0.434]`. Detecting the mistake after the fact needs a rule for which of two
+  same-shaped matrices is which. Naming them at the call site needs none. One positional
+  construction existed in the tree, `examples/efe_collapse_figure.py`, now converted.
+  `ty` reports the arity error statically, so a stale positional call fails the type gate
+  rather than running.
 - **Breaking:** `sensor_model` is now `observation_matrix`, on the same classes plus
   `_JointObservation` and `epistemic_value`. C is the *observation matrix* in the same
   literature that gives R its name, so the two halves of the measurement equation now
