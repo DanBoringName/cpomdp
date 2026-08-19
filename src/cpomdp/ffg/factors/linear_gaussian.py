@@ -51,31 +51,38 @@ class GaussianObservation:
     canonical-form contribution to the belief on x.
 
     - ``sensor_model`` — C, shape ``(m, n)``.
-    - ``sensor_noise`` — R, shape ``(m, m)``, positive-definite (it is inverted).
+    - ``observation_noise`` — R, shape ``(m, m)``, positive-definite (it is inverted).
     """
 
     sensor_model: Float64[Array, "m n"]
-    sensor_noise: Float64[Array, "m m"]
+    observation_noise: Float64[Array, "m m"]
     is_fixed = True  # constant (C, R) — lets the backend keep its byte-identical path
 
-    def __init__(self, sensor_model: ArrayLike, sensor_noise: ArrayLike) -> None:
+    def __init__(self, sensor_model: ArrayLike, observation_noise: ArrayLike) -> None:
         object.__setattr__(self, "sensor_model", jnp.asarray(sensor_model, dtype=float))
-        object.__setattr__(self, "sensor_noise", jnp.asarray(sensor_noise, dtype=float))
+        object.__setattr__(
+            self, "observation_noise", jnp.asarray(observation_noise, dtype=float)
+        )
         self._validate()
 
     def _validate(self) -> None:
-        sensor_model, sensor_noise = self.sensor_model, self.sensor_noise  # C, R
+        sensor_model, observation_noise = (
+            self.sensor_model,
+            self.observation_noise,
+        )  # C, R
         if sensor_model.ndim != 2:
             raise ValueError(
                 f"sensor_model must be 2-D (m, n), got shape {sensor_model.shape}"
             )
         # R is inverted in the message, so it must be positive-definite.
-        validate_covariance(sensor_noise, "sensor_noise", require_definite=True)
+        validate_covariance(
+            observation_noise, "observation_noise", require_definite=True
+        )
         m = sensor_model.shape[0]
-        if sensor_noise.shape != (m, m):
+        if observation_noise.shape != (m, m):
             raise ValueError(
-                f"sensor_noise must be {m}x{m} to match the {m}-row sensor_model, "
-                f"got shape {sensor_noise.shape}"
+                f"observation_noise must be {m}x{m} to match the {m}-row sensor_model, "
+                f"got shape {observation_noise.shape}"
             )
 
     def message(
@@ -98,12 +105,17 @@ class GaussianObservation:
             A ``CanonicalGaussian`` over the n-D state — precision ``(n, n)``,
             potential ``(n,)``.
         """
-        sensor_model, sensor_noise = self.sensor_model, self.sensor_noise  # C, R
+        sensor_model, observation_noise = (
+            self.sensor_model,
+            self.observation_noise,
+        )  # C, R
         reading = jnp.asarray(observation, dtype=float)  # y
         # Λ = CᵀR⁻¹C, h = CᵀR⁻¹y — solved against R rather than forming R⁻¹.
-        noise_weighted_model = jnp.linalg.solve(sensor_noise, sensor_model)  # R⁻¹C
+        noise_weighted_model = jnp.linalg.solve(observation_noise, sensor_model)  # R⁻¹C
         precision = sensor_model.T @ noise_weighted_model  # CᵀR⁻¹C
-        potential = sensor_model.T @ jnp.linalg.solve(sensor_noise, reading)  # CᵀR⁻¹y
+        potential = sensor_model.T @ jnp.linalg.solve(
+            observation_noise, reading
+        )  # CᵀR⁻¹y
         return CanonicalGaussian._unchecked(precision, potential)
 
     def linearize(
@@ -114,13 +126,13 @@ class GaussianObservation:
         The shared seam with ``CallableGaussianObservation.linearize``, so a caller can
         read ``(C, R)`` off either factor without a type branch.
         """
-        return self.sensor_model, self.sensor_noise
+        return self.sensor_model, self.observation_noise
 
     def tree_flatten(
         self,
     ) -> tuple[tuple[Float64[Array, "m n"], Float64[Array, "m m"]], None]:
-        """Leaves for JAX: ``(sensor_model, sensor_noise)``, no static aux data."""
-        return (self.sensor_model, self.sensor_noise), None
+        """Leaves for JAX: ``(sensor_model, observation_noise)``, no static aux data."""
+        return (self.sensor_model, self.observation_noise), None
 
     @classmethod
     def tree_unflatten(
@@ -129,10 +141,10 @@ class GaussianObservation:
         children: tuple[Float64[Array, "m n"], Float64[Array, "m m"]],
     ) -> "GaussianObservation":
         """Rebuild from leaves without validating — the leaves may be tracers."""
-        sensor_model, sensor_noise = children
+        sensor_model, observation_noise = children
         obj = object.__new__(cls)
         object.__setattr__(obj, "sensor_model", sensor_model)
-        object.__setattr__(obj, "sensor_noise", sensor_noise)
+        object.__setattr__(obj, "observation_noise", observation_noise)
         return obj
 
 
@@ -226,11 +238,13 @@ class CallableGaussianObservation:
         sensor_model = self.sensor_model  # C
         reading = jnp.asarray(observation, dtype=float)  # y
         state = jnp.asarray(state, dtype=float)
-        sensor_noise = self.noise_fn(state, self.noise_params)  # R(state)
+        observation_noise = self.noise_fn(state, self.noise_params)  # R(state)
         # Λ = CᵀR⁻¹C, h = CᵀR⁻¹y — solved against R rather than forming R⁻¹.
-        noise_weighted_model = jnp.linalg.solve(sensor_noise, sensor_model)  # R⁻¹C
+        noise_weighted_model = jnp.linalg.solve(observation_noise, sensor_model)  # R⁻¹C
         precision = sensor_model.T @ noise_weighted_model  # CᵀR⁻¹C
-        potential = sensor_model.T @ jnp.linalg.solve(sensor_noise, reading)  # CᵀR⁻¹y
+        potential = sensor_model.T @ jnp.linalg.solve(
+            observation_noise, reading
+        )  # CᵀR⁻¹y
         return CanonicalGaussian._unchecked(precision, potential)
 
     def linearize(

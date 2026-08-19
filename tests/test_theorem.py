@@ -39,20 +39,20 @@ def predicted_cov(prior_cov, dynamics, process_noise):
     )
 
 
-def posterior_cov(pred_cov, sensor_model, sensor_noise):
+def posterior_cov(pred_cov, sensor_model, observation_noise):
     """Σ⁺ = Σ⁻ − Σ⁻ Cᵀ S⁻¹ C Σ⁻, with S = C Σ⁻ Cᵀ + R."""
     cov = np.asarray(pred_cov, dtype=float)
     c = np.asarray(sensor_model, dtype=float)
-    r = np.asarray(sensor_noise, dtype=float)
+    r = np.asarray(observation_noise, dtype=float)
     s = c @ cov @ c.T + r
     return cov - cov @ c.T @ np.linalg.solve(s, c @ cov)
 
 
-def epistemic(pred_cov, sensor_model, sensor_noise):
+def epistemic(pred_cov, sensor_model, observation_noise):
     """½ ln det S − ½ ln det R, in nats."""
     cov = np.asarray(pred_cov, dtype=float)
     c = np.asarray(sensor_model, dtype=float)
-    r = np.asarray(sensor_noise, dtype=float)
+    r = np.asarray(observation_noise, dtype=float)
     s = c @ cov @ c.T + r
     return 0.5 * (np.linalg.slogdet(s)[1] - np.linalg.slogdet(r)[1])
 
@@ -86,7 +86,7 @@ def scalar_chain(*, dynamics=1.0, control=1.0, process=1.0, prior_var=1.0, mean=
         dynamics=[[dynamics]],
         sensor_model=[[1.0]],
         dynamics_noise=[[process]],
-        sensor_noise=[[1.0]],
+        observation_noise=[[1.0]],
         prior=Belief([mean], [[prior_var]]),
         control=[[control]],
         observation=CallableSensor([[1.0]], range_noise, RANGE_NOISE_PARAMS),
@@ -155,7 +155,7 @@ class TestCollapse:
             dynamics=[[1.0]],
             sensor_model=[[1.0]],
             dynamics_noise=[[1.0]],
-            sensor_noise=[[1.0]],
+            observation_noise=[[1.0]],
             prior=Belief([0.0], [[1.0]]),
             control=[[1.0]],
         )
@@ -327,7 +327,7 @@ class TestPlanningReductionEquivalence:
             dynamics=[[1.0]],
             sensor_model=[[1.0]],
             dynamics_noise=[[1.0]],
-            sensor_noise=[[1.0]],
+            observation_noise=[[1.0]],
             prior=Belief([0.0], [[1.0]]),
             control=[[1.0]],
         )

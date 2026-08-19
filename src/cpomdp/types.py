@@ -102,10 +102,10 @@ class LinearGaussianModel:
     observations, under linear maps and Gaussian noise::
 
         next_state  = dynamics @ state + control @ action + dynamics noise
-        observation = sensor_model @ state               + sensor noise
+        observation = sensor_model @ state               + observation noise
 
     The noise terms are zero-mean Gaussians with covariances ``dynamics_noise``
-    and ``sensor_noise``; the initial state is drawn from ``prior``.
+    and ``observation_noise``; the initial state is drawn from ``prior``.
 
     Parameters are *role-named* rather than using the traditional control-theory
     letters, to avoid the letter collision with discrete active inference
@@ -120,7 +120,7 @@ class LinearGaussianModel:
     | ``control`` | B | action -> state (optional) | (n,p) | input/control matrix |
     | ``sensor_model`` | C | state -> expected reading | (m,n) | observation/emission |
     | ``dynamics_noise`` | Q | dynamics-noise covariance | (n,n) | process noise |
-    | ``sensor_noise`` | R | sensor-noise covariance | (m,m) | observation noise |
+    | ``observation_noise`` | R | sensor-noise covariance | (m,m) | observation noise |
     | ``prior`` | -- | initial belief over state | n-D | Belief / D (pymdp) |
 
     Dimensions: ``n`` = state, ``m`` = observation, ``p`` = action. A model with
@@ -137,7 +137,7 @@ class LinearGaussianModel:
     dynamics: Float64[Array, "n n"]
     sensor_model: Float64[Array, "m n"]
     dynamics_noise: Float64[Array, "n n"]
-    sensor_noise: Float64[Array, "m m"]
+    observation_noise: Float64[Array, "m m"]
     prior: Belief
     control: Float64[Array, "n p"] | None
     observation: ObservationModel | None
@@ -149,7 +149,7 @@ class LinearGaussianModel:
         dynamics: ArrayLike,
         sensor_model: ArrayLike,
         dynamics_noise: ArrayLike,
-        sensor_noise: ArrayLike,
+        observation_noise: ArrayLike,
         prior: Belief,
         control: ArrayLike | None = None,
         observation: ObservationModel | None = None,
@@ -161,7 +161,9 @@ class LinearGaussianModel:
         object.__setattr__(
             self, "dynamics_noise", jnp.asarray(dynamics_noise, dtype=float)
         )
-        object.__setattr__(self, "sensor_noise", jnp.asarray(sensor_noise, dtype=float))
+        object.__setattr__(
+            self, "observation_noise", jnp.asarray(observation_noise, dtype=float)
+        )
         object.__setattr__(self, "prior", prior)
         object.__setattr__(
             self,
@@ -198,12 +200,14 @@ class LinearGaussianModel:
                 f"got shape {self.dynamics_noise.shape}"
             )
 
-        # sensor_noise: covariance of the sensor noise, (m, m), symmetric.
-        validate_covariance(self.sensor_noise, "sensor_noise", require_definite=True)
-        if self.sensor_noise.shape != (m, m):
+        # observation_noise: covariance of the observation noise, (m, m), symmetric.
+        validate_covariance(
+            self.observation_noise, "observation_noise", require_definite=True
+        )
+        if self.observation_noise.shape != (m, m):
             raise ValueError(
-                f"sensor_noise must be {m}x{m} to match the {m}-D observation, "
-                f"got shape {self.sensor_noise.shape}"
+                f"observation_noise must be {m}x{m} to match the {m}-D observation, "
+                f"got shape {self.observation_noise.shape}"
             )
 
         # control (optional) maps action -> state: (n, p). Rows must match n.
@@ -294,8 +298,8 @@ class LinearGaussianModel:
 
     @property
     def R(self) -> Float64[Array, "m m"]:
-        """R: the observation-noise covariance (alias of ``sensor_noise``)."""
-        return self.sensor_noise
+        """R: the observation-noise covariance (alias of ``observation_noise``)."""
+        return self.observation_noise
 
     def tree_flatten(self) -> tuple[tuple[_ModelLeaf, ...], ModelStructure | None]:
         """Leaves for JAX: every matrix plus the ``prior`` belief; ``structure`` is aux.
@@ -312,7 +316,7 @@ class LinearGaussianModel:
             self.dynamics,
             self.sensor_model,
             self.dynamics_noise,
-            self.sensor_noise,
+            self.observation_noise,
             self.prior,
             self.control,
             self.observation,
@@ -335,7 +339,7 @@ class LinearGaussianModel:
             "dynamics",
             "sensor_model",
             "dynamics_noise",
-            "sensor_noise",
+            "observation_noise",
             "prior",
             "control",
             "observation",

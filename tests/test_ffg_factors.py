@@ -42,7 +42,7 @@ def _spd(rng, n):
 
 
 def _constant_noise(x, params):
-    """R(x) = R0 for every x — the reduction back to a fixed sensor noise."""
+    """R(x) = R0 for every x — the reduction back to a fixed observation noise."""
     return params["R0"]
 
 
@@ -66,14 +66,14 @@ class TestGaussianObservation:
         fac = GaussianObservation([[1.0, 0.0]], [[2.0]])
         assert isinstance(fac.sensor_model, jax.Array)
         np.testing.assert_array_equal(fac.sensor_model, [[1.0, 0.0]])
-        np.testing.assert_array_equal(fac.sensor_noise, [[2.0]])
+        np.testing.assert_array_equal(fac.observation_noise, [[2.0]])
 
-    def test_rejects_singular_sensor_noise(self):
+    def test_rejects_singular_observation_noise(self):
         # R is inverted in the message, so a singular R is rejected at construction.
         with pytest.raises(ValueError, match="positive-definite"):
             GaussianObservation([[1.0]], [[0.0]])
 
-    def test_rejects_sensor_noise_shape_mismatch(self):
+    def test_rejects_observation_noise_shape_mismatch(self):
         # C is 1xn (m=1) but R is 2x2 — R must be m x m.
         with pytest.raises(ValueError, match="match"):
             GaussianObservation([[1.0, 0.0]], [[1.0, 0.0], [0.0, 1.0]])

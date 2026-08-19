@@ -97,7 +97,7 @@ model = LinearGaussianModel(
     control=[[0], [dt]],                 # a push nudges velocity
     sensor_model=[[1, 0]],               # we observe position only
     dynamics_noise=jnp.eye(2) * 1e-6,
-    sensor_noise=[[1e-2]],
+    observation_noise=[[1e-2]],
     prior=Belief(mean=[0, 0], cov=jnp.eye(2)),
 )
 
@@ -142,7 +142,7 @@ tracker = LinearGaussianModel(        # no control matrix -> pure tracking
     dynamics=[[1, dt], [0, 1]],
     sensor_model=[[1, 0]],
     dynamics_noise=jnp.eye(2) * 1e-6,
-    sensor_noise=[[1e-2]],
+    observation_noise=[[1e-2]],
     prior=Belief(mean=[0, 0], cov=jnp.eye(2)),
 )
 agent = Agent(tracker)                # no objective

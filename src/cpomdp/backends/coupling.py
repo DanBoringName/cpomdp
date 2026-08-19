@@ -84,11 +84,11 @@ class _JointObservation:
     ]:
         """Linear ingredients ``(C·x, C·Σ·Cᵀ + R(x), R(x))``."""
         x = jnp.asarray(x, dtype=float)
-        sensor_model, sensor_noise = self.linearize(x)
+        sensor_model, observation_noise = self.linearize(x)
         return (
             sensor_model @ x,
-            sensor_model @ sigma @ sensor_model.T + sensor_noise,
-            sensor_noise,
+            sensor_model @ sigma @ sensor_model.T + observation_noise,
+            observation_noise,
         )
 
     def tree_flatten(self):
@@ -313,14 +313,14 @@ class CouplingGraphBackend:
 
         A graph with any state-dependent sensor also gets a ``_JointObservation``, so
         the model's ``R`` follows the state rather than sitting frozen at the
-        representative value the ``sensor_noise`` block carries for shape.
+        representative value the ``observation_noise`` block carries for shape.
         """
         rows, noise_blocks = self._real_observation_blocks()
         sensor_model = jnp.vstack(rows) if rows else jnp.zeros((0, self.n_total))
         if noise_blocks:
-            sensor_noise = jax.scipy.linalg.block_diag(*noise_blocks)
+            observation_noise = jax.scipy.linalg.block_diag(*noise_blocks)
         else:
-            sensor_noise = jnp.zeros((0, 0))
+            observation_noise = jnp.zeros((0, 0))
         factors = tuple(
             self.graph.observations[node] for node, _lo, _hi in self._obs_layout
         )
@@ -337,7 +337,7 @@ class CouplingGraphBackend:
             dynamics=self._transition.dynamics,
             sensor_model=sensor_model,
             dynamics_noise=self._transition.dynamics_noise,
-            sensor_noise=sensor_noise,
+            observation_noise=observation_noise,
             prior=Belief(jnp.zeros(self.n_total), jnp.eye(self.n_total)),
             control=self._control,
             observation=observation,
@@ -799,7 +799,7 @@ class CouplingGraphBackend:
         observations ``to_flat_model`` adds; the EFE pragmatic and epistemic terms
         both read them.
         """
-        return self._flat_model.sensor_model, self._flat_model.sensor_noise
+        return self._flat_model.sensor_model, self._flat_model.observation_noise
 
     def predicted_belief(
         self, prior: Belief, action: ArrayLike | None = None
@@ -869,7 +869,7 @@ class CouplingGraphBackend:
             dynamics=self._transition.dynamics,
             sensor_model=jnp.vstack(rows),
             dynamics_noise=self._transition.dynamics_noise,
-            sensor_noise=jax.scipy.linalg.block_diag(*noise_blocks),
+            observation_noise=jax.scipy.linalg.block_diag(*noise_blocks),
             prior=Belief(jnp.zeros(self.n_total), jnp.eye(self.n_total)),
             control=self._control,
             observation=observation,

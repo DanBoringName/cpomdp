@@ -63,7 +63,7 @@ def _valid_kwargs(**overrides):
         "dynamics": [[1.0, 0.1], [0.0, 1.0]],  # 2x2  (n=2)
         "sensor_model": [[1.0, 0.0]],  # 1x2  (m=1)
         "dynamics_noise": [[0.1, 0.0], [0.0, 0.1]],  # 2x2
-        "sensor_noise": [[1.0]],  # 1x1
+        "observation_noise": [[1.0]],  # 1x1
         "prior": Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
     }
     kwargs.update(overrides)
@@ -94,7 +94,7 @@ class TestLinearGaussianModels:
         np.testing.assert_array_equal(m.A, m.dynamics)
         np.testing.assert_array_equal(m.C, m.sensor_model)
         np.testing.assert_array_equal(m.Q, m.dynamics_noise)
-        np.testing.assert_array_equal(m.R, m.sensor_noise)
+        np.testing.assert_array_equal(m.R, m.observation_noise)
 
     def test_rejects_non_square_dynamics(self):
         with pytest.raises(ValueError, match="square"):
@@ -110,9 +110,11 @@ class TestLinearGaussianModels:
         with pytest.raises(ValueError, match="dynamics_noise"):
             LinearGaussianModel(**_valid_kwargs(dynamics_noise=[[1.0]]))
 
-    def test_rejects_sensor_noise_wrong_size(self):
-        with pytest.raises(ValueError, match="sensor_noise"):
-            LinearGaussianModel(**_valid_kwargs(sensor_noise=[[1.0, 0.0], [0.0, 1.0]]))
+    def test_rejects_observation_noise_wrong_size(self):
+        with pytest.raises(ValueError, match="observation_noise"):
+            LinearGaussianModel(
+                **_valid_kwargs(observation_noise=[[1.0, 0.0], [0.0, 1.0]])
+            )
 
     def test_rejects_indefinite_dynamics_noise(self):
         with pytest.raises(ValueError, match="positive-semi-definite"):
@@ -120,17 +122,18 @@ class TestLinearGaussianModels:
                 **_valid_kwargs(dynamics_noise=[[-1.0, 0.0], [0.0, -1.0]])
             )
 
-    def test_rejects_negative_sensor_noise(self):
-        # sensor_noise is positive-DEFINITE (not just PSD): the epistemic term inverts
+    def test_rejects_negative_observation_noise(self):
+        # observation_noise is positive-DEFINITE (not just PSD): the epistemic term
+        # inverts
         # it, so a negative or zero R is rejected.
         with pytest.raises(ValueError, match="positive-definite"):
-            LinearGaussianModel(**_valid_kwargs(sensor_noise=[[-0.5]]))
+            LinearGaussianModel(**_valid_kwargs(observation_noise=[[-0.5]]))
 
-    def test_rejects_noiseless_sensor_noise(self):
+    def test_rejects_noiseless_observation_noise(self):
         # A noiseless R=0 sends the EFE information gain to +inf and silently
         # collapses action selection — reject it as not positive-definite.
         with pytest.raises(ValueError, match="positive-definite"):
-            LinearGaussianModel(**_valid_kwargs(sensor_noise=[[0.0]]))
+            LinearGaussianModel(**_valid_kwargs(observation_noise=[[0.0]]))
 
     def test_rejects_control_wrong_rows(self):
         with pytest.raises(ValueError, match="control"):
@@ -146,7 +149,7 @@ class TestLinearGaussianModels:
             LinearGaussianModel(**_valid_kwargs(prior=[0.0, 0.0]))
 
     def test_observation_defaults_to_none(self):
-        # No observation given -> fixed sensor defined by sensor_model/sensor_noise
+        # No observation given -> fixed sensor defined by sensor_model/observation_noise
         # (the v0.2 semantics). None is the canonical "fixed" case.
         assert LinearGaussianModel(**_valid_kwargs()).observation is None
 
@@ -218,4 +221,4 @@ class TestPytreeRegistration:
         assert isinstance(restored.observation, FixedSensor)
         c_out, r_out = restored.observation.linearize(jnp.zeros(2))
         np.testing.assert_array_equal(c_out, sensor.sensor_model)
-        np.testing.assert_array_equal(r_out, sensor.sensor_noise)
+        np.testing.assert_array_equal(r_out, sensor.observation_noise)

@@ -28,7 +28,7 @@ def _model(observation=None):
         dynamics=[[1.0, 0.1], [0.0, 1.0]],
         sensor_model=[[1.0, 0.0]],
         dynamics_noise=[[0.1, 0.0], [0.0, 0.1]],
-        sensor_noise=[[0.5]],
+        observation_noise=[[0.5]],
         prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
         control=[[0.0], [1.0]],
         observation=observation,
@@ -54,7 +54,7 @@ def _numpy_efe(model, belief, action, goal, precision):
     B = np.asarray(model.control)
     Q = np.asarray(model.dynamics_noise)
     C = np.asarray(model.sensor_model)
-    R = np.asarray(model.sensor_noise)
+    R = np.asarray(model.observation_noise)
     mu = np.asarray(belief.mean)
     sigma = np.asarray(belief.cov)
     a = np.asarray(action, dtype=float)
@@ -99,7 +99,7 @@ class TestAgainstNumpyOracle:
             dynamics=[[1.0]],
             sensor_model=[[1.0]],
             dynamics_noise=[[0.1]],
-            sensor_noise=[[0.5]],
+            observation_noise=[[0.5]],
             prior=Belief(mean=[0.0], cov=[[1.0]]),
         )
         pref = Preference(goal=[0.0], precision=[[1.0]])
@@ -251,7 +251,7 @@ class TestPrecisionControlsBalance:
             control=[[1.0]],
             sensor_model=[[1.0]],
             dynamics_noise=[[0.05]],
-            sensor_noise=[[0.3]],
+            observation_noise=[[0.3]],
             prior=Belief(mean=[0.0], cov=[[0.5]]),
             observation=CallableSensor([[1.0]], beacon_noise, {}),
         )
@@ -317,7 +317,7 @@ def _ramp_model():
         dynamics=[[1.0]],
         sensor_model=[[1.0]],
         dynamics_noise=[[0.1]],
-        sensor_noise=[[0.5]],
+        observation_noise=[[0.5]],
         prior=Belief(mean=[0.0], cov=[[0.4]]),
         control=[[1.0]],
         observation=sensor,
@@ -431,7 +431,7 @@ def _internal_q_model():
         dynamics=[[1.0]],
         sensor_model=[[1.0]],
         dynamics_noise=[[0.1]],
-        sensor_noise=[[0.3]],  # R is FIXED (observation=None)
+        observation_noise=[[0.3]],  # R is FIXED (observation=None)
         prior=Belief(mean=[0.0], cov=[[0.2]]),
         control=[[1.0]],
         process_noise=pn,
@@ -488,7 +488,7 @@ class TestInternalProcessNoise:
             dynamics=[[1.0]],
             sensor_model=[[1.0]],
             dynamics_noise=[[0.1]],
-            sensor_noise=[[0.3]],
+            observation_noise=[[0.3]],
             prior=Belief(mean=[0.0], cov=[[0.2]]),
             control=[[1.0]],
         )
@@ -514,7 +514,7 @@ class TestInternalProcessNoise:
                 dynamics=[[1.0]],
                 sensor_model=[[1.0]],
                 dynamics_noise=[[0.1]],
-                sensor_noise=[[0.3]],
+                observation_noise=[[0.3]],
                 prior=Belief(mean=[0.0], cov=[[0.2]]),
                 control=[[1.0]],
                 process_noise=pn,
@@ -545,7 +545,7 @@ def _flip_model():
         dynamics=[[1.0]],
         sensor_model=[[1.0]],
         dynamics_noise=[[0.1]],
-        sensor_noise=[[0.2]],
+        observation_noise=[[0.2]],
         prior=Belief(mean=[0.0], cov=[[0.1]]),
         control=[[1.0]],
         process_noise=pn,

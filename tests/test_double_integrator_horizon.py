@@ -28,7 +28,7 @@ def _double_integrator():
         dynamics=[[1.0, 1.0], [0.0, 1.0]],
         sensor_model=[[1.0, 0.0]],
         dynamics_noise=[[0.05, 0.0], [0.0, 0.05]],
-        sensor_noise=[[0.2]],
+        observation_noise=[[0.2]],
         prior=Belief(mean=[0.0, 0.0], cov=[[0.3, 0.0], [0.0, 0.3]]),
         control=[[0.0], [1.0]],
     )

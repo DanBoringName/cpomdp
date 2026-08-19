@@ -164,7 +164,7 @@ class RxInferBackend:
             np.asarray(model.dynamics),
             np.asarray(model.sensor_model),
             np.asarray(model.dynamics_noise),
-            np.asarray(model.sensor_noise),
+            np.asarray(model.observation_noise),
             np.asarray(prior.mean),
             np.asarray(prior.cov),
             np.asarray(control_term),

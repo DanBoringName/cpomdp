@@ -62,14 +62,15 @@ def _model():
         dynamics=[[1.0, 0.1], [0.0, 1.0]],
         sensor_model=[[1.0, 0.0]],
         dynamics_noise=[[0.1, 0.0], [0.0, 0.1]],
-        sensor_noise=[[0.5]],
+        observation_noise=[[0.5]],
         prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
         control=[[0.0], [1.0]],
     )
 
 
 def _beacon_model():
-    """1-D `R(x)`: sensor noise falls near +2, so the epistemic term varies with action.
+    """1-D `R(x)`: observation noise falls near +2, so the epistemic term varies
+    with action.
 
     The fixed-sensor model above would exercise only the pragmatic path. Here the
     epistemic term is live, which is the branch the crossover result runs on.
@@ -89,7 +90,7 @@ def _beacon_model():
         dynamics=[[1.0]],
         sensor_model=[[1.0]],
         dynamics_noise=[[0.05]],
-        sensor_noise=[[0.5]],
+        observation_noise=[[0.5]],
         prior=Belief(mean=[0.0], cov=[[1.0]]),
         control=[[1.0]],
         observation=sensor,
@@ -331,7 +332,7 @@ class TestGuards:
             dynamics=[[1.0]],
             sensor_model=[[1.0]],
             dynamics_noise=[[0.1]],
-            sensor_noise=[[0.5]],
+            observation_noise=[[0.5]],
             prior=Belief(mean=[0.0], cov=[[1.0]]),
         )
         with pytest.raises(ValueError, match="control matrix"):

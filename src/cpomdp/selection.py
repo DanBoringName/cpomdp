@@ -287,12 +287,14 @@ class FfgEfeSelector:
 
         def g_of(action: Float64[Array, "p"]) -> Float64[Array, ""]:
             predicted = self._backend.predicted_belief(belief, action)  # μ⁺, Σ⁺
-            sensor_noise = self._backend.observation_noise_at(predicted.mean)  # R(μ⁺)
+            observation_noise = self._backend.observation_noise_at(
+                predicted.mean
+            )  # R(μ⁺)
             g, _ = _ffg_efe_step(
                 predicted.mean,
                 predicted.cov,
                 self._sensor_model,
-                sensor_noise,
+                observation_noise,
                 preference.goal,
                 preference.precision,
                 self._target,

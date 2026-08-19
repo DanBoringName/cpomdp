@@ -54,7 +54,7 @@ def test_FixedSensor_survives_a_flatten_unflatten_round_trip():
     restored = jax.tree_util.tree_unflatten(treedef, leaves)
     assert isinstance(restored, FixedSensor)
     np.testing.assert_array_equal(restored.sensor_model, sensor.sensor_model)
-    np.testing.assert_array_equal(restored.sensor_noise, sensor.sensor_noise)
+    np.testing.assert_array_equal(restored.observation_noise, sensor.observation_noise)
 
 
 # --- CallableSensor: state-dependent noise R(x), constant C (Phase 2a) ---

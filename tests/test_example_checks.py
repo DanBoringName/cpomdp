@@ -24,7 +24,8 @@ from cpomdp.warrant import Outcome, Tier, Warrant, check_summary
 
 def test_single_chain_theorem_check():
     """Theorem 1 (i)/(iii) on the single-chain model class: the epistemic value varies,
-    its frozen-R twin is flat, and the sensor noise traces a curve across the grid."""
+    its frozen-R twin is flat, and the observation noise traces a curve across the
+    grid."""
     efe_collapse_figure.check()
 
 

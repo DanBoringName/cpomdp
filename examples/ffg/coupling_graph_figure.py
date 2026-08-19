@@ -136,7 +136,7 @@ def infer_flattened() -> Belief:
         dynamics=np.eye(N_NODES),
         sensor_model=c,
         dynamics_noise=np.zeros((N_NODES, N_NODES)),
-        sensor_noise=r,
+        observation_noise=r,
         prior=Belief(mean=joint_mean, cov=joint_cov),
     )
     posterior = KalmanBackend(model).infer_states(y, Belief(joint_mean, joint_cov))

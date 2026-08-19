@@ -16,7 +16,7 @@ def _gain_and_posterior_cov(
     dynamics: Float64[Array, "n n"],
     sensor_model: Float64[Array, "m n"],
     dynamics_noise: Float64[Array, "n n"],
-    sensor_noise: Float64[Array, "m m"],
+    observation_noise: Float64[Array, "m m"],
     prior_cov: Float64[Array, "n n"],
 ) -> tuple[Float64[Array, "n m"], Float64[Array, "n n"]]:
     """Run one covariance recursion: prior covariance in, ``(gain, cov_post)`` out.
@@ -29,7 +29,7 @@ def _gain_and_posterior_cov(
         gain     = cov_pred · Cᵀ · S⁻¹          # how far to trust the reading
         cov_post = (I − gain · C) · cov_pred    # update: the reading shrinks it
 
-    (A=dynamics, C=sensor_model, Q=dynamics_noise, R=sensor_noise.) The gain is
+    (A=dynamics, C=sensor_model, Q=dynamics_noise, R=observation_noise.) The gain is
     obtained via ``jnp.linalg.solve`` against ``S`` rather than an explicit inverse,
     for numerical stability. Crucially this depends only on the model and
     ``prior_cov``, never on an observation — which is exactly what lets the
@@ -40,7 +40,7 @@ def _gain_and_posterior_cov(
         dynamics: The state-transition matrix A, shape ``(n, n)``.
         sensor_model: The observation matrix C, shape ``(m, n)``.
         dynamics_noise: The process-noise covariance Q, shape ``(n, n)``.
-        sensor_noise: The observation-noise covariance R, shape ``(m, m)``.
+        observation_noise: The observation-noise covariance R, shape ``(m, m)``.
         prior_cov: The incoming belief's covariance, shape ``(n, n)``.
 
     Returns:
@@ -48,7 +48,7 @@ def _gain_and_posterior_cov(
         covariance, shape ``(n, n)``, for this step.
     """
     cov_pred = dynamics @ prior_cov @ dynamics.T + dynamics_noise
-    prediction_error_cov = sensor_model @ cov_pred @ sensor_model.T + sensor_noise
+    prediction_error_cov = sensor_model @ cov_pred @ sensor_model.T + observation_noise
     gain = jnp.linalg.solve(prediction_error_cov, sensor_model @ cov_pred).T
     cov_post = (jnp.eye(dynamics.shape[0]) - gain @ sensor_model) @ cov_pred
     return gain, cov_post
@@ -183,10 +183,13 @@ class KalmanBackend:
 
         if sensor_is_fixed:
             # fixed sensor: direct reads, byte-identical hot path (no linearize).
-            sensor_model, sensor_noise = model.sensor_model, model.sensor_noise
+            sensor_model, observation_noise = (
+                model.sensor_model,
+                model.observation_noise,
+            )
         else:
             # state-dependent R(x), linearized at μ⁻ (the EFE kernel's point).
-            sensor_model, sensor_noise = model.observation.linearize(mean_pred)
+            sensor_model, observation_noise = model.observation.linearize(mean_pred)
 
         if process_is_fixed:
             dynamics_noise = model.dynamics_noise
@@ -201,7 +204,7 @@ class KalmanBackend:
                 model.dynamics,
                 sensor_model,
                 dynamics_noise,
-                sensor_noise,
+                observation_noise,
                 prior.cov,
             )
 
@@ -254,7 +257,7 @@ class KalmanBackend:
                 model.dynamics,
                 model.sensor_model,
                 model.dynamics_noise,
-                model.sensor_noise,
+                model.observation_noise,
                 cov,
             )
             if jnp.allclose(cov, cov_post, atol=tol, rtol=0.0):

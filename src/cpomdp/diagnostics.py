@@ -137,7 +137,7 @@ def logdet_pd(matrix: ArrayLike) -> float:
 
 
 def epistemic_value(
-    predicted_cov: ArrayLike, sensor_model: ArrayLike, sensor_noise: ArrayLike
+    predicted_cov: ArrayLike, sensor_model: ArrayLike, observation_noise: ArrayLike
 ) -> float:
     """The per-step epistemic value ``½(ln det S − ln det R)``, in nats.
 
@@ -150,7 +150,7 @@ def epistemic_value(
     """
     cov = np.asarray(predicted_cov, dtype=float)
     c = np.asarray(sensor_model, dtype=float)
-    r = np.asarray(sensor_noise, dtype=float)
+    r = np.asarray(observation_noise, dtype=float)
     s = c @ cov @ c.T + r
     return 0.5 * (logdet_pd(s) - logdet_pd(r))
 
@@ -310,7 +310,7 @@ def probe_model(
             model.dynamics_noise, dtype=float
         )
         covs = [cov] * len(actions)
-        fixed = np.asarray(model.sensor_noise, dtype=float)
+        fixed = np.asarray(model.observation_noise, dtype=float)
         noises = _linearizations(model.observation, sensor_model, means) or [
             fixed
         ] * len(actions)

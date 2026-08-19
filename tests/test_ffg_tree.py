@@ -583,7 +583,7 @@ def _flattened_kalman_root(root, dims, edges, obs_specs, m0, p0, readings):
         dynamics=np.eye(dim),
         sensor_model=np.vstack(c_rows),
         dynamics_noise=np.zeros((dim, dim)),
-        sensor_noise=_block_diag(r_blocks),
+        observation_noise=_block_diag(r_blocks),
         prior=Belief(mean=mu, cov=sig),
     )
     posterior = KalmanBackend(model).infer_states(

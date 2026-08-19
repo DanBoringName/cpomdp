@@ -48,7 +48,7 @@ def _scalar_model():
         dynamics=[[A]],
         sensor_model=[[C]],
         dynamics_noise=[[Q]],
-        sensor_noise=[[R]],
+        observation_noise=[[R]],
         prior=Belief(mean=[PRIOR_MEAN], cov=[[PRIOR_VAR]]),
     )
 
@@ -60,7 +60,7 @@ def _random_chain_model(rng, n, m, *, with_control=False):
         dynamics=0.5 * rng.standard_normal((n, n)),
         sensor_model=rng.standard_normal((m, n)),
         dynamics_noise=_spd(rng, n),
-        sensor_noise=_spd(rng, m),
+        observation_noise=_spd(rng, m),
         prior=Belief(mean=rng.standard_normal(n), cov=_spd(rng, n)),
         control=control,
     )
@@ -169,7 +169,7 @@ class TestChainBackendScope:
             dynamics=[[A]],
             sensor_model=[[C]],
             dynamics_noise=[[0.0]],
-            sensor_noise=[[R]],
+            observation_noise=[[R]],
             prior=Belief(mean=[0.0], cov=[[1.0]]),
         )
         with pytest.raises(ValueError, match="positive-definite"):
@@ -203,7 +203,7 @@ def _callable_sensor_scalar_model(*, control=None):
         dynamics=[[A]],
         sensor_model=[[C]],
         dynamics_noise=[[Q]],
-        sensor_noise=[[R]],
+        observation_noise=[[R]],
         prior=Belief(mean=[PRIOR_MEAN], cov=[[PRIOR_VAR]]),
         control=control,
         observation=CallableSensor(
@@ -217,7 +217,7 @@ def _callable_process_scalar_model(*, control=None):
         dynamics=[[A]],
         sensor_model=[[C]],
         dynamics_noise=[[Q]],
-        sensor_noise=[[R]],
+        observation_noise=[[R]],
         prior=Belief(mean=[PRIOR_MEAN], cov=[[PRIOR_VAR]]),
         control=control,
         process_noise=CallableProcessNoise(_quad_process, _QPROC),
@@ -227,7 +227,7 @@ def _callable_process_scalar_model(*, control=None):
 class TestChainCallableSensorParity:
     def test_constant_callable_reduces_to_fixed_chain(self):
         # Safety net, green before and after: a CallableSensor whose R ignores x and
-        # equals the model's fixed sensor_noise must filter exactly like the
+        # equals the model's fixed observation_noise must filter exactly like the
         # fixed-sensor model. Guards the gating and the fixed hot path.
         r0 = [[R]]
         fixed = _scalar_model()
@@ -235,7 +235,7 @@ class TestChainCallableSensorParity:
             dynamics=[[A]],
             sensor_model=[[C]],
             dynamics_noise=[[Q]],
-            sensor_noise=r0,
+            observation_noise=r0,
             prior=Belief(mean=[PRIOR_MEAN], cov=[[PRIOR_VAR]]),
             observation=CallableSensor(
                 sensor_model=[[C]],
@@ -268,7 +268,7 @@ class TestChainCallableSensorParity:
             dynamics=[[1.0, 1.0], [0.0, 1.0]],
             sensor_model=[[1.0, 0.0]],
             dynamics_noise=[[1e-3, 0.0], [0.0, 1e-3]],
-            sensor_noise=[[1.0]],
+            observation_noise=[[1.0]],
             prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
             observation=CallableSensor(
                 sensor_model=[[1.0, 0.0]], noise_fn=_quad_noise, noise_params=_QUAD
@@ -302,7 +302,7 @@ class TestChainCallableProcessNoiseParity:
             dynamics=[[A]],
             sensor_model=[[C]],
             dynamics_noise=q0,
-            sensor_noise=[[R]],
+            observation_noise=[[R]],
             prior=Belief(mean=[PRIOR_MEAN], cov=[[PRIOR_VAR]]),
             process_noise=CallableProcessNoise(lambda x, p: jnp.array(q0), None),
         )
@@ -331,7 +331,7 @@ class TestChainCallableProcessNoiseParity:
             dynamics=[[1.0, 1.0], [0.0, 1.0]],
             sensor_model=[[1.0, 0.0]],
             dynamics_noise=[[1e-3, 0.0], [0.0, 1e-3]],
-            sensor_noise=[[1.0]],
+            observation_noise=[[1.0]],
             prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
             process_noise=CallableProcessNoise(_quad_process, q2d),
         )
@@ -384,7 +384,7 @@ def _cross_block_model(*, control=None):
         control=control,
         sensor_model=c_disp,
         dynamics_noise=jnp.diag(jnp.array([0.5, 0.5, 1e-3, 1e-3])),
-        sensor_noise=jnp.eye(2),
+        observation_noise=jnp.eye(2),
         prior=Belief(mean=jnp.array([0.0, 0.0, 1.0, 1.0]), cov=jnp.eye(4)),
         observation=sensor,
     )

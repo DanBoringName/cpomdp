@@ -137,7 +137,9 @@ def _flat_pair():
         dynamics=a,
         sensor_model=_ARENA_C,
         dynamics_noise=q,
-        sensor_noise=np.eye(3),  # placeholder under a callable sensor, ignored there
+        observation_noise=np.eye(
+            3
+        ),  # placeholder under a callable sensor, ignored there
         prior=Belief(mean=np.zeros(4), cov=np.eye(4)),
         control=b,
         observation=CallableSensor(_ARENA_C, _cue_noise, _CUE_PARAMS),

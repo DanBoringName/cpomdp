@@ -30,7 +30,7 @@ def _point_mass_model():
         dynamics=DYNAMICS,
         sensor_model=[[1.0, 0.0]],  # observe position
         dynamics_noise=[[1e-4, 0.0], [0.0, 1e-4]],
-        sensor_noise=[[1e-2]],
+        observation_noise=[[1e-2]],
         prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
         control=CONTROL,
     )
@@ -128,7 +128,7 @@ class TestLQRValidation:
             dynamics=DYNAMICS,
             sensor_model=[[1.0, 0.0]],
             dynamics_noise=[[1e-4, 0.0], [0.0, 1e-4]],
-            sensor_noise=[[1e-2]],
+            observation_noise=[[1e-2]],
             prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
         )  # no control matrix
         with pytest.raises(ValueError, match="control matrix"):

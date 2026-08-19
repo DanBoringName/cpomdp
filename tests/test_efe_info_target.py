@@ -28,16 +28,16 @@ def test_full_state_info_gain_equals_observation_space_form():
     n, m = 4, 2
     sigma_pred = jnp.asarray(_spd(rng, n))  # Σ⁺, the predicted joint covariance
     sensor_model = jnp.asarray(rng.standard_normal((m, n)))  # C
-    sensor_noise = jnp.asarray(_spd(rng, m))  # R
+    observation_noise = jnp.asarray(_spd(rng, m))  # R
 
     # The observation-space number the current kernel computes.
-    s = sensor_model @ sigma_pred @ sensor_model.T + sensor_noise  # S
+    s = sensor_model @ sigma_pred @ sensor_model.T + observation_noise  # S
     _, logdet_s = np.linalg.slogdet(s)
-    _, logdet_r = np.linalg.slogdet(sensor_noise)
+    _, logdet_r = np.linalg.slogdet(observation_noise)
     expected = 0.5 * (logdet_s - logdet_r)
 
     # The new state-space route, restricted to the whole state (target = all indices).
-    got = _state_info_gain(sigma_pred, sensor_model, sensor_noise, target=range(n))
+    got = _state_info_gain(sigma_pred, sensor_model, observation_noise, target=range(n))
     np.testing.assert_allclose(float(got), expected, atol=1e-10)
 
 
@@ -48,11 +48,11 @@ def test_node_info_gain_matches_independent_moment_update():
     n, m = 5, 2
     sigma_pred = _spd(rng, n)  # Σ⁺
     sensor_model = rng.standard_normal((m, n))  # C
-    sensor_noise = _spd(rng, m)  # R
+    observation_noise = _spd(rng, m)  # R
     target = [1, 2]  # a node occupying state indices 1..2
 
     # Independent (moment-form) posterior covariance, then the block log-det drop.
-    s = sensor_model @ sigma_pred @ sensor_model.T + sensor_noise
+    s = sensor_model @ sigma_pred @ sensor_model.T + observation_noise
     gain = sigma_pred @ sensor_model.T @ np.linalg.inv(s)  # K
     sigma_post = sigma_pred - gain @ sensor_model @ sigma_pred
     block = np.ix_(target, target)
@@ -63,7 +63,7 @@ def test_node_info_gain_matches_independent_moment_update():
     got = _state_info_gain(
         jnp.asarray(sigma_pred),
         jnp.asarray(sensor_model),
-        jnp.asarray(sensor_noise),
+        jnp.asarray(observation_noise),
         target=target,
     )
     np.testing.assert_allclose(float(got), expected, atol=1e-9)
@@ -75,12 +75,12 @@ def test_full_state_gain_matches_expected_free_energy_epistemic():
     dynamics = np.array([[1.0, 0.1], [0.0, 1.0]])  # A
     dynamics_noise = np.array([[0.1, 0.0], [0.0, 0.1]])  # Q
     sensor_model = np.array([[1.0, 0.0]])  # C
-    sensor_noise = np.array([[0.5]])  # R
+    observation_noise = np.array([[0.5]])  # R
     model = LinearGaussianModel(
         dynamics=dynamics,
         sensor_model=sensor_model,
         dynamics_noise=dynamics_noise,
-        sensor_noise=sensor_noise,
+        observation_noise=observation_noise,
         prior=Belief(mean=[0.0, 0.0], cov=np.eye(2)),
         control=[[0.0], [1.0]],
     )
@@ -95,7 +95,7 @@ def test_full_state_gain_matches_expected_free_energy_epistemic():
     got = _state_info_gain(
         jnp.asarray(sigma_pred),
         jnp.asarray(sensor_model),
-        jnp.asarray(sensor_noise),
+        jnp.asarray(observation_noise),
         target=range(2),
     )
     np.testing.assert_allclose(float(got), float(parts["epistemic"]), atol=1e-9)
@@ -107,13 +107,13 @@ def test_ffg_efe_step_reduces_to_expected_free_energy():
     dynamics = np.array([[1.0, 0.1], [0.0, 1.0]])  # A
     dynamics_noise = np.array([[0.1, 0.0], [0.0, 0.1]])  # Q
     sensor_model = np.array([[1.0, 0.0]])  # C
-    sensor_noise = np.array([[0.5]])  # R
+    observation_noise = np.array([[0.5]])  # R
     control = np.array([[0.0], [1.0]])  # B
     model = LinearGaussianModel(
         dynamics=dynamics,
         sensor_model=sensor_model,
         dynamics_noise=dynamics_noise,
-        sensor_noise=sensor_noise,
+        observation_noise=observation_noise,
         prior=Belief(mean=[0.0, 0.0], cov=np.eye(2)),
         control=control,
     )
@@ -131,7 +131,7 @@ def test_ffg_efe_step_reduces_to_expected_free_energy():
         jnp.asarray(mu_plus),
         jnp.asarray(sigma_plus),
         jnp.asarray(sensor_model),
-        jnp.asarray(sensor_noise),
+        jnp.asarray(observation_noise),
         preference.goal,
         preference.precision,
         target=range(2),

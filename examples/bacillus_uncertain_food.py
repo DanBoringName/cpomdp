@@ -224,7 +224,8 @@ def build_model() -> LinearGaussianModel:
         control=control,
         sensor_model=sensor_model,
         dynamics_noise=dynamics_noise,
-        sensor_noise=R_SELF * jnp.eye(4),  # nominal; the live R comes from `sensor`
+        observation_noise=R_SELF
+        * jnp.eye(4),  # nominal; the live R comes from `sensor`
         prior=Belief(mean=prior_mean, cov=prior_cov),
         observation=sensor,
     )

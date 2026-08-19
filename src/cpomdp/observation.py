@@ -21,7 +21,7 @@ __all__ = ["CallableSensor", "FixedSensor", "ObservationModel"]
 
 def _linear_gaussianize(
     sensor_model: Float64[Array, "m n"],
-    sensor_noise: Float64[Array, "m m"],
+    observation_noise: Float64[Array, "m m"],
     x: Float64[Array, "n"],
     sigma: Float64[Array, "n n"],
 ) -> tuple[Float64[Array, "m"], Float64[Array, "m m"]]:
@@ -31,7 +31,7 @@ def _linear_gaussianize(
     moment-matching lives in one place. A sensor with a nonlinear mean would supply
     its own second-order ``gaussianize`` instead of calling this.
     """
-    return sensor_model @ x, sensor_model @ sigma @ sensor_model.T + sensor_noise
+    return sensor_model @ x, sensor_model @ sigma @ sensor_model.T + observation_noise
 
 
 @runtime_checkable
@@ -86,44 +86,49 @@ class FixedSensor:
     Attributes:
         sensor_model: the observation matrix ``C`` (shape ``m x n``), mapping
             the ``n``-D state to the ``m``-D observation mean.
-        sensor_noise: the observation-noise covariance ``R`` (shape ``m x m``).
+        observation_noise: the observation-noise covariance ``R`` (shape ``m x m``).
     """
 
     sensor_model: Float64[Array, "m n"]  # C
-    sensor_noise: Float64[Array, "m m"]  # R
+    observation_noise: Float64[Array, "m m"]  # R
     is_fixed = True
 
-    def __init__(self, sensor_model: ArrayLike, sensor_noise: ArrayLike) -> None:
+    def __init__(self, sensor_model: ArrayLike, observation_noise: ArrayLike) -> None:
         object.__setattr__(self, "sensor_model", jnp.asarray(sensor_model, dtype=float))
-        object.__setattr__(self, "sensor_noise", jnp.asarray(sensor_noise, dtype=float))
+        object.__setattr__(
+            self, "observation_noise", jnp.asarray(observation_noise, dtype=float)
+        )
         self._validate()
 
     def linearize(
         self, x: ArrayLike
     ) -> tuple[Float64[Array, "m n"], Float64[Array, "m m"]]:
         """Return the stored ``(C, R)`` unchanged — the same for every ``x``."""
-        return self.sensor_model, self.sensor_noise
+        return self.sensor_model, self.observation_noise
 
     def gaussianize(
         self, x: ArrayLike, sigma: Float64[Array, "n n"]
     ) -> tuple[Float64[Array, "m"], Float64[Array, "m m"], Float64[Array, "m m"]]:
         """Exact linear ingredients ``(C·x, C·Σ·Cᵀ + R, R)``."""
         o_pred, pred_obs_cov = _linear_gaussianize(
-            self.sensor_model, self.sensor_noise, jnp.asarray(x, dtype=float), sigma
+            self.sensor_model,
+            self.observation_noise,
+            jnp.asarray(x, dtype=float),
+            sigma,
         )
-        return o_pred, pred_obs_cov, self.sensor_noise
+        return o_pred, pred_obs_cov, self.observation_noise
 
     def tree_flatten(self):
-        """Leaves: (sensor_model, sensor_noise); no static aux."""
-        return (self.sensor_model, self.sensor_noise), None
+        """Leaves: (sensor_model, observation_noise); no static aux."""
+        return (self.sensor_model, self.observation_noise), None
 
     @classmethod
     def tree_unflatten(cls, aux_data, children):
         """Rebuild without re-validating — leaves may be tracers."""
-        sensor_model, sensor_noise = children
+        sensor_model, observation_noise = children
         obj = object.__new__(cls)
         object.__setattr__(obj, "sensor_model", sensor_model)
-        object.__setattr__(obj, "sensor_noise", sensor_noise)
+        object.__setattr__(obj, "observation_noise", observation_noise)
         return obj
 
     def _validate(self) -> None:
@@ -132,12 +137,14 @@ class FixedSensor:
                 f"sensor_model must be a 2-D (m x n) matrix, "
                 f"got shape {self.sensor_model.shape}"
             )
-        validate_covariance(self.sensor_noise, "sensor_noise", require_definite=True)
+        validate_covariance(
+            self.observation_noise, "observation_noise", require_definite=True
+        )
         m = self.sensor_model.shape[0]
-        if self.sensor_noise.shape != (m, m):
+        if self.observation_noise.shape != (m, m):
             raise ValueError(
-                f"sensor_noise must be {m}x{m} to match the {m}-D observation, "
-                f"got shape {self.sensor_noise.shape}"
+                f"observation_noise must be {m}x{m} to match the {m}-D observation, "
+                f"got shape {self.observation_noise.shape}"
             )
 
 
@@ -158,7 +165,7 @@ class CallableSensor:
     — it is a covariance the epistemic term inverts. A non-PD ``R(x)`` has no real
     ½ln det, so the EFE epistemic term becomes NaN there (surfaced at action
     selection, not silently wrong); this is the runtime analogue of the
-    construction-time positive-definite check on a fixed ``sensor_noise``.
+    construction-time positive-definite check on a fixed ``observation_noise``.
 
     ``params`` is a pytree **leaf** (so EFE is grad-able w.r.t. it — sensor
     learning); ``noise_fn`` is **static aux** (a callable cannot be a traced leaf).

@@ -856,7 +856,7 @@ class TestStateDependentSensing:
             dynamics=A,
             sensor_model=C,
             dynamics_noise=Q,
-            sensor_noise=params["R0"],  # placeholder; overridden by observation
+            observation_noise=params["R0"],  # placeholder; overridden by observation
             prior=Belief(mean=np.zeros(2), cov=np.eye(2)),
             control=B,
             observation=CallableSensor(C, _rx_noise, params),

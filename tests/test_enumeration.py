@@ -62,17 +62,18 @@ def _model():
         dynamics=[[1.0, 0.1], [0.0, 1.0]],
         sensor_model=[[1.0, 0.0]],
         dynamics_noise=[[0.1, 0.0], [0.0, 0.1]],
-        sensor_noise=[[0.5]],
+        observation_noise=[[0.5]],
         prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
         control=[[0.0], [1.0]],
     )
 
 
 def _beacon_model():
-    """1-D R(x): the action moves position directly, sensor noise is low near +2.
+    """1-D R(x): the action moves position directly, observation noise is low near +2.
 
     Action maps straight to position (control [[1.0]], sensor [[1.0]]), so every action
-    reaches an observation. Sensor noise falls near the beacon at +2, so reaching that
+    reaches an observation. Observation noise falls near the beacon at +2, so
+    reaching that
     low-noise region buys epistemic value the goal-observation at 0 does not. The
     optimum is to get to the beacon and hold, which no single held action can do.
     """
@@ -91,7 +92,7 @@ def _beacon_model():
         dynamics=[[1.0]],
         sensor_model=[[1.0]],
         dynamics_noise=[[0.05]],
-        sensor_noise=[[0.5]],
+        observation_noise=[[0.5]],
         prior=Belief(mean=[0.0], cov=[[1.0]]),
         control=[[1.0]],
         observation=sensor,
@@ -292,7 +293,7 @@ class TestCostAndTransforms:
             dynamics=[[1.0, 0.0], [0.0, 1.0]],
             sensor_model=[[1.0, 0.0]],
             dynamics_noise=[[0.1, 0.0], [0.0, 0.1]],
-            sensor_noise=[[0.5]],
+            observation_noise=[[0.5]],
             prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
             control=[[1.0, 0.0], [0.0, 1.0]],  # (n=2, p=2)
         )
@@ -312,7 +313,7 @@ class TestValidation:
             dynamics=[[1.0]],
             sensor_model=[[1.0]],
             dynamics_noise=[[0.1]],
-            sensor_noise=[[0.5]],
+            observation_noise=[[0.5]],
             prior=Belief(mean=[0.0], cov=[[1.0]]),
             control=None,
         )

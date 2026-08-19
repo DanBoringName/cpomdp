@@ -1,7 +1,7 @@
 """Figure: the epistemic collapse breaks from the *inside* — through process noise.
 
 The companion to examples/efe_collapse_figure.py. There, a state-dependent sensor
-R(x) made the epistemic term action-dependent. Here the sensor noise R is held
+R(x) made the epistemic term action-dependent. Here the observation noise R is held
 FIXED and the action-dependence comes entirely from state-dependent internal
 process noise Q(x) — the route RFC-001 chapter 8 cares about, where the binding
 precision constraint lives in internal processing rather than the sensor.
@@ -32,7 +32,7 @@ from cpomdp.types import Belief, LinearGaussianModel
 OUT = Path(__file__).resolve().parent.parent / "docs" / "assets" / "internal_noise.png"
 
 # 1-D single integrator: μ⁺ = μ + a, so the action moves the state directly and a
-# one-step sweep is clean. R (sensor noise) is fixed throughout — the only thing
+# one-step sweep is clean. R (observation noise) is fixed throughout — the only thing
 # that varies between the panels is Q.
 DYNAMICS = [[1.0]]
 CONTROL = [[1.0]]
@@ -63,7 +63,7 @@ def _model(process_noise=None):
         dynamics=DYNAMICS,
         sensor_model=SENSOR,
         dynamics_noise=FIXED_Q,
-        sensor_noise=FIXED_R,
+        observation_noise=FIXED_R,
         prior=BELIEF,
         control=CONTROL,
         process_noise=process_noise,

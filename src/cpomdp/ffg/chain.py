@@ -102,7 +102,7 @@ class ChainBackend:
             else None
         )
         self._observation: GaussianObservation | None = (
-            GaussianObservation(model.sensor_model, model.sensor_noise)  # C, R
+            GaussianObservation(model.sensor_model, model.observation_noise)  # C, R
             if self._sensor_fixed
             else None
         )
@@ -180,8 +180,8 @@ class ChainBackend:
             observation_factor = self._observation
         else:
             assert model.observation is not None  # guaranteed by _sensor_fixed
-            sensor_model, sensor_noise = model.observation.linearize(mean_pred)
-            observation_factor = GaussianObservation(sensor_model, sensor_noise)
+            sensor_model, observation_noise = model.observation.linearize(mean_pred)
+            observation_factor = GaussianObservation(sensor_model, observation_noise)
 
         prior_precision = jnp.linalg.inv(prior.cov)  # Λ₀ = Σ⁻¹
         prior_msg = CanonicalGaussian._unchecked(

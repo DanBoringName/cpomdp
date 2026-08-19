@@ -79,10 +79,10 @@ Notice the 0. The agent can never measure its velocity, it can only *infer* it b
 
 ### Noise
 
-The last piece we need is the noise of the world. In this case we have two noises. Dynamic noise, and sensor noise. Let's use our bacteria in a petri-dish example again.
+The last piece we need is the noise of the world. In this case we have two noises. Dynamic noise, and observation noise. Let's use our bacteria in a petri-dish example again.
 
 - **Dynamic noise** can be thought of as the random pelting you would take from neighbouring particles in the jelly and vibrations in the dish. This makes your idea of where you are much harder to read.
-- **Sensor noise** is the uncertainty of what you are sensing with your tiny microbial sensor. The blurriness of what you "see" if you will.
+- **Observation noise** is the uncertainty of what you are sensing with your tiny microbial sensor. The blurriness of what you "see" if you will.
 
 Now represent these terms as scalar values. The `dynamics_noise` (the wobble) affects position and velocity. Say we give it the value of **1e-6**. Dynamics has two properties that get pelted so `dynamics_noise` is a 2x2 matrix.
 
@@ -99,13 +99,13 @@ dynamics_noise = jnp.eye(2) * 1e-6
 
 Broken down this is saying "multiply a 2x2 identity matrix by 1e-6" which comes out exactly as written above in full matrix form.
 
-The sensor only gives one reading, so `sensor_noise` is a 1x1 matrix.
+The sensor only gives one reading, so `observation_noise` is a 1x1 matrix.
 
 ```python
-sensor_noise   = [[1e-2]]            # one reading, one wobble
+observation_noise   = [[1e-2]]            # one reading, one wobble
 ```
 
->Note: `sensor_noise` looks the same written down as it does in Python, so there's no separate "in Python this is written as…" step.
+>Note: `observation_noise` looks the same written down as it does in Python, so there's no separate "in Python this is written as…" step.
 
 ### The Prior
 
@@ -152,7 +152,7 @@ dynamics = [[1, dt],
 sensor_model = [[1, 0]]     # what the agent senses: position only (the 0 hides velocity)
 
 dynamics_noise = jnp.eye(2) * 1e-6   # the world's own wobble
-sensor_noise   = [[1e-2]]            # the sensor's wobble
+observation_noise   = [[1e-2]]            # the sensor's wobble
 
 # --- the agent's starting belief ---
 prior = Belief(mean=[0, 0],
@@ -163,7 +163,7 @@ model = LinearGaussianModel(
     dynamics=dynamics,
     sensor_model=sensor_model,
     dynamics_noise=dynamics_noise,
-    sensor_noise=sensor_noise,
+    observation_noise=observation_noise,
     prior=prior,
 )
 # the world is built — nothing has happened yet; that starts when we perceive and act
@@ -283,7 +283,7 @@ model = LinearGaussianModel(
     control=control,          # <-- the new piece
     sensor_model=sensor_model,
     dynamics_noise=dynamics_noise,
-    sensor_noise=sensor_noise,
+    observation_noise=observation_noise,
     prior=prior,
 )
 ```
@@ -356,7 +356,7 @@ model = LinearGaussianModel(
     control=[[0], [dt]],
     sensor_model=[[1, 0]],
     dynamics_noise=jnp.eye(2) * 1e-6,
-    sensor_noise=[[1e-2]],
+    observation_noise=[[1e-2]],
     prior=Belief(mean=[0, 0], cov=jnp.eye(2)),
 )
 agent = Agent(model, StateGoal([1.0, 0.0]))

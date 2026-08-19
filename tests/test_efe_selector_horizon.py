@@ -53,7 +53,7 @@ def _model():
         dynamics=[[1.0]],
         sensor_model=[[1.0]],
         dynamics_noise=[[0.05]],
-        sensor_noise=[[0.3]],
+        observation_noise=[[0.3]],
         prior=Belief(mean=[0.0], cov=[[0.5]]),
         control=[[1.0]],
         observation=sensor,
@@ -182,7 +182,7 @@ class TestEFESelectorValidation:
             dynamics=[[1.0, 0.0], [0.0, 1.0]],
             sensor_model=[[1.0, 0.0]],
             dynamics_noise=[[0.1, 0.0], [0.0, 0.1]],
-            sensor_noise=[[0.3]],
+            observation_noise=[[0.3]],
             prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
             control=[[1.0, 0.0], [0.0, 1.0]],  # p = 2
         )
@@ -200,7 +200,7 @@ class TestEFESelectorValidation:
             dynamics=[[1.0]],
             sensor_model=[[1.0]],
             dynamics_noise=[[0.05]],
-            sensor_noise=[[0.3]],
+            observation_noise=[[0.3]],
             prior=belief,
             control=[[1.0]],
             observation=CallableSensor([[1.0]], half_neg, {}),

@@ -44,7 +44,7 @@ def _model(observation=None):
         dynamics=[[1.0, 0.1], [0.0, 1.0]],
         sensor_model=[[1.0, 0.0]],
         dynamics_noise=[[0.1, 0.0], [0.0, 0.1]],
-        sensor_noise=[[0.5]],
+        observation_noise=[[0.5]],
         prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
         control=[[0.0], [1.0]],
         observation=observation,
@@ -84,7 +84,7 @@ def _internal_q_model():
         dynamics=[[1.0]],
         sensor_model=[[1.0]],
         dynamics_noise=[[0.1]],
-        sensor_noise=[[0.3]],
+        observation_noise=[[0.3]],
         prior=Belief(mean=[0.0], cov=[[0.2]]),
         control=[[1.0]],
         process_noise=pn,
@@ -155,11 +155,11 @@ def _frozen_efe(model, belief, action, preference):
     sigma_pred = model.A @ sigma @ model.A.T + process_q
 
     if model.observation is None:
-        sensor_model, sensor_noise = model.C, model.R
+        sensor_model, observation_noise = model.C, model.R
         o_pred = sensor_model @ mu_pred
-        pred_obs_cov = sensor_model @ sigma_pred @ sensor_model.T + sensor_noise
+        pred_obs_cov = sensor_model @ sigma_pred @ sensor_model.T + observation_noise
     else:
-        o_pred, pred_obs_cov, sensor_noise = model.observation.gaussianize(
+        o_pred, pred_obs_cov, observation_noise = model.observation.gaussianize(
             mu_pred, sigma_pred
         )
 
@@ -170,7 +170,7 @@ def _frozen_efe(model, belief, action, preference):
     pragmatic = pragmatic_mean + pragmatic_var
 
     epistemic = 0.5 * (
-        _frozen_logdet_pd(pred_obs_cov) - _frozen_logdet_pd(sensor_noise)
+        _frozen_logdet_pd(pred_obs_cov) - _frozen_logdet_pd(observation_noise)
     )
 
     g = pragmatic - epistemic
@@ -235,7 +235,7 @@ class TestEfeStepContract:
         b_mat = np.asarray(model.control)
         q_mat = np.asarray(model.dynamics_noise)
         c_mat = np.asarray(model.sensor_model)
-        r_mat = np.asarray(model.sensor_noise)
+        r_mat = np.asarray(model.observation_noise)
         mu = np.asarray(belief.mean)
         sigma = np.asarray(belief.cov)
         a = np.asarray(action, dtype=float)

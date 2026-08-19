@@ -24,7 +24,7 @@ def _reaching_model() -> LinearGaussianModel:
         dynamics=DYNAMICS,
         sensor_model=SENSOR_MODEL,
         dynamics_noise=[[1e-6, 0.0], [0.0, 1e-6]],
-        sensor_noise=[[1e-2]],
+        observation_noise=[[1e-2]],
         prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
         control=CONTROL,
     )
@@ -54,7 +54,7 @@ def _reaching_model_2d() -> LinearGaussianModel:
         dynamics=DYNAMICS_2D,
         sensor_model=SENSOR_MODEL_2D,
         dynamics_noise=np.eye(4) * 1e-6,
-        sensor_noise=np.eye(2) * 1e-2,
+        observation_noise=np.eye(2) * 1e-2,
         prior=Belief(mean=[0.0, 0.0, 0.0, 0.0], cov=np.eye(4)),
         control=CONTROL_2D,
     )
@@ -127,7 +127,7 @@ def test_perceive_only_agent_cannot_act():
         dynamics=[[1.0, DT], [0.0, 1.0]],
         sensor_model=SENSOR_MODEL,
         dynamics_noise=[[1e-6, 0.0], [0.0, 1e-6]],
-        sensor_noise=[[1e-2]],
+        observation_noise=[[1e-2]],
         prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
         # no control= → no action channel
     )
@@ -187,7 +187,7 @@ def _corridor_model(*, fixed, control=True):
         dynamics=[[1.0]],
         sensor_model=[[1.0]],
         dynamics_noise=[[0.05]],
-        sensor_noise=[[0.3]],
+        observation_noise=[[0.3]],
         prior=Belief(mean=[0.0], cov=[[0.5]]),
         control=[[1.0]] if control else None,
         observation=sensor,

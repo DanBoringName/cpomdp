@@ -46,7 +46,7 @@ def _model(observation=None):
         dynamics=[[1.0, 0.1], [0.0, 1.0]],
         sensor_model=[[1.0, 0.0]],
         dynamics_noise=[[0.1, 0.0], [0.0, 0.1]],
-        sensor_noise=[[0.5]],
+        observation_noise=[[0.5]],
         prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
         control=[[0.0], [1.0]],
         observation=observation,
@@ -86,7 +86,7 @@ def _internal_q_model():
         dynamics=[[1.0]],
         sensor_model=[[1.0]],
         dynamics_noise=[[0.1]],
-        sensor_noise=[[0.3]],
+        observation_noise=[[0.3]],
         prior=Belief(mean=[0.0], cov=[[0.2]]),
         control=[[1.0]],
         process_noise=pn,
@@ -150,7 +150,7 @@ def _numpy_policy_efe_trace(model, belief, policy, goal, precision):
 
         if model.observation is None:
             c = np.asarray(model.sensor_model)
-            r = np.asarray(model.sensor_noise)
+            r = np.asarray(model.observation_noise)
         else:
             c_arr, r_arr = model.observation.linearize(mu_pred)
             c, r = np.asarray(c_arr), np.asarray(r_arr)

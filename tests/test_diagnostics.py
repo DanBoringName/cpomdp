@@ -47,7 +47,7 @@ def chain(noise_fn, *, control=1.0):
         dynamics=[[1.0]],
         sensor_model=[[1.0]],
         dynamics_noise=[[1.0]],
-        sensor_noise=[[1.0]],
+        observation_noise=[[1.0]],
         prior=Belief([0.0], [[1.0]]),
         control=[[control]],
         observation=CallableSensor([[1.0]], noise_fn, None),
@@ -137,7 +137,7 @@ class TestProbeFlatModel:
             dynamics=[[1.0]],
             sensor_model=[[1.0]],
             dynamics_noise=[[1.0]],
-            sensor_noise=[[1.0]],
+            observation_noise=[[1.0]],
             prior=Belief([0.0], [[1.0]]),
             control=[[1.0]],
         )
