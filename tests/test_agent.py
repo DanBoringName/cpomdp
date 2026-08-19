@@ -198,7 +198,9 @@ def _corridor_model(*, fixed, control_matrix=True):
     )
 
 
-_OBS_GOAL = ObservationGoal([0.0], (-3.0, 3.0), precision=[[0.4]])  # observe position 0
+_OBS_GOAL = ObservationGoal(
+    [0.0], action_bounds=(-3.0, 3.0), precision=[[0.4]]
+)  # observe position 0
 _BOUNDS = (-3.0, 3.0)
 
 
@@ -268,7 +270,8 @@ class TestRegimeDispatch:
         # crash cryptically deep in the EFE kernel at sample_action.
         with pytest.raises(ValueError, match=r"observation dimension|length 1"):
             Agent(
-                _corridor_model(fixed=False), ObservationGoal([0.0, 0.0], (-3.0, 3.0))
+                _corridor_model(fixed=False),
+                ObservationGoal([0.0, 0.0], action_bounds=(-3.0, 3.0)),
             )
 
     def test_qs_aliases_belief(self):
@@ -368,7 +371,9 @@ def test_efe_agent_reaches_lower_uncertainty_than_lqr():
     steps = 15
     efe = Agent(
         _corridor_model(fixed=False),
-        ObservationGoal([0.0], (-3.0, 3.0), precision=[[0.4]], n_candidates=61),
+        ObservationGoal(
+            [0.0], action_bounds=(-3.0, 3.0), precision=[[0.4]], n_candidates=61
+        ),
     )
     _, efe_cov, efe_pos, _ = _run_recording(efe, [0.0], steps)
 

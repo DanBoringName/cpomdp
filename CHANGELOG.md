@@ -94,6 +94,11 @@ an exposure rather than a result.
   share a name on two classes: the field holds the declaration, the method returns the
   `(C, R)` it resolves to. The `.A`/`.B`/`.C`/`.Q`/`.R` aliases are unchanged, and no
   numerical behaviour moved.
+- **Breaking:** `ObservationGoal` takes `action_bounds` by keyword. `StateGoal` already
+  keyword-onlys everything after its first argument, so this was the odd one out in a
+  public pair a reader meets together. The two positional slots also transposed without
+  raising for a 2-D increasing target, since `(lo, hi)` then satisfies the target's shape
+  check and the target satisfies `lo < hi`. 24 call sites moved to keywords.
 - **Breaking:** `FixedSensor` and `GaussianObservation` take `observation_noise` by
   keyword. The observation pair is (m, n) against (m, m), so the two are distinguishable
   by shape only when m != n, and a 1-D sensor is the case where they coincide. Only the

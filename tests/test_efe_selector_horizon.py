@@ -125,34 +125,40 @@ class TestHorizonSelect:
 
 class TestObservationGoalHorizon:
     def test_default_horizon_is_one(self):
-        assert ObservationGoal([0.0], (-2.0, 2.0)).horizon == 1
+        assert ObservationGoal([0.0], action_bounds=(-2.0, 2.0)).horizon == 1
 
     def test_carries_horizon(self):
-        assert ObservationGoal([0.0], (-2.0, 2.0), horizon=4).horizon == 4
+        assert ObservationGoal([0.0], action_bounds=(-2.0, 2.0), horizon=4).horizon == 4
 
     def test_horizon_below_one_raises(self):
         with np.testing.assert_raises(ValueError):
-            ObservationGoal([0.0], (-2.0, 2.0), horizon=0)
+            ObservationGoal([0.0], action_bounds=(-2.0, 2.0), horizon=0)
 
 
 class TestObservationGoalInfoTarget:
     def test_default_info_target_is_none(self):
         # None = whole-state info gain, the unchanged default (issue #26).
-        assert ObservationGoal([0.0], (-2.0, 2.0)).info_target is None
+        assert ObservationGoal([0.0], action_bounds=(-2.0, 2.0)).info_target is None
 
     def test_carries_info_target_node_index(self):
-        assert ObservationGoal([0.0], (-2.0, 2.0), info_target=2).info_target == 2
+        assert (
+            ObservationGoal([0.0], action_bounds=(-2.0, 2.0), info_target=2).info_target
+            == 2
+        )
 
     def test_negative_info_target_raises(self):
         with np.testing.assert_raises(ValueError):
-            ObservationGoal([0.0], (-2.0, 2.0), info_target=-1)
+            ObservationGoal([0.0], action_bounds=(-2.0, 2.0), info_target=-1)
 
 
 class TestAgentThreadsHorizon:
     def test_agent_builds_selector_with_goal_horizon(self):
         model = _model()
         agent = Agent(
-            model, ObservationGoal([0.0], (-3.0, 3.0), n_candidates=11, horizon=3)
+            model,
+            ObservationGoal(
+                [0.0], action_bounds=(-3.0, 3.0), n_candidates=11, horizon=3
+            ),
         )
         sel = agent._selector
         assert isinstance(sel, EFESelector)
@@ -161,7 +167,9 @@ class TestAgentThreadsHorizon:
 
     def test_default_goal_gives_horizon_one_selector(self):
         model = _model()
-        agent = Agent(model, ObservationGoal([0.0], (-3.0, 3.0), n_candidates=11))
+        agent = Agent(
+            model, ObservationGoal([0.0], action_bounds=(-3.0, 3.0), n_candidates=11)
+        )
         sel = agent._selector
         assert isinstance(sel, EFESelector)
         assert sel.horizon == 1

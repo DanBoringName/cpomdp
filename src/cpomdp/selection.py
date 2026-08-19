@@ -392,8 +392,8 @@ class ObservationGoal:
     def __init__(
         self,
         target,
-        action_bounds,
         *,
+        action_bounds,
         precision=None,
         n_candidates=21,
         horizon=1,
