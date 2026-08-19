@@ -1189,6 +1189,24 @@ reader should use. Nothing about a registered count, a bar, a tolerance or a mea
 number is touched by the move: `research/` became a package of its own so the modules are
 type-checked and installed rather than resolved off `sys.path` (ADR-039).
 
+### DISCLOSURE 2026-08-19: the subtract decision carries the declaration's date
+
+`### DECISION 2026-08-07: the rule fires for **subtract**` is dated three days before the
+measurement it rests on. It reports `c₄`'s relative error as 0.36% by extraction, and that
+jackknifed spread is established in the RESULT entry dated 2026-08-10, "the `c₄` refit,
+and the rule fires for subtraction", immediately above it. The basis-fit figure beside it
+comes from the same refit. An entry recording that a rule fired cannot predate the run
+that fired it.
+
+The pre-registration is not in doubt. The rule is registered in `### AMENDMENT 2026-08-07:
+dilute-versus-subtract becomes a rule`, and its threshold `X = 0.1` in `### AMENDMENT
+2026-08-07: the numbers, committed before the refit`. Both are genuinely earlier than the
+08-10 refit and the git history carries them, so the branch was decided against a bar set
+before the answer was visible. That is what the entry claims about itself and it holds.
+
+What is wrong is the date on the entry recording the firing, which should be the refit's
+rather than the declaration's. The heading and its text stay as written.
+
 ## Stop conditions (DECLARED 2026-08-07)
 
 Two branches, disjoint, split by which half of the instrument failed.
