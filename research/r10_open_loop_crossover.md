@@ -121,7 +121,7 @@ Asserted in `tests/test_crossover.py` (`ANCHOR_TOL = 1e-4`).
 
 ### 3.2 The decisive measurement: the exhaustive argmin flips at H = 7 (selection-free)
 
-`EnumeratedEfeSearch.over_backend(backend, {−2,−1,0,1,2}, target=CONTEXT, horizon=H)`,
+`EnumeratedEfeSearch.over_backend(backend, {−2,−1,0,1,2}, info_block=CONTEXT, horizon=H)`,
 every `A^H` policy enumerated at each horizon. Feasibility is the enumeration cost
 `|A|^H · H`, printed so it is not an undeclared budget (chapter 6):
 

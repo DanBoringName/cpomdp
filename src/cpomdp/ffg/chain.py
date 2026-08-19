@@ -21,7 +21,8 @@ Scope (tier-1). Both factors invert their noise covariance, so a deterministic
 (``Q = 0``) transition has no information form and is rejected by the transition
 factor regardless of fixedness — the one documented divergence from moment-form
 Kalman, harmless for the chain the gate exercises. State-dependent ``R(x)``/``Q(x)``
-(the ``observation``/``process_noise`` fields) reach parity with ``KalmanBackend``
+(the ``observation_model``/``dynamics_noise_model`` fields) reach parity with
+``KalmanBackend``
 (ADR-012 amendment 2026-06-26): the fixed sides keep their front-loaded
 factors; a state-dependent side is linearized at the predicted mean ``μ⁻`` and its
 factor rebuilt per step (see ``infer_states``).
@@ -58,7 +59,8 @@ class ChainBackend:
 
     Args:
         model: The linear-Gaussian generative model to filter under. A
-            state-dependent ``observation`` (``R(x)``) or ``process_noise``
+            state-dependent ``observation_model`` (``R(x)``) or
+            ``dynamics_noise_model``
             (``Q(x)``) is supported and linearized at the predicted
             mean each step; the fixed sides are front-loaded once here. Whichever
             covariance ends up feeding the transition factor (fixed ``dynamics_noise``
@@ -78,14 +80,17 @@ class ChainBackend:
         mirroring ``KalmanBackend``::
 
             fixed = model.observation_model is None or model.observation_model.is_fixed
-            process_fixed = model.process_noise is None or model.process_noise.is_fixed
+            process_fixed = (model.dynamics_noise_model is None
+                             or model.dynamics_noise_model.is_fixed)
 
         When a side is *not* fixed, the corresponding factor is left ``None`` here
-        and built per step in ``infer_states`` from ``observation.linearize(μ⁻)`` /
-        ``process_noise.noise_at(μ⁻)`` instead (ADR-012 amendment
+        and built per step in ``infer_states`` from
+        ``observation_model.linearize(μ⁻)`` /
+        ``dynamics_noise_model.noise_at(μ⁻)`` instead (ADR-012 amendment
         2026-06-26). This is not just laziness: ``GaussianTransition`` requires Q
         positive-*definite* (it inverts it), but a model carrying a state-dependent
-        ``process_noise`` is only required to give ``model.dynamics_noise`` itself a
+        ``dynamics_noise_model`` is only required to give ``model.dynamics_noise``
+        itself a
         positive-*semi*-definite placeholder (it's unused) — front-loading
         unconditionally would reject that legitimate placeholder.
 
@@ -131,8 +136,8 @@ class ChainBackend:
         ``to_moment`` the result back into a ``Belief``.
 
         On a state-dependent side, the transition/observation factor for
-        *this* step is built from ``process_noise.noise_at(μ⁻)`` /
-        ``observation.linearize(μ⁻)``, where ``μ⁻ = A·prior.mean + b`` is the
+        *this* step is built from ``dynamics_noise_model.noise_at(μ⁻)`` /
+        ``observation_model.linearize(μ⁻)``, where ``μ⁻ = A·prior.mean + b`` is the
         predicted mean — pure mean-propagation, so it needs no Q and can be computed
         before any factor exists. This is exactly ``KalmanBackend``'s linearization
         point (ADR-008), so the two backends see the same noise each step. The fully

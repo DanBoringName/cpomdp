@@ -77,6 +77,7 @@ class CallableProcessNoise:
 
     def _validate(self) -> None:
         # Shape/PSD of Q(x) can't be checked here — we don't know n. The MODEL probes
-        # process_noise.at(zeros(n)) at its own construction, where n is known.
+        # dynamics_noise_model.noise_at(zeros(n)) at its own construction, where n
+        # is known.
         if not callable(self.q_fn):
             raise TypeError(f"q_fn must be callable, got {type(self.q_fn).__name__}")

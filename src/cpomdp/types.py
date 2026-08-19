@@ -89,7 +89,8 @@ class Belief:
 
 
 # A pytree leaf of a LinearGaussianModel: a matrix, the prior Belief, a child
-# sensor/process-noise model, or None (an absent control/observation/process_noise).
+# sensor/process-noise model, or None (an absent control_matrix,
+# observation_model or dynamics_noise_model).
 _ModelLeaf = Array | Belief | ObservationModel | DynamicsNoise | None
 
 
@@ -225,36 +226,36 @@ class LinearGaussianModel:
                 f"got shape {self.observation_noise.shape}"
             )
 
-        # control (optional) maps action -> state: (n, p). Rows must match n.
+        # control_matrix (optional) maps action -> state: (n, p). Rows match n.
         if self.control_matrix is not None and (
             self.control_matrix.ndim != 2 or self.control_matrix.shape[0] != n
         ):
             raise ValueError(
-                f"control must have {n} rows to match the {n}-D state, "
+                f"control_matrix must have {n} rows to match the {n}-D state, "
                 f"got shape {self.control_matrix.shape}"
             )
         if self.observation_model is not None and not isinstance(
             self.observation_model, ObservationModel
         ):
             raise TypeError(
-                f"observation must be an ObservationModel, "
+                f"observation_model must be an ObservationModel, "
                 f"got {type(self.observation_model).__name__}"
             )
 
-        # process_noise (optional): state-dependent Q(x). CallableProcessNoise can't
+        # dynamics_noise_model (optional): state-dependent Q(x). CallableProcessNoise
         # check its own shape (no n), so probe it here, where n is known.
         if self.dynamics_noise_model is not None:
             if not isinstance(self.dynamics_noise_model, DynamicsNoise):
                 raise TypeError(
-                    f"process_noise must be a DynamicsNoise, "
+                    f"dynamics_noise_model must be a DynamicsNoise, "
                     f"got {type(self.dynamics_noise_model).__name__}"
                 )
             q_probe = jnp.asarray(self.dynamics_noise_model.noise_at(jnp.zeros(n)))
-            validate_covariance(q_probe, "process_noise.noise_at(x)")
+            validate_covariance(q_probe, "dynamics_noise_model.noise_at(x)")
             if q_probe.shape != (n, n):
                 raise ValueError(
-                    f"process_noise.noise_at(x) must return an {n}x{n} covariance "
-                    f"to match the {n}-D state, got shape {q_probe.shape}"
+                    f"dynamics_noise_model.noise_at(x) must return an {n}x{n} "
+                    f"covariance to match the {n}-D state, got shape {q_probe.shape}"
                 )
 
         # structure (optional): declarative metadata; validated opt-in via
@@ -319,10 +320,12 @@ class LinearGaussianModel:
     def tree_flatten(self) -> tuple[tuple[_ModelLeaf, ...], ModelStructure | None]:
         """Leaves for JAX: every matrix plus the ``prior`` belief; ``structure`` is aux.
 
-        ``control``, ``observation`` and ``process_noise`` are included as (possibly
+        ``control_matrix``, ``observation_model`` and ``dynamics_noise_model`` are
+        included as (possibly
         ``None``) children; an uncontrolled / fixed-sensor / fixed-Q model contributes
         no leaf there and the ``None`` is restored on rebuild. A non-``None``
-        ``observation``/``process_noise`` is itself a pytree and recurses into its own
+        ``observation_model``/``dynamics_noise_model`` is itself a pytree and recurses
+        into its own
         leaves. ``structure`` (declarative metadata, no array leaves) rides in the
         static aux_data, so two models differing only in ``structure`` are different
         pytrees and a jit keyed on the model re-specialises when it changes.
