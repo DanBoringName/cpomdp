@@ -126,6 +126,11 @@ class LinearGaussianModel:
     Dimensions: ``n`` = state, ``m`` = observation, ``p`` = action. A model with
     no ``control`` is a pure filtering (tracking) model.
 
+    Everything after ``dynamics`` is keyword-only. Two of the four matrices are maps and
+    two are covariances, all of the same rank, and only the covariances are
+    content-checked. A transposed pair therefore constructs in silence whenever the maps
+    are square and symmetric. Naming them at the call site rules that out.
+
     Three optional fields (all default ``None`` → the plain fixed-matrix model)
     extend it: ``observation`` (an [`ObservationModel`][cpomdp.ObservationModel] for
     state-dependent sensing ``R(x)``), ``process_noise`` (a
@@ -147,6 +152,7 @@ class LinearGaussianModel:
     def __init__(
         self,
         dynamics: ArrayLike,
+        *,
         observation_matrix: ArrayLike,
         dynamics_noise: ArrayLike,
         observation_noise: ArrayLike,

@@ -130,7 +130,8 @@ class EFESelector:
     *sequence*. A genuinely sequential epistemic policy — move to sense, then exploit —
     needs a varying sequence the constant-action family cannot express, so at H > 1 the
     selector can still look myopic-ish on such tasks. True varying-sequence search is
-    the deferred v0.4 ``GradientEFESelector`` seam.
+    ``EnumeratedEfeSearch`` in ``cpomdp.enumeration``, which enumerates every length-H
+    sequence of a declared finite action set (ADR-031).
     """
 
     def __init__(
@@ -150,8 +151,8 @@ class EFESelector:
         if p != 1:
             raise ValueError(
                 f"EFESelector searches a 1-D action grid (p=1); got p={p}. "
-                f"Multi-dimensional action search is the deferred v0.4 "
-                f"GradientEFESelector seam — pass a custom selector for p>1."
+                "For p>1 use EnumeratedEfeSearch over a declared FiniteActionSet "
+                "(cpomdp.enumeration), or pass a custom selector."
             )
         lo, hi = action_bounds
         if not lo < hi:
