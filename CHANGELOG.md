@@ -98,7 +98,7 @@ an exposure rather than a result.
   `target`. `target` carried two unrelated types on exported API: a desired value
   (`Float64[Array, "n"]`) on `StateGoal` and `ObservationGoal`, and the joint-state
   indices the epistemic term reads (`Sequence[int]`) on `FfgEfeSelector`,
-  `policy_efe_ffg` and both `over_backend` classmethods. A reader who learned the first
+  `policy_efe_ffg` and both `over_backend` class methods. A reader who learned the first
   from the Goal classes and passed a goal vector to the FFG API got `G = nan` with no
   raise, and `_argmin` maps nan to `+inf`, so a different action was selected in silence.
   The two are one address at two resolutions: `info_node` names a graph node,
@@ -107,7 +107,7 @@ an exposure rather than a result.
   `ObservationGoal.info_target` becomes `info_node`. `StateGoal.target` and
   `ObservationGoal.target` keep the name, which now has one meaning.
 - **Breaking:** `ObservationGoal` takes `action_bounds` by keyword. `StateGoal` already
-  keyword-onlys everything after its first argument, so this was the odd one out in a
+  takes everything after its first argument by keyword, so this was the odd one out in a
   public pair a reader meets together. The two positional slots also transposed without
   raising for a 2-D increasing target, since `(lo, hi)` then satisfies the target's shape
   check and the target satisfies `lo < hi`. 24 call sites moved to keywords.
