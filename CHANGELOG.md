@@ -54,6 +54,14 @@ an exposure rather than a result.
 
 ### Fixed
 
+- `EFESelector` described varying-sequence search as a deferred v0.4 `GradientEFESelector`
+  seam, in its rendered class docstring and in the `ValueError` a `p > 1` caller hits. That
+  search shipped in v0.4.4 as `EnumeratedEfeSearch`, whose own docstring says it supports
+  `p >= 1` and varying sequences (ADR-031). No such class has ever existed under `src/`.
+  The name is still a planned continuous-action selector elsewhere, so only these two
+  strings were wrong, not the name itself. The error path was the worse of the two: it
+  told a caller to reimplement a search the package already had. Both now name
+  `EnumeratedEfeSearch` and the `FiniteActionSet` it needs.
 - The NumPy oracle in `examples/ffg/crossover.py` discarded `slogdet`'s sign on both halves
   of its per-step epistemic. v0.4.3 fixed the shipped kernel and the changelog did not say
   whether the oracle path went with it. It did not. Both paths now reject a matrix with an
