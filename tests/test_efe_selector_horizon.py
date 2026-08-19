@@ -50,13 +50,13 @@ def _model():
         },
     )
     return LinearGaussianModel(
-        dynamics=[[1.0]],
+        dynamics_matrix=[[1.0]],
         observation_matrix=[[1.0]],
         dynamics_noise=[[0.05]],
         observation_noise=[[0.3]],
         prior=Belief(mean=[0.0], cov=[[0.5]]),
-        control=[[1.0]],
-        observation=sensor,
+        control_matrix=[[1.0]],
+        observation_model=sensor,
     )
 
 
@@ -179,12 +179,12 @@ class TestEFESelectorValidation:
     def test_rejects_multidimensional_action(self):
         # EFESelector's grid is 1-D; p>1 must error clearly, not crash cryptically.
         m2 = LinearGaussianModel(
-            dynamics=[[1.0, 0.0], [0.0, 1.0]],
+            dynamics_matrix=[[1.0, 0.0], [0.0, 1.0]],
             observation_matrix=[[1.0, 0.0]],
             dynamics_noise=[[0.1, 0.0], [0.0, 0.1]],
             observation_noise=[[0.3]],
             prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
-            control=[[1.0, 0.0], [0.0, 1.0]],  # p = 2
+            control_matrix=[[1.0, 0.0], [0.0, 1.0]],  # p = 2
         )
         with pytest.raises(ValueError, match=r"1-D action grid|p=1|p>1"):
             EFESelector(m2, n_candidates=11, action_bounds=(-2.0, 2.0))
@@ -197,13 +197,13 @@ class TestEFESelectorValidation:
 
         belief = Belief(mean=[0.0], cov=[[0.5]])
         model = LinearGaussianModel(
-            dynamics=[[1.0]],
+            dynamics_matrix=[[1.0]],
             observation_matrix=[[1.0]],
             dynamics_noise=[[0.05]],
             observation_noise=[[0.3]],
             prior=belief,
-            control=[[1.0]],
-            observation=CallableSensor([[1.0]], half_neg, {}),
+            control_matrix=[[1.0]],
+            observation_model=CallableSensor([[1.0]], half_neg, {}),
         )
         sel = EFESelector(model, n_candidates=21, action_bounds=(-3.0, 3.0))
         chosen = sel.select(belief, _pref())

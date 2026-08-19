@@ -79,6 +79,21 @@ an exposure rather than a result.
 
 ### Changed
 
+- **Breaking:** the model's fields are `dynamics_matrix`, `control_matrix`,
+  `observation_model` and `dynamics_noise_model` (were `dynamics`, `control`,
+  `observation`, `process_noise`). One rule now covers every field: `_matrix` is a linear
+  map, `_noise` a fixed covariance, `_model` the state-dependent stand-in for one of them.
+  Before this the fixed process noise was `dynamics_noise` and the state-dependent one
+  `process_noise`, the same channel under two roots, while A was `dynamics` and C was
+  `observation_matrix`. Keyword-only construction is what made the names load-bearing:
+  every argument after the first is typed out at each call site, so a member on its own
+  scheme is a question the caller has to answer each time. `GaussianTransition.dynamics`
+  and the `CouplingGraphBackend(control=...)` argument move with it, as do the demo
+  constants (`SENSOR` is `OBSERVATION_MATRIX`, `PROCESS_NOISE` is `DYNAMICS_NOISE`).
+  `LinearGaussianModel.observation_model` and `InferenceBackend.observation_model()` now
+  share a name on two classes: the field holds the declaration, the method returns the
+  `(C, R)` it resolves to. The `.A`/`.B`/`.C`/`.Q`/`.R` aliases are unchanged, and no
+  numerical behaviour moved.
 - **Breaking:** every `LinearGaussianModel` argument after `dynamics` is keyword-only.
   The four matrices are two maps and two covariances of the same rank, and only the
   covariances are content-checked, so a transposed pair constructed in silence whenever
@@ -92,9 +107,9 @@ an exposure rather than a result.
 - **Breaking:** `sensor_model` is now `observation_matrix`, on the same classes plus
   `_JointObservation` and `epistemic_value`. C is the *observation matrix* in the same
   literature that gives R its name, so the two halves of the measurement equation now
-  read from one vocabulary. It cannot be called `observation_model`: that name is taken
-  by `InferenceBackend.observation_model()`, which returns the `(C, R)` pair rather than
-  C alone. The 2026-06-13 sketch wanted plain `observation` for C, which the state-
+  read from one vocabulary. C is not `observation_model`: that name means the whole
+  `(C, R)` channel, both on `InferenceBackend.observation_model()` and on the model field
+  the entry above renames. The 2026-06-13 sketch wanted plain `observation` for C, which the state-
   dependent sensor field later claimed. The `.C` alias is unchanged, and no numerical
   behaviour moved.
 - **Breaking:** `sensor_noise` is now `observation_noise`, on `LinearGaussianModel`,

@@ -132,17 +132,17 @@ def _flat_pair():
     b[1, 1] = 1.0
     sensor = CallableGaussianObservation(_ARENA_C, _cue_noise, _CUE_PARAMS)
     graph = CouplingGraph(root=0, dims=(4,), couplings=(), observations={0: sensor})
-    backend = CouplingGraphBackend(graph, (GaussianTransition(a, q),), control=b)
+    backend = CouplingGraphBackend(graph, (GaussianTransition(a, q),), control_matrix=b)
     model = LinearGaussianModel(
-        dynamics=a,
+        dynamics_matrix=a,
         observation_matrix=_ARENA_C,
         dynamics_noise=q,
         observation_noise=np.eye(
             3
         ),  # placeholder under a callable sensor, ignored there
         prior=Belief(mean=np.zeros(4), cov=np.eye(4)),
-        control=b,
-        observation=CallableSensor(_ARENA_C, _cue_noise, _CUE_PARAMS),
+        control_matrix=b,
+        observation_model=CallableSensor(_ARENA_C, _cue_noise, _CUE_PARAMS),
     )
     return backend, model
 

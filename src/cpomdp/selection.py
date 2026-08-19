@@ -142,12 +142,12 @@ class EFESelector:
         action_bounds: tuple[float, float],
         horizon: int = 1,
     ) -> None:
-        if model.control is None:
+        if model.control_matrix is None:
             raise ValueError(
                 "EFESelector needs a model with a control matrix; an action has no "
                 "effect on a control-free (pure-tracking) model."
             )
-        p = model.control.shape[1]
+        p = model.control_matrix.shape[1]
         if p != 1:
             raise ValueError(
                 f"EFESelector searches a 1-D action grid (p=1); got p={p}. "

@@ -115,7 +115,9 @@ class Agent:
         self.model = model
         self.belief = model.prior
         self._backend = backend
-        sensor_is_fixed = model.observation is None or model.observation.is_fixed
+        sensor_is_fixed = (
+            model.observation_model is None or model.observation_model.is_fixed
+        )
 
         if objective is None:
             # perceive-only tracker: nothing to act toward.
@@ -151,7 +153,7 @@ class Agent:
         elif isinstance(objective, ObservationGoal):
             # observation-space goal -> EFE. Needs control to act; on a fixed sensor it
             # is output regulation (deferred), so require an explicit selector there.
-            if model.control is None:
+            if model.control_matrix is None:
                 raise ValueError(
                     "an ObservationGoal needs a model with a control matrix to act."
                 )

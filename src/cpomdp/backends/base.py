@@ -163,7 +163,7 @@ def validate_step_inputs(
             f"got a {prior.ndim}-D belief"
         )
 
-    if model.control is None:
+    if model.control_matrix is None:
         return observation, None
 
     if action is None:

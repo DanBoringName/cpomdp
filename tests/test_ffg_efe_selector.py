@@ -62,15 +62,15 @@ def test_ffg_selector_reduces_to_efe_selector_single_node():
         observations={0: GaussianObservation(observation_matrix, observation_noise)},
     )
     backend = CouplingGraphBackend(
-        graph, (GaussianTransition(dynamics, dynamics_noise),), control=control
+        graph, (GaussianTransition(dynamics, dynamics_noise),), control_matrix=control
     )
     model = LinearGaussianModel(
-        dynamics=dynamics,
+        dynamics_matrix=dynamics,
         observation_matrix=observation_matrix,
         dynamics_noise=dynamics_noise,
         observation_noise=observation_noise,
         prior=Belief(mean=np.zeros(2), cov=np.eye(2)),
-        control=control,
+        control_matrix=control,
     )
 
     belief = Belief(mean=[0.3, -0.2], cov=[[0.7, 0.1], [0.1, 0.4]])
@@ -99,7 +99,7 @@ def _two_node_backend():
         GaussianTransition([[0.7]], [[0.1]]),
         GaussianTransition([[0.5]], [[0.08]]),
     )
-    return CouplingGraphBackend(graph, transitions, control=[[1.0], [0.0]])
+    return CouplingGraphBackend(graph, transitions, control_matrix=[[1.0], [0.0]])
 
 
 def test_agent_on_ffg_backend_acts_via_ffg_selector():
@@ -133,12 +133,12 @@ def test_agent_ffg_whole_state_when_info_target_none():
 def test_info_target_on_flat_backend_raises():
     # info_target aims at an FFG node; it is meaningless without a branching backend.
     model = LinearGaussianModel(
-        dynamics=[[1.0]],
+        dynamics_matrix=[[1.0]],
         observation_matrix=[[1.0]],
         dynamics_noise=[[0.1]],
         observation_noise=[[0.2]],
         prior=Belief(mean=[0.0], cov=[[1.0]]),
-        control=[[1.0]],
+        control_matrix=[[1.0]],
     )
     with np.testing.assert_raises(ValueError):
         Agent(model, ObservationGoal([0.5], (-2.0, 2.0), info_target=0))
@@ -155,12 +155,12 @@ def test_ffg_agent_matches_kalman_efe_agent_end_to_end():
     control = np.array([[1.0], [0.0]])  # B — drives the observed state[0]
     prior = Belief(mean=np.zeros(2), cov=np.eye(2))
     model = LinearGaussianModel(
-        dynamics=dynamics,
+        dynamics_matrix=dynamics,
         observation_matrix=observation_matrix,
         dynamics_noise=dynamics_noise,
         observation_noise=observation_noise,
         prior=prior,
-        control=control,
+        control_matrix=control,
     )
     graph = CouplingGraph(
         root=0,
@@ -169,7 +169,7 @@ def test_ffg_agent_matches_kalman_efe_agent_end_to_end():
         observations={0: GaussianObservation(observation_matrix, observation_noise)},
     )
     backend = CouplingGraphBackend(
-        graph, (GaussianTransition(dynamics, dynamics_noise),), control=control
+        graph, (GaussianTransition(dynamics, dynamics_noise),), control_matrix=control
     )
     bounds, k = (-2.0, 2.0), 21
 
@@ -234,7 +234,7 @@ def _single_node_rx_backend(params):
         couplings=(),
         observations={0: CallableGaussianObservation(C, _rx_noise, params)},
     )
-    backend = CouplingGraphBackend(graph, (GaussianTransition(A, Q),), control=B)
+    backend = CouplingGraphBackend(graph, (GaussianTransition(A, Q),), control_matrix=B)
     return backend, A, Q, C, B
 
 
@@ -259,7 +259,9 @@ class TestStateDependentSelection:
             couplings=(),
             observations={0: GaussianObservation(C, params["R0"])},
         )
-        fx = CouplingGraphBackend(graph_fx, (GaussianTransition(A, Q),), control=B)
+        fx = CouplingGraphBackend(
+            graph_fx, (GaussianTransition(A, Q),), control_matrix=B
+        )
         _, epi_fx = _score_components(fx, belief, pref, cands, range(2))
         np.testing.assert_allclose(np.asarray(epi_fx), float(epi_fx[0]), atol=1e-9)
 
@@ -270,13 +272,13 @@ class TestStateDependentSelection:
         params = {"R0": np.array([[0.5]]), "gain": 0.4}
         rx, A, Q, C, B = _single_node_rx_backend(params)
         model = LinearGaussianModel(
-            dynamics=A,
+            dynamics_matrix=A,
             observation_matrix=C,
             dynamics_noise=Q,
             observation_noise=params["R0"],  # placeholder; overridden by observation
             prior=Belief(mean=np.zeros(2), cov=np.eye(2)),
-            control=B,
-            observation=CallableSensor(C, _rx_noise, params),
+            control_matrix=B,
+            observation_model=CallableSensor(C, _rx_noise, params),
         )
         belief = Belief(mean=[0.3, -0.2], cov=[[0.7, 0.1], [0.1, 0.4]])
         pref = Preference(goal=[1.0], precision=[[2.0]])
@@ -307,7 +309,7 @@ class TestStateDependentSelection:
             },  # both channels read s
         )
         rx = CouplingGraphBackend(
-            graph, (GaussianTransition([[1.0]], [[0.1]]),), control=[[1.0]]
+            graph, (GaussianTransition([[1.0]], [[0.1]]),), control_matrix=[[1.0]]
         )
         belief = Belief(mean=[0.0], cov=[[1.0]])
         # goal 3.0 on the fixed channel, ~0 weight on the info channel (decoupling).

@@ -21,12 +21,12 @@ GOAL = np.array([1.0, 0.0])  # reach position 1, at rest
 
 def _reaching_model() -> LinearGaussianModel:
     return LinearGaussianModel(
-        dynamics=DYNAMICS,
+        dynamics_matrix=DYNAMICS,
         observation_matrix=SENSOR_MODEL,
         dynamics_noise=[[1e-6, 0.0], [0.0, 1e-6]],
         observation_noise=[[1e-2]],
         prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
-        control=CONTROL,
+        control_matrix=CONTROL,
     )
 
 
@@ -51,12 +51,12 @@ GOAL_2D = np.array([1.0, -1.0, 0.0, 0.0])  # reach (+1, -1), at rest
 
 def _reaching_model_2d() -> LinearGaussianModel:
     return LinearGaussianModel(
-        dynamics=DYNAMICS_2D,
+        dynamics_matrix=DYNAMICS_2D,
         observation_matrix=SENSOR_MODEL_2D,
         dynamics_noise=np.eye(4) * 1e-6,
         observation_noise=np.eye(2) * 1e-2,
         prior=Belief(mean=[0.0, 0.0, 0.0, 0.0], cov=np.eye(4)),
-        control=CONTROL_2D,
+        control_matrix=CONTROL_2D,
     )
 
 
@@ -70,7 +70,11 @@ def _run_closed_loop(agent, true_state, steps, rng=None):
     The plant matrices are read off the agent's own model, so this drives a
     p=1 single-force point mass and a p=2 multi-actuator plant identically.
     """
-    A, B, C = agent.model.dynamics, agent.model.control, agent.model.observation_matrix
+    A, B, C = (
+        agent.model.dynamics_matrix,
+        agent.model.control_matrix,
+        agent.model.observation_matrix,
+    )
     true_state = np.asarray(true_state, dtype=float)
     for _ in range(steps):
         obs = C @ true_state
@@ -124,12 +128,12 @@ def test_reaches_goal_multi_actuator() -> None:
 def test_perceive_only_agent_cannot_act():
     # A goal-less agent on a control-free model: a pure tracker.
     model = LinearGaussianModel(
-        dynamics=[[1.0, DT], [0.0, 1.0]],
+        dynamics_matrix=[[1.0, DT], [0.0, 1.0]],
         observation_matrix=SENSOR_MODEL,
         dynamics_noise=[[1e-6, 0.0], [0.0, 1e-6]],
         observation_noise=[[1e-2]],
         prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
-        # no control= → no action channel
+        # no control_matrix= → no action channel
     )
     agent = Agent(model)  # no goal
 
@@ -174,7 +178,7 @@ _WELL_PARAMS = {
 }
 
 
-def _corridor_model(*, fixed, control=True):
+def _corridor_model(*, fixed, control_matrix=True):
     """1-D single integrator; fixed or precision-well sensor; optional control."""
     sensor = (
         None
@@ -184,13 +188,13 @@ def _corridor_model(*, fixed, control=True):
         )
     )
     return LinearGaussianModel(
-        dynamics=[[1.0]],
+        dynamics_matrix=[[1.0]],
         observation_matrix=[[1.0]],
         dynamics_noise=[[0.05]],
         observation_noise=[[0.3]],
         prior=Belief(mean=[0.0], cov=[[0.5]]),
-        control=[[1.0]] if control else None,
-        observation=sensor,
+        control_matrix=[[1.0]] if control_matrix else None,
+        observation_model=sensor,
     )
 
 
@@ -251,7 +255,7 @@ class TestRegimeDispatch:
 
     def test_observation_goal_without_control_raises(self):
         with pytest.raises(ValueError, match="control"):
-            Agent(_corridor_model(fixed=False, control=False), _OBS_GOAL)
+            Agent(_corridor_model(fixed=False, control_matrix=False), _OBS_GOAL)
 
     def test_observation_goal_on_fixed_sensor_raises(self):
         # Output regulation (obs goal on a fixed sensor) is deferred; raise rather
@@ -313,8 +317,8 @@ def _run_recording(agent, start_pos, steps):
     filter linearized R at, for the replay baseline.
     """
     model = agent.model
-    a_mat = np.asarray(model.dynamics)
-    b_mat = None if model.control is None else np.asarray(model.control)
+    a_mat = np.asarray(model.dynamics_matrix)
+    b_mat = None if model.control_matrix is None else np.asarray(model.control_matrix)
     c_mat = np.asarray(model.observation_matrix)
     p = 0 if b_mat is None else b_mat.shape[1]
     true = np.asarray(start_pos, dtype=float)
@@ -340,7 +344,7 @@ def _replay_cov_trace(model, mu_minus, noise_fn, params):
     recursion never touches observation *values*, so this faithfully reconstructs
     the covariance a path would accumulate under the state-dependent noise.
     """
-    a_mat = np.asarray(model.dynamics)
+    a_mat = np.asarray(model.dynamics_matrix)
     c_mat = np.asarray(model.observation_matrix)
     q_mat = np.asarray(model.dynamics_noise)
     n = a_mat.shape[0]

@@ -76,7 +76,7 @@ class LQRController:
     hands these straight through to its controller.
 
     Args:
-        model: The linear-Gaussian model to act in. Must carry a ``control``
+        model: The linear-Gaussian model to act in. Must carry a ``control_matrix``
             matrix — there is nothing to act with otherwise.
         goal_precision: How sharply the agent prefers the goal, an ``(n, n)``
             matrix. It is exactly the precision of the Gaussian preference centred
@@ -91,7 +91,7 @@ class LQRController:
             failed to converge.
 
     Raises:
-        ValueError: If the model has no ``control`` matrix, or a cost matrix does
+        ValueError: If the model has no ``control_matrix``, or a cost matrix does
             not match the state/action dimensions, is not symmetric, or fails its
             definiteness requirement (``goal_precision`` PSD, ``effort_penalty``
             PD).
@@ -108,7 +108,7 @@ class LQRController:
         tol: float = 1e-12,
         max_iter: int = 1000,
     ) -> None:
-        if model.control is None:
+        if model.control_matrix is None:
             raise ValueError(
                 "LQR needs an action channel: the model has no control matrix, "
                 "so there is nothing to act with."
@@ -200,20 +200,28 @@ class LQRController:
         Raises:
             RuntimeError: If the recursion has not converged within ``max_iter``.
         """
-        dynamics = self.model.dynamics  # A  (n×n)
-        assert self.model.control is not None  # guard lives in __init__; narrows type
-        control = self.model.control  # B  (n×p)
+        dynamics_matrix = self.model.dynamics_matrix  # A  (n×n)
+        assert (
+            self.model.control_matrix is not None
+        )  # guard lives in __init__; narrows type
+        control_matrix = self.model.control_matrix  # B  (n×p)
         cost_to_go = self._goal_precision  # P, starting at the running state cost (n×n)
 
         for _ in range(max_iter):
             # Bellman's equation, one sweep.
-            dyn_cost_ctrl = dynamics.T @ cost_to_go @ control  # Aᵀ P B  (n×p)
+            dyn_cost_ctrl = (
+                dynamics_matrix.T @ cost_to_go @ control_matrix
+            )  # Aᵀ P B  (n×p)
             # curvature of the action cost — the dual of the Kalman innovation
             # covariance S, the denominator the gain is solved against (p×p)
-            inner = self._effort_penalty + control.T @ cost_to_go @ control
+            inner = (
+                self._effort_penalty + control_matrix.T @ cost_to_go @ control_matrix
+            )
             next_cost_to_go = (
                 self._goal_precision  # pay now
-                + dynamics.T @ cost_to_go @ dynamics  # cost the dynamics carry forward
+                + dynamics_matrix.T
+                @ cost_to_go
+                @ dynamics_matrix  # cost the dynamics carry forward
                 - dyn_cost_ctrl
                 @ jnp.linalg.solve(
                     inner, dyn_cost_ctrl.T
@@ -231,5 +239,7 @@ class LQRController:
                 "gain exists."
             )
 
-        inner = self._effort_penalty + control.T @ cost_to_go @ control
-        return jnp.linalg.solve(inner, control.T @ cost_to_go @ dynamics)  # L∞  (p×n)
+        inner = self._effort_penalty + control_matrix.T @ cost_to_go @ control_matrix
+        return jnp.linalg.solve(
+            inner, control_matrix.T @ cost_to_go @ dynamics_matrix
+        )  # L∞  (p×n)

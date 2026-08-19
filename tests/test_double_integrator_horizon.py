@@ -25,12 +25,12 @@ def _double_integrator():
     # state = [position, velocity]; A advances position by velocity; control moves
     # velocity only ([[0], [1]]); C observes position only ([[1, 0]]).
     return LinearGaussianModel(
-        dynamics=[[1.0, 1.0], [0.0, 1.0]],
+        dynamics_matrix=[[1.0, 1.0], [0.0, 1.0]],
         observation_matrix=[[1.0, 0.0]],
         dynamics_noise=[[0.05, 0.0], [0.0, 0.05]],
         observation_noise=[[0.2]],
         prior=Belief(mean=[0.0, 0.0], cov=[[0.3, 0.0], [0.0, 0.3]]),
-        control=[[0.0], [1.0]],
+        control_matrix=[[0.0], [1.0]],
     )
 
 

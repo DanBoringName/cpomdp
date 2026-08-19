@@ -43,7 +43,7 @@ def test_timescale_separation_is_present():
     # nodes relax noticeably (A well below 1). This ~separation is what makes the
     # methylation carry cut nearly free.
     _graph, transitions = chemotaxis_ffg(dt=0.01)
-    a = [float(np.asarray(t.dynamics)[0, 0]) for t in transitions]
+    a = [float(np.asarray(t.dynamics_matrix)[0, 0]) for t in transitions]
     assert a[CHEB] > 0.99  # slow methylation: long memory
     assert a[CHEA] < 0.95  # fast kinase: relaxes each step
     assert a[CHEY] < 0.95

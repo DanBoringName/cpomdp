@@ -23,12 +23,12 @@ EFFORT_PENALTY = [[0.1]]
 
 def _point_mass_model():
     return LinearGaussianModel(
-        dynamics=DYNAMICS,
+        dynamics_matrix=DYNAMICS,
         observation_matrix=[[1.0, 0.0]],
         dynamics_noise=[[1e-4, 0.0], [0.0, 1e-4]],
         observation_noise=[[1e-2]],
         prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
-        control=CONTROL,
+        control_matrix=CONTROL,
     )
 
 

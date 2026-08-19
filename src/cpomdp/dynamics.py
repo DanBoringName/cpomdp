@@ -1,6 +1,6 @@
 """Process-noise models: state-dependent dynamics noise Q(x).
 
-The internal-noise dual of ``observation``. ``DynamicsNoise`` is the seam the EFE
+The internal-noise dual of ``observation_model``. ``DynamicsNoise`` is the seam the EFE
 predict step asks for the process-noise covariance at a state; ``CallableProcessNoise``
 is the state-dependent case. Per RFC-001 chapter 8 this is where the *binding* precision
 constraint lives for the chemotaxis fidelity (internal processing, not the sensor).

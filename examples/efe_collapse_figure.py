@@ -33,7 +33,7 @@ The right-hand sensor is a real `CallableSensor` supplying a position-dependent
 `R(x)` to `expected_free_energy` through the `gaussianize` seam.
 
 Run:
-    uv run python examples/efe_collapse_figure.py --check
+    uv run --no-sync python examples/efe_collapse_figure.py --check
     uv run --extra examples python examples/efe_collapse_figure.py
 Output (bare command): docs/assets/efe_collapse.png
 """
@@ -55,11 +55,11 @@ OUT = Path(__file__).resolve().parent.parent / "docs" / "assets" / "efe_collapse
 
 # A 1-D single integrator: action moves the observed position directly, so a
 # one-step sweep tells a clean story (μ⁺ = μ + a, observation = position).
-DYNAMICS = [[1.0]]
-CONTROL = [[1.0]]
-SENSOR = [[1.0]]
-PROCESS_NOISE = [[0.01]]
-FIXED_NOISE = [[0.3]]
+DYNAMICS_MATRIX = [[1.0]]
+CONTROL_MATRIX = [[1.0]]
+OBSERVATION_MATRIX = [[1.0]]
+DYNAMICS_NOISE = [[0.01]]
+OBSERVATION_NOISE = [[0.3]]
 BELIEF = Belief(mean=[0.0], cov=[[2.0]])
 GOAL = Preference(goal=[0.0], precision=[[0.4]])  # prefer to observe position 0
 ACTIONS = jnp.linspace(-2.0, 4.0, 400)
@@ -83,21 +83,21 @@ def _precision_well_noise(x, params):
     return jnp.array([[r]])
 
 
-def _model(observation=None):
+def _model(observation_model=None):
     return LinearGaussianModel(
-        dynamics=DYNAMICS,
-        observation_matrix=SENSOR,
-        dynamics_noise=PROCESS_NOISE,
-        observation_noise=FIXED_NOISE,
+        dynamics_matrix=DYNAMICS_MATRIX,
+        observation_matrix=OBSERVATION_MATRIX,
+        dynamics_noise=DYNAMICS_NOISE,
+        observation_noise=OBSERVATION_NOISE,
         prior=BELIEF,
-        control=CONTROL,
-        observation=observation,
+        control_matrix=CONTROL_MATRIX,
+        observation_model=observation_model,
     )
 
 
 def _well() -> CallableSensor:
     """The state-dependent sensor: constant ``C``, ``R(x)`` dipping at the beacon."""
-    return CallableSensor(SENSOR, _precision_well_noise, WELL_PARAMS)
+    return CallableSensor(OBSERVATION_MATRIX, _precision_well_noise, WELL_PARAMS)
 
 
 def _sweep(model):
@@ -126,7 +126,7 @@ def check() -> None:
     run through the flat ``KalmanBackend(CallableSensor)`` route. The sweep is the same
     one the figure plots; here the clauses are asserted, not drawn.
     """
-    live = _model(observation=_well())
+    live = _model(observation_model=_well())
 
     # The single chain actually filters. KalmanBackend(CallableSensor) is the
     # coupling-free R(x) route the CouplingGraphBackend.to_flat_model docstring points
@@ -146,15 +146,15 @@ def check() -> None:
     # epistemic term to a constant (ADR-003), whatever the action.
     r_frozen = float(_precision_well_noise(jnp.asarray(BELIEF.mean), WELL_PARAMS)[0, 0])
     frozen = LinearGaussianModel(
-        DYNAMICS,
-        observation_matrix=SENSOR,
-        dynamics_noise=PROCESS_NOISE,
+        DYNAMICS_MATRIX,
+        observation_matrix=OBSERVATION_MATRIX,
+        dynamics_noise=DYNAMICS_NOISE,
         observation_noise=[[r_frozen]],
         prior=BELIEF,
-        control=CONTROL,
+        control_matrix=CONTROL_MATRIX,
     )
 
-    a_mat, b_mat = np.asarray(DYNAMICS), np.asarray(CONTROL)
+    a_mat, b_mat = np.asarray(DYNAMICS_MATRIX), np.asarray(CONTROL_MATRIX)
     mu = np.asarray(BELIEF.mean)
     epi_live, epi_frozen, r_curve, post_vars, gains = [], [], [], [], []
     for a in np.asarray(ACTIONS):
@@ -168,9 +168,9 @@ def check() -> None:
         # The covariance half of the same step: the action chose where R was read, so
         # it also chose this posterior and this gain.
         gain, cov_post = _gain_and_posterior_cov(
-            jnp.asarray(DYNAMICS),
-            jnp.asarray(SENSOR),
-            jnp.asarray(PROCESS_NOISE),
+            jnp.asarray(DYNAMICS_MATRIX),
+            jnp.asarray(OBSERVATION_MATRIX),
+            jnp.asarray(DYNAMICS_NOISE),
             r_here,
             jnp.asarray(BELIEF.cov),
         )
@@ -223,7 +223,7 @@ def main():
     import matplotlib.pyplot as plt
 
     prag_f, epi_f, g_f = _sweep(_model())  # fixed sensor (observation=None)
-    prag_s, epi_s, g_s = _sweep(_model(observation=_well()))
+    prag_s, epi_s, g_s = _sweep(_model(observation_model=_well()))
 
     fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(12.5, 5.2), sharex=True)
     fig.suptitle(

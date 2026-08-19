@@ -267,8 +267,8 @@ class TestCallableGaussianObservation:
 class TestGaussianTransition:
     def test_stores_coerced_arrays(self):
         fac = GaussianTransition([[1.0]], [[2.0]])
-        assert isinstance(fac.dynamics, jax.Array)
-        np.testing.assert_array_equal(fac.dynamics, [[1.0]])
+        assert isinstance(fac.dynamics_matrix, jax.Array)
+        np.testing.assert_array_equal(fac.dynamics_matrix, [[1.0]])
 
     def test_rejects_singular_process_noise(self):
         # Q is inverted in the joint, so a singular Q is rejected at construction.
@@ -302,7 +302,7 @@ class TestGaussianTransition:
         # Exact OU discretisation (ADR-017): A_i = exp(-dt/τ), Q_i = Σ_stat (1 − A²).
         t = GaussianTransition.from_ou(tau, var, dt)
         a = np.exp(-dt / tau)
-        np.testing.assert_allclose(np.asarray(t.dynamics), [[a]], atol=1e-12)
+        np.testing.assert_allclose(np.asarray(t.dynamics_matrix), [[a]], atol=1e-12)
         np.testing.assert_allclose(
             np.asarray(t.dynamics_noise), [[var * (1.0 - a * a)]], atol=1e-12
         )
@@ -312,7 +312,7 @@ class TestGaussianTransition:
         # the requested Σ_stat at any τ, dt (a wrong Q, e.g. Σ(1−A), fails this).
         for tau, var, dt in [(0.05, 1.7, 0.01), (9.9, 0.4, 0.01), (9.9, 0.4, 2.0)]:
             t = GaussianTransition.from_ou(tau, var, dt)
-            a = float(np.asarray(t.dynamics)[0, 0])
+            a = float(np.asarray(t.dynamics_matrix)[0, 0])
             q = float(np.asarray(t.dynamics_noise)[0, 0])
             np.testing.assert_allclose(q / (1.0 - a * a), var, atol=1e-10)
 
@@ -321,7 +321,7 @@ class TestGaussianTransition:
         # constructs) — no blow-up at the stiff slow mode (exact, not Euler; ADR-017).
         for tau in (0.05, 9.9):
             t = GaussianTransition.from_ou(tau, 1.0, dt=0.01)  # builds ⇒ Q is PD
-            assert 0.0 < float(np.asarray(t.dynamics)[0, 0]) < 1.0
+            assert 0.0 < float(np.asarray(t.dynamics_matrix)[0, 0]) < 1.0
 
     def test_predict_applies_control_term(self):
         # The control shifts the predicted mean by b; the covariance is unchanged.

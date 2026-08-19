@@ -79,12 +79,12 @@ def test_full_state_gain_matches_expected_free_energy_epistemic():
     observation_matrix = np.array([[1.0, 0.0]])  # C
     observation_noise = np.array([[0.5]])  # R
     model = LinearGaussianModel(
-        dynamics=dynamics,
+        dynamics_matrix=dynamics,
         observation_matrix=observation_matrix,
         dynamics_noise=dynamics_noise,
         observation_noise=observation_noise,
         prior=Belief(mean=[0.0, 0.0], cov=np.eye(2)),
-        control=[[0.0], [1.0]],
+        control_matrix=[[0.0], [1.0]],
     )
     belief = Belief(mean=[0.3, -0.2], cov=[[0.7, 0.1], [0.1, 0.4]])
     action = jnp.array([0.5])
@@ -112,12 +112,12 @@ def test_ffg_efe_step_reduces_to_expected_free_energy():
     observation_noise = np.array([[0.5]])  # R
     control = np.array([[0.0], [1.0]])  # B
     model = LinearGaussianModel(
-        dynamics=dynamics,
+        dynamics_matrix=dynamics,
         observation_matrix=observation_matrix,
         dynamics_noise=dynamics_noise,
         observation_noise=observation_noise,
         prior=Belief(mean=[0.0, 0.0], cov=np.eye(2)),
-        control=control,
+        control_matrix=control,
     )
     belief = Belief(mean=[0.3, -0.2], cov=[[0.7, 0.1], [0.1, 0.4]])
     action = jnp.array([0.5])

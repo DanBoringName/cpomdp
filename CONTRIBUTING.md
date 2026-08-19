@@ -112,7 +112,7 @@ uv run --group docs mkdocs serve          # live preview at localhost:8000
 ```bash
 uv run pytest -m "not rxinfer and not slow"   # the fast, pure-Python suite
 uv run pytest -m "not rxinfer"                # + the slow crossover gate (H*=7)
-uv run ty check                  # type checking
+uv run --extra examples ty check # type checking (examples are in the checked tree)
 uv run pre-commit run --all-files
 ```
 

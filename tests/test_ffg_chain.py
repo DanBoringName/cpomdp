@@ -45,7 +45,7 @@ def _spd(rng, n):
 
 def _scalar_model():
     return LinearGaussianModel(
-        dynamics=[[A]],
+        dynamics_matrix=[[A]],
         observation_matrix=[[C]],
         dynamics_noise=[[Q]],
         observation_noise=[[R]],
@@ -57,12 +57,12 @@ def _random_chain_model(rng, n, m, *, with_control=False):
     """A well-conditioned fixed-matrix chain model of the given dims."""
     control = rng.standard_normal((n, 1)) if with_control else None
     return LinearGaussianModel(
-        dynamics=0.5 * rng.standard_normal((n, n)),
+        dynamics_matrix=0.5 * rng.standard_normal((n, n)),
         observation_matrix=rng.standard_normal((m, n)),
         dynamics_noise=_spd(rng, n),
         observation_noise=_spd(rng, m),
         prior=Belief(mean=rng.standard_normal(n), cov=_spd(rng, n)),
-        control=control,
+        control_matrix=control,
     )
 
 
@@ -166,7 +166,7 @@ class TestChainBackendScope:
     def test_rejects_deterministic_transition(self):
         # Q = 0 has no information form (the transition factor inverts Q).
         model = LinearGaussianModel(
-            dynamics=[[A]],
+            dynamics_matrix=[[A]],
             observation_matrix=[[C]],
             dynamics_noise=[[0.0]],
             observation_noise=[[R]],
@@ -198,29 +198,29 @@ def _quad_process(x, params):
 _QPROC = {"base": jnp.array([[0.05]]), "scale": jnp.array(0.4)}
 
 
-def _callable_sensor_scalar_model(*, control=None):
+def _callable_sensor_scalar_model(*, control_matrix=None):
     return LinearGaussianModel(
-        dynamics=[[A]],
+        dynamics_matrix=[[A]],
         observation_matrix=[[C]],
         dynamics_noise=[[Q]],
         observation_noise=[[R]],
         prior=Belief(mean=[PRIOR_MEAN], cov=[[PRIOR_VAR]]),
-        control=control,
-        observation=CallableSensor(
+        control_matrix=control_matrix,
+        observation_model=CallableSensor(
             observation_matrix=[[C]], noise_fn=_quad_noise, noise_params=_QUAD
         ),
     )
 
 
-def _callable_process_scalar_model(*, control=None):
+def _callable_process_scalar_model(*, control_matrix=None):
     return LinearGaussianModel(
-        dynamics=[[A]],
+        dynamics_matrix=[[A]],
         observation_matrix=[[C]],
         dynamics_noise=[[Q]],
         observation_noise=[[R]],
         prior=Belief(mean=[PRIOR_MEAN], cov=[[PRIOR_VAR]]),
-        control=control,
-        process_noise=CallableProcessNoise(_quad_process, _QPROC),
+        control_matrix=control_matrix,
+        dynamics_noise_model=CallableProcessNoise(_quad_process, _QPROC),
     )
 
 
@@ -232,12 +232,12 @@ class TestChainCallableSensorParity:
         r0 = [[R]]
         fixed = _scalar_model()
         callable_model = LinearGaussianModel(
-            dynamics=[[A]],
+            dynamics_matrix=[[A]],
             observation_matrix=[[C]],
             dynamics_noise=[[Q]],
             observation_noise=r0,
             prior=Belief(mean=[PRIOR_MEAN], cov=[[PRIOR_VAR]]),
-            observation=CallableSensor(
+            observation_model=CallableSensor(
                 observation_matrix=[[C]],
                 noise_fn=lambda x, p: jnp.array(r0),
                 noise_params=None,
@@ -265,12 +265,12 @@ class TestChainCallableSensorParity:
         # 2-D state, 1-D obs: exercises the gain/cov orientation the scalar case
         # can't, with R varying through the position component.
         model = LinearGaussianModel(
-            dynamics=[[1.0, 1.0], [0.0, 1.0]],
+            dynamics_matrix=[[1.0, 1.0], [0.0, 1.0]],
             observation_matrix=[[1.0, 0.0]],
             dynamics_noise=[[1e-3, 0.0], [0.0, 1e-3]],
             observation_noise=[[1.0]],
             prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
-            observation=CallableSensor(
+            observation_model=CallableSensor(
                 observation_matrix=[[1.0, 0.0]],
                 noise_fn=_quad_noise,
                 noise_params=_QUAD,
@@ -288,7 +288,7 @@ class TestChainCallableSensorParity:
         # A control input carries μ⁻ far from the prior mean, into a different R
         # regime — guards ChainBackend actually threading control_term into μ⁻
         # before linearizing, not just the no-control case above.
-        model = _callable_sensor_scalar_model(control=[[1.0]])
+        model = _callable_sensor_scalar_model(control_matrix=[[1.0]])
         action = np.array([3.0])  # μ⁻ = 0 + 3 = 3 -> R(3)=4.7 vs R(0)=0.2
         kalman_belief = KalmanBackend(model).infer_states([2.0], model.prior, action)
         chain_belief = ChainBackend(model).infer_states([2.0], model.prior, action)
@@ -301,12 +301,12 @@ class TestChainCallableProcessNoiseParity:
         q0 = [[Q]]
         fixed = _scalar_model()
         callable_model = LinearGaussianModel(
-            dynamics=[[A]],
+            dynamics_matrix=[[A]],
             observation_matrix=[[C]],
             dynamics_noise=q0,
             observation_noise=[[R]],
             prior=Belief(mean=[PRIOR_MEAN], cov=[[PRIOR_VAR]]),
-            process_noise=CallableProcessNoise(lambda x, p: jnp.array(q0), None),
+            dynamics_noise_model=CallableProcessNoise(lambda x, p: jnp.array(q0), None),
         )
         cf_fixed, cf_call = ChainBackend(fixed), ChainBackend(callable_model)
         b_fixed, b_call = fixed.prior, callable_model.prior
@@ -330,12 +330,12 @@ class TestChainCallableProcessNoiseParity:
         # 2x2 Q growing with the position component — exercises A·Σ·Aᵀ + Q(μ⁻).
         q2d = {"base": jnp.eye(2) * 0.05, "scale": jnp.array(0.4)}
         model = LinearGaussianModel(
-            dynamics=[[1.0, 1.0], [0.0, 1.0]],
+            dynamics_matrix=[[1.0, 1.0], [0.0, 1.0]],
             observation_matrix=[[1.0, 0.0]],
             dynamics_noise=[[1e-3, 0.0], [0.0, 1e-3]],
             observation_noise=[[1.0]],
             prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
-            process_noise=CallableProcessNoise(_quad_process, q2d),
+            dynamics_noise_model=CallableProcessNoise(_quad_process, q2d),
         )
         kalman, chain = KalmanBackend(model), ChainBackend(model)
         k_belief = c_belief = model.prior
@@ -346,7 +346,7 @@ class TestChainCallableProcessNoiseParity:
             np.testing.assert_allclose(c_belief.cov, k_belief.cov, atol=1e-7)
 
     def test_evaluates_Q_at_predicted_mean_matching_kalman(self):
-        model = _callable_process_scalar_model(control=[[1.0]])
+        model = _callable_process_scalar_model(control_matrix=[[1.0]])
         action = np.array([3.0])  # μ⁻ = 0 + 3 = 3 -> Q(3) >> Q(0)
         kalman_belief = KalmanBackend(model).infer_states([2.0], model.prior, action)
         chain_belief = ChainBackend(model).infer_states([2.0], model.prior, action)
@@ -374,7 +374,7 @@ def _cross_block_noise(x, params):
 _CROSS = {"base": jnp.array(0.2), "scale": jnp.array(0.5)}
 
 
-def _cross_block_model(*, control=None):
+def _cross_block_model(*, control_matrix=None):
     """4-D state [block A (2), block B (2)]; one channel reads (B - A), noise keyed
     on A alone — the shape ADR-013's displacement channel needs."""
     c_disp = jnp.array([[-1.0, 0.0, 1.0, 0.0], [0.0, -1.0, 0.0, 1.0]])
@@ -382,13 +382,13 @@ def _cross_block_model(*, control=None):
         observation_matrix=c_disp, noise_fn=_cross_block_noise, noise_params=_CROSS
     )
     return LinearGaussianModel(
-        dynamics=jnp.eye(4),
-        control=control,
+        dynamics_matrix=jnp.eye(4),
+        control_matrix=control_matrix,
         observation_matrix=c_disp,
         dynamics_noise=jnp.diag(jnp.array([0.5, 0.5, 1e-3, 1e-3])),
         observation_noise=jnp.eye(2),
         prior=Belief(mean=jnp.array([0.0, 0.0, 1.0, 1.0]), cov=jnp.eye(4)),
-        observation=sensor,
+        observation_model=sensor,
     )
 
 
@@ -408,7 +408,7 @@ class TestChainCrossBlockSensorParity:
         # into a different noise regime — guards that the noise is keyed on the
         # PREDICTED block A, not the channel's own (block B - block A) reading.
         control = jnp.concatenate([jnp.eye(2), jnp.zeros((2, 2))], axis=0)  # (4, 2)
-        model = _cross_block_model(control=control)
+        model = _cross_block_model(control_matrix=control)
         action = jnp.array([3.0, 3.0])  # block-A μ⁻ moves to (3, 3), far from (0, 0)
         kalman_belief = KalmanBackend(model).infer_states(
             [1.0, 1.0], model.prior, action

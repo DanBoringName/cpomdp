@@ -61,7 +61,7 @@ def _backend(graph, partition=None):
         GaussianTransition([[0.9]], [[0.02]]),
     )
     return CouplingGraphBackend(
-        graph, transitions, control=[[1.0], [0.0], [0.0]], partition=partition
+        graph, transitions, control_matrix=[[1.0], [0.0], [0.0]], partition=partition
     )
 
 

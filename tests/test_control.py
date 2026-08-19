@@ -27,16 +27,16 @@ def _point_mass_model():
     # The noise/sensor fields are required to build a model but don't enter the
     # LQR solve at all — control selection reads only dynamics + control.
     return LinearGaussianModel(
-        dynamics=DYNAMICS,
+        dynamics_matrix=DYNAMICS,
         observation_matrix=[[1.0, 0.0]],  # observe position
         dynamics_noise=[[1e-4, 0.0], [0.0, 1e-4]],
         observation_noise=[[1e-2]],
         prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
-        control=CONTROL,
+        control_matrix=CONTROL,
     )
 
 
-def _scipy_gain(dynamics, control, goal_precision, effort_penalty):
+def _scipy_gain(dynamics_matrix, control_matrix, goal_precision, effort_penalty):
     """L∞ via scipy's Schur-based DARE solver — the independent oracle.
 
     scipy returns the cost-to-go P, not the gain, so we derive the gain with the
@@ -44,8 +44,8 @@ def _scipy_gain(dynamics, control, goal_precision, effort_penalty):
     scipy reaches P by Schur decomposition rather than value iteration, a
     transpose or orientation bug in our loop can't survive in both.
     """
-    a = np.asarray(dynamics, dtype=float)
-    b = np.asarray(control, dtype=float)
+    a = np.asarray(dynamics_matrix, dtype=float)
+    b = np.asarray(control_matrix, dtype=float)
     qc = np.asarray(goal_precision, dtype=float)
     rc = np.asarray(effort_penalty, dtype=float)
     p = scipy.linalg.solve_discrete_are(a, b, qc, rc)
@@ -125,7 +125,7 @@ class TestLQRAction:
 class TestLQRValidation:
     def test_rejects_model_without_control(self):
         model = LinearGaussianModel(
-            dynamics=DYNAMICS,
+            dynamics_matrix=DYNAMICS,
             observation_matrix=[[1.0, 0.0]],
             dynamics_noise=[[1e-4, 0.0], [0.0, 1e-4]],
             observation_noise=[[1e-2]],

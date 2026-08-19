@@ -124,7 +124,7 @@ class CouplingGraphBackend:
             dynamics. Each ``Q_i`` must be positive-*definite* (the information form
             inverts it), the same divergence from moment-form Kalman that
             ``ChainBackend`` carries.
-        control: B, shape ``(n_total, p)``, mapping an action into the joint state;
+        control_matrix: B, shape ``(n_total, p)``, mapping an action into the joint
             ``None`` for a pure filtering model. ``n_total = sum(graph.dims)``.
         readout_node: the node ``readout`` returns; defaults to ``graph.root``. The
             latent of interest need not be the root (issue #25).
@@ -138,7 +138,7 @@ class CouplingGraphBackend:
         graph: CouplingGraph,
         transitions: Sequence[GaussianTransition],
         *,
-        control: ArrayLike | None = None,
+        control_matrix: ArrayLike | None = None,
         readout_node: int | None = None,
         partition: Sequence[Sequence[int]] | None = None,
     ) -> None:
@@ -156,7 +156,7 @@ class CouplingGraphBackend:
         self._offsets = tuple(int(o) for o in np.cumsum([0, *graph.dims]))
         self.n_total = self._offsets[-1]
         self.readout_node = self._resolve_readout_node(readout_node)
-        self._control = self._coerce_control(control)
+        self._control = self._coerce_control(control_matrix)
         self._partition = self._resolve_partition(partition)
         # Fully-factored (every cluster a singleton) → the carry keeps the belief
         # block-diagonal, so the within-slice solve is a tree and cheap two-pass BP
@@ -189,7 +189,7 @@ class CouplingGraphBackend:
                 f"got {len(transitions)}"
             )
         for node, transition in enumerate(transitions):
-            state_dim = transition.dynamics.shape[0]
+            state_dim = transition.dynamics_matrix.shape[0]
             if state_dim != graph.dims[node]:
                 raise ValueError(
                     f"transition for node {node} has state dim {state_dim}, "
@@ -234,11 +234,11 @@ class CouplingGraphBackend:
             raise ValueError(f"partition does not cover node(s) {sorted(missing)}")
         return clusters
 
-    def _coerce_control(self, control: ArrayLike | None) -> jax.Array | None:
+    def _coerce_control(self, control_matrix: ArrayLike | None) -> jax.Array | None:
         """Coerce the control matrix B to a float array and shape-check it."""
-        if control is None:
+        if control_matrix is None:
             return None
-        matrix = jnp.asarray(control, dtype=float)
+        matrix = jnp.asarray(control_matrix, dtype=float)
         if matrix.ndim != 2 or matrix.shape[0] != self.n_total:
             raise ValueError(
                 f"control must be a 2-D matrix with {self.n_total} rows "
@@ -248,7 +248,9 @@ class CouplingGraphBackend:
 
     def _build_transition(self) -> GaussianTransition:
         """The network's temporal edges as one block-diagonal transition (F, Q)."""
-        force = jax.scipy.linalg.block_diag(*[t.dynamics for t in self.transitions])
+        force = jax.scipy.linalg.block_diag(
+            *[t.dynamics_matrix for t in self.transitions]
+        )
         force_noise = jax.scipy.linalg.block_diag(
             *[t.dynamics_noise for t in self.transitions]
         )
@@ -328,19 +330,19 @@ class CouplingGraphBackend:
             (self._offsets[node], self._offsets[node + 1])
             for node, _lo, _hi in self._obs_layout
         )
-        observation = (
+        observation_model = (
             None
             if all(f.is_fixed for f in factors)
             else _JointObservation(observation_matrix, factors, spans)
         )
         return LinearGaussianModel(
-            dynamics=self._transition.dynamics,
+            dynamics_matrix=self._transition.dynamics_matrix,
             observation_matrix=observation_matrix,
             dynamics_noise=self._transition.dynamics_noise,
             observation_noise=observation_noise,
             prior=Belief(jnp.zeros(self.n_total), jnp.eye(self.n_total)),
-            control=self._control,
-            observation=observation,
+            control_matrix=self._control,
+            observation_model=observation_model,
         )
 
     def _block(self, node: int) -> slice:
@@ -731,11 +733,11 @@ class CouplingGraphBackend:
 
     def _control_shift(self, action: jax.Array | None) -> jax.Array:
         """The control shift ``b = B·action`` (zero when the model has no control)."""
-        control = self._control
-        if control is None:
+        control_matrix = self._control
+        if control_matrix is None:
             return jnp.zeros(self.n_total)
         assert action is not None  # validate_step_inputs guarantees this
-        return control @ action  # b = B·action
+        return control_matrix @ action  # b = B·action
 
     def marginal(self, node: int, belief: Belief) -> Belief:
         """The marginal belief at a single ``node`` — a pure slice of the joint belief.
@@ -782,7 +784,7 @@ class CouplingGraphBackend:
 
         Block-diagonal dynamics (F, Q), the real sensors (C, R), and the control — the
         joint state as one linear-Gaussian model, carrying the metadata an
-        [`Agent`][cpomdp.Agent] reads (``n_observations``, ``control``,
+        [`Agent`][cpomdp.Agent] reads (``n_observations``, ``control_matrix``,
         ``n_controls``). The ``Agent`` derives
         its own ``model`` from this, so passing the backend is enough (issue #26).
         Distinct from ``to_flat_model()``, which *augments* this with the structural
@@ -856,7 +858,9 @@ class CouplingGraphBackend:
         # Coupling-free R(x): μ⁻ = μ⁺, so handing the graph's own sensor to a flat
         # backend reproduces this filter. With couplings the branch above has already
         # refused, so this is None whenever a pseudo-observation is about to be added.
-        observation = None if self._sensor_is_fixed else self._flat_model.observation
+        observation_model = (
+            None if self._sensor_is_fixed else self._flat_model.observation_model
+        )
         for edge in self.graph.couplings:  # child − W·parent ~ N(0, Q_struct)
             coupling = edge.factor.coupling  # W
             child_dim = coupling.shape[0]
@@ -866,13 +870,13 @@ class CouplingGraphBackend:
             rows.append(row)
             noise_blocks.append(edge.factor.coupling_noise)
         return LinearGaussianModel(
-            dynamics=self._transition.dynamics,
+            dynamics_matrix=self._transition.dynamics_matrix,
             observation_matrix=jnp.vstack(rows),
             dynamics_noise=self._transition.dynamics_noise,
             observation_noise=jax.scipy.linalg.block_diag(*noise_blocks),
             prior=Belief(jnp.zeros(self.n_total), jnp.eye(self.n_total)),
-            control=self._control,
-            observation=observation,
+            control_matrix=self._control,
+            observation_model=observation_model,
         )
 
     def flat_observation(self, observation: ArrayLike) -> jax.Array:

@@ -185,12 +185,12 @@ class ModelStructure:
         self._validate_partition(
             self.channels, n_observations, "channel", require_cover=False
         )
-        a_mat = np.asarray(model.dynamics)
+        a_mat = np.asarray(model.dynamics_matrix)
         c_mat = np.asarray(model.observation_matrix)
         # fixed Q only — a state-dependent Q(x) has no single matrix to check (skip it).
         q_mat = (
             None
-            if model.process_noise is not None
+            if model.dynamics_noise_model is not None
             else np.asarray(model.dynamics_noise)
         )
         for name_i, idx_i in self.factors:

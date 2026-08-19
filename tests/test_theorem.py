@@ -31,11 +31,11 @@ from cpomdp.efe import expected_free_energy
 # --- the algebra the claims are stated in ----------------------------------------
 
 
-def predicted_cov(prior_cov, dynamics, process_noise):
+def predicted_cov(prior_cov, dynamics_matrix, dynamics_noise_model):
     """Σ⁻ = A Σ Aᵀ + Q."""
-    a = np.asarray(dynamics, dtype=float)
+    a = np.asarray(dynamics_matrix, dtype=float)
     return a @ np.asarray(prior_cov, dtype=float) @ a.T + np.asarray(
-        process_noise, dtype=float
+        dynamics_noise_model, dtype=float
     )
 
 
@@ -80,30 +80,34 @@ def range_noise(x, params):
     return jnp.atleast_2d(1.0 + x[0] ** 2)
 
 
-def scalar_chain(*, dynamics=1.0, control=1.0, process=1.0, prior_var=1.0, mean=0.0):
+def scalar_chain(
+    *, dynamics_matrix=1.0, control_matrix=1.0, process=1.0, prior_var=1.0, mean=0.0
+):
     """The scalar chain the worked example uses: A = B = C = Q = 1, R(x) = 1 + x²."""
     model = LinearGaussianModel(
-        dynamics=[[dynamics]],
+        dynamics_matrix=[[dynamics_matrix]],
         observation_matrix=[[1.0]],
         dynamics_noise=[[process]],
         observation_noise=[[1.0]],
         prior=Belief([mean], [[prior_var]]),
-        control=[[control]],
-        observation=CallableSensor([[1.0]], range_noise, RANGE_NOISE_PARAMS),
+        control_matrix=[[control_matrix]],
+        observation_model=CallableSensor([[1.0]], range_noise, RANGE_NOISE_PARAMS),
     )
     return model, Belief([mean], [[prior_var]])
 
 
 def noise_at(model, mean):
     """R evaluated at a predicted mean, through the model's own sensor."""
-    return np.asarray(model.observation.linearize(jnp.asarray(mean))[1], dtype=float)
+    return np.asarray(
+        model.observation_model.linearize(jnp.asarray(mean))[1], dtype=float
+    )
 
 
 def predict_mean(model, belief, action):
     """μ⁻ = A μ + B u."""
     return np.asarray(model.A, dtype=float) @ np.asarray(
         belief.mean, dtype=float
-    ) + np.asarray(model.control, dtype=float) @ np.atleast_1d(action)
+    ) + np.asarray(model.control_matrix, dtype=float) @ np.atleast_1d(action)
 
 
 class TestWorkedExample:
@@ -152,12 +156,12 @@ class TestCollapse:
 
     def test_fixed_sensor_epistemic_is_action_invariant(self):
         model = LinearGaussianModel(
-            dynamics=[[1.0]],
+            dynamics_matrix=[[1.0]],
             observation_matrix=[[1.0]],
             dynamics_noise=[[1.0]],
             observation_noise=[[1.0]],
             prior=Belief([0.0], [[1.0]]),
-            control=[[1.0]],
+            control_matrix=[[1.0]],
         )
         belief = Belief([0.0], [[1.0]])
         pref = Preference([0.0], [[1.0]])
@@ -306,7 +310,7 @@ class TestZeroInnovation:
         open_loop, mean = [], np.asarray(belief.mean, dtype=float)
         for u in actions:  # observations marginalised: the mean never gets corrected
             mean = np.asarray(model.A, dtype=float) @ mean + np.asarray(
-                model.control, dtype=float
+                model.control_matrix, dtype=float
             ) @ np.atleast_1d(u)
             open_loop.append(mean.copy())
 
@@ -324,12 +328,12 @@ class TestPlanningReductionEquivalence:
 
     def test_fixed_noise_leaves_the_covariance_policy_independent(self):
         model = LinearGaussianModel(
-            dynamics=[[1.0]],
+            dynamics_matrix=[[1.0]],
             observation_matrix=[[1.0]],
             dynamics_noise=[[1.0]],
             observation_noise=[[1.0]],
             prior=Belief([0.0], [[1.0]]),
-            control=[[1.0]],
+            control_matrix=[[1.0]],
         )
         belief = Belief([0.0], [[1.0]])
         cov_pred = predicted_cov(belief.cov, model.A, model.Q)
@@ -356,7 +360,7 @@ class TestPlanningReductionEquivalence:
         With no control authority the predicted mean is the same under every action, so
         the noise is pinned to one value and a fixed schedule reproduces the agent.
         """
-        model, belief = scalar_chain(control=0.0)
+        model, belief = scalar_chain(control_matrix=0.0)
         cov_pred = predicted_cov(belief.cov, model.A, model.Q)
         pinned = {
             float(
@@ -434,7 +438,7 @@ class TestObservationDrivenMean:
     """
 
     def test_data_moves_the_pinned_noise_when_the_control_cannot(self):
-        model, belief = scalar_chain(control=0.0, mean=0.0)
+        model, belief = scalar_chain(control_matrix=0.0, mean=0.0)
         backend = KalmanBackend(model)
 
         pinned = []

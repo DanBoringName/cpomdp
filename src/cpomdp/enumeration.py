@@ -248,7 +248,7 @@ class EnumeratedEfeSearch:
         *,
         horizon: int,
     ) -> None:
-        if model.control is None:
+        if model.control_matrix is None:
             raise ValueError(
                 "EnumeratedEfeSearch needs a model with a control matrix; an "
                 "action has no effect on a control-free (pure-tracking) model."
@@ -272,7 +272,7 @@ class EnumeratedEfeSearch:
         ``backend.block``) or the whole state. This runs the coupled-tree model the flat
         constructor cannot express.
         """
-        if backend.model.control is None:
+        if backend.model.control_matrix is None:
             raise ValueError(
                 "EnumeratedEfeSearch.over_backend needs a backend with a control "
                 "matrix; an action has no effect without one."
@@ -461,7 +461,7 @@ class ChunkedEfeSearch:
         horizon: int,
         chunk: int = DEFAULT_CHUNK,
     ) -> None:
-        if model.control is None:
+        if model.control_matrix is None:
             raise ValueError(
                 "ChunkedEfeSearch needs a model with a control matrix; an action has "
                 "no effect on a control-free (pure-tracking) model."
@@ -479,7 +479,7 @@ class ChunkedEfeSearch:
         chunk: int = DEFAULT_CHUNK,
     ) -> "ChunkedEfeSearch":
         """Chunked search that scores on an FFG ``backend`` via ``policy_efe_ffg``."""
-        if backend.model.control is None:
+        if backend.model.control_matrix is None:
             raise ValueError(
                 "ChunkedEfeSearch.over_backend needs a backend with a control "
                 "matrix; an action has no effect without one."

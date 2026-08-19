@@ -202,9 +202,13 @@ def build_model(*, frozen_noise: float | None = None) -> LinearGaussianModel:
     Returns:
         The `LinearGaussianModel`. A = I, control on the position block only.
     """
-    dynamics = np.eye(STATE_DIMS)  # A: position drifts nowhere, the goal is static
-    control = np.vstack([np.eye(CONTEXT_DIMS), np.zeros((CONTEXT_DIMS, CONTEXT_DIMS))])
-    process_noise = np.diag(  # Q
+    dynamics_matrix = np.eye(
+        STATE_DIMS
+    )  # A: position drifts nowhere, the goal is static
+    control_matrix = np.vstack(
+        [np.eye(CONTEXT_DIMS), np.zeros((CONTEXT_DIMS, CONTEXT_DIMS))]
+    )
+    dynamics_noise = np.diag(  # Q
         [Q_POSITION] * CONTEXT_DIMS + [Q_GOAL] * CONTEXT_DIMS
     )
     observed = observation_matrix()  # C
@@ -212,15 +216,15 @@ def build_model(*, frozen_noise: float | None = None) -> LinearGaussianModel:
     pinned = R_DULL if frozen_noise is None else frozen_noise
     fixed_noise = np.diag([R_DULL] * CONTEXT_DIMS + [pinned] * CONTEXT_DIMS)
     live_sensor = CallableSensor(observed, beacon_noise, sensor_params())
-    observation = None if frozen_noise is not None else live_sensor
+    observation_model = None if frozen_noise is not None else live_sensor
     return LinearGaussianModel(
-        dynamics=dynamics.tolist(),
+        dynamics_matrix=dynamics_matrix.tolist(),
         observation_matrix=observed.tolist(),
-        dynamics_noise=process_noise.tolist(),
+        dynamics_noise=dynamics_noise.tolist(),
         observation_noise=fixed_noise.tolist(),
         prior=start_belief(),
-        control=control.tolist(),
-        observation=observation,
+        control_matrix=control_matrix.tolist(),
+        observation_model=observation_model,
     )
 
 
@@ -1326,18 +1330,18 @@ def render_still(myopic: dict, farsighted: dict, out_path: Path) -> Path:
     frozen = margin_curve(frozen_noise=frozen_at)
     crossing = first_crossing(live)
 
-    fig, (scene, flip, control) = plt.subplots(
+    fig, (scene, flip, control_matrix) = plt.subplots(
         1, 3, figsize=(15.4, 5.2), width_ratios=(1.05, 1.35, 1.0)
     )
     fig.patch.set_facecolor(BG)
     fig.suptitle(TITLE, fontsize=13.5, fontweight="bold", color=INK, y=0.975)
     _draw_scene(scene, myopic, farsighted)
     _draw_margin(flip, live, crossing)
-    _draw_control(control, frozen, frozen_at)
-    for ax in (flip, control):
+    _draw_control(control_matrix, frozen, frozen_at)
+    for ax in (flip, control_matrix):
         ax.set_facecolor(BG)
         ax.set_ylim(-165.0, 82.0)
-    control.set_yticklabels([])
+    control_matrix.set_yticklabels([])
 
     fig.text(
         0.5,

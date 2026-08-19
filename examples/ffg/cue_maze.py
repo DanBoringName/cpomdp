@@ -380,10 +380,12 @@ def build_maze(
     )
     # B: the action drives position, which is the arena node's first block, and the
     # joint state puts the context in front of it.
-    control = np.zeros((context_dim + arena_dim, n_dims))
+    control_matrix = np.zeros((context_dim + arena_dim, n_dims))
     for axis in range(n_dims):
-        control[context_dim + axis, axis] = 1.0
-    return CouplingGraphBackend(graph, transitions, control=control.tolist())
+        control_matrix[context_dim + axis, axis] = 1.0
+    return CouplingGraphBackend(
+        graph, transitions, control_matrix=control_matrix.tolist()
+    )
 
 
 def _far_away(n_dims: int) -> np.ndarray:

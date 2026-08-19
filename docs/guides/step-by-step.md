@@ -49,15 +49,15 @@ new position = 1·position + dt·velocity   →   row 1:  [1, dt]
 new velocity = 0·position +  1·velocity   →   row 2:  [0,  1]
 ```
 
-We call this `dynamics`. Written in Python it looks like this:
+We call this `dynamics_matrix`. Written in Python it looks like this:
 
 ```python
 dt = 0.1
-dynamics = [[1, dt],
-            [0, 1]]
+dynamics_matrix = [[1, dt],
+                   [0, 1]]
 ```
 
-`dynamics` is literally Newtonian kinematics in matrix form. *Add these python blocks as we go*.
+`dynamics_matrix` is literally Newtonian kinematics in matrix form. *Add these python blocks as we go*.
 
 ### Sensor
 
@@ -146,8 +146,8 @@ from cpomdp import Belief, LinearGaussianModel
 # --- the world's mechanics ---
 dt = 0.1
 
-dynamics = [[1, dt],
-            [0, 1]]          # how the state drifts on its own (Newtonian kinematics)
+dynamics_matrix = [[1, dt],
+                   [0, 1]]   # how the state drifts on its own (Newtonian kinematics)
 
 observation_matrix = [[1, 0]]     # what the agent senses: position only (the 0 hides velocity)
 
@@ -160,7 +160,7 @@ prior = Belief(mean=[0, 0],
 
 # --- snap the world and the belief into one object ---
 model = LinearGaussianModel(
-    dynamics=dynamics,
+    dynamics_matrix=dynamics_matrix,
     observation_matrix=observation_matrix,
     dynamics_noise=dynamics_noise,
     observation_noise=observation_noise,
@@ -271,16 +271,16 @@ velocity = last-velocity + dt × wiggle
 The wiggle never touches position directly — it only changes your **velocity**, which then carries position along (the dynamics do that part). Same coefficient trick as the others, and because the wiggle drives velocity, not position, the top row is `0`:
 
 ```python
-control = [[0],
-           [dt]]
+control_matrix = [[0],
+                  [dt]]
 ```
 
-Now re-run the model definition with `control` added — the one new line that turns our observer into something that can move:
+Now re-run the model definition with `control_matrix` added — the one new line that turns our observer into something that can move:
 
 ```python
 model = LinearGaussianModel(
-    dynamics=dynamics,
-    control=control,          # <-- the new piece
+    dynamics_matrix=dynamics_matrix,
+    control_matrix=control_matrix,   # <-- the new piece
     observation_matrix=observation_matrix,
     dynamics_noise=dynamics_noise,
     observation_noise=observation_noise,
@@ -325,7 +325,7 @@ for _ in range(100):
                                                           # '@' is matrix multiplication in python notation
     agent.infer_states(obs)                               # PERCEIVE: fold it in, sharpen the belief
     action = agent.sample_action()                        # ACT: how hard to wiggle the flagellum toward the food
-    real   = model.dynamics @ real + model.control @ action   # the world moves on
+    real   = model.dynamics_matrix @ real + model.control_matrix @ action   # the world moves on
 
 print(agent.belief.mean)     # ≈ [1, 0] — it arrived
 ```
@@ -352,8 +352,8 @@ from cpomdp import Agent, Belief, LinearGaussianModel, StateGoal
 
 dt = 0.1
 model = LinearGaussianModel(
-    dynamics=[[1, dt], [0, 1]],
-    control=[[0], [dt]],
+    dynamics_matrix=[[1, dt], [0, 1]],
+    control_matrix=[[0], [dt]],
     observation_matrix=[[1, 0]],
     dynamics_noise=jnp.eye(2) * 1e-6,
     observation_noise=[[1e-2]],
@@ -366,7 +366,7 @@ for _ in range(100):
     obs = model.observation_matrix @ true     # what the agent gets to see
     agent.infer_states(obs)             # perceive
     action = agent.sample_action()      # act
-    true = model.dynamics @ true + model.control @ action
+    true = model.dynamics_matrix @ true + model.control_matrix @ action
 
 print(agent.belief.mean)                # ≈ [1, 0]
 ```

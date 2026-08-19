@@ -166,8 +166,12 @@ def build_backend(
             [[1.0, 0.0], [0.0, 1.0]], [[Q_POSITION, 0.0], [0.0, Q_ARM]]
         ),
     )
-    control = [[0.0], [1.0], [0.0]]  # B: the 1-D action drives position (joint idx 1)
-    return CouplingGraphBackend(graph, transitions, control=control)
+    control_matrix = [
+        [0.0],
+        [1.0],
+        [0.0],
+    ]  # B: the 1-D action drives position (joint idx 1)
+    return CouplingGraphBackend(graph, transitions, control_matrix=control_matrix)
 
 
 def start_belief() -> Belief:

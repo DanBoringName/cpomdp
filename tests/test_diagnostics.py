@@ -42,15 +42,15 @@ def ignores_the_state(x, params):
     return jnp.atleast_2d(2.0) + 0.0 * x[0]
 
 
-def chain(noise_fn, *, control=1.0):
+def chain(noise_fn, *, control_matrix=1.0):
     model = LinearGaussianModel(
-        dynamics=[[1.0]],
+        dynamics_matrix=[[1.0]],
         observation_matrix=[[1.0]],
         dynamics_noise=[[1.0]],
         observation_noise=[[1.0]],
         prior=Belief([0.0], [[1.0]]),
-        control=[[control]],
-        observation=CallableSensor([[1.0]], noise_fn, None),
+        control_matrix=[[control_matrix]],
+        observation_model=CallableSensor([[1.0]], noise_fn, None),
     )
     return model, Belief([0.0], [[1.0]])
 
@@ -134,12 +134,12 @@ class TestProbeFlatModel:
 
     def test_fixed_sensor_flattens(self):
         model = LinearGaussianModel(
-            dynamics=[[1.0]],
+            dynamics_matrix=[[1.0]],
             observation_matrix=[[1.0]],
             dynamics_noise=[[1.0]],
             observation_noise=[[1.0]],
             prior=Belief([0.0], [[1.0]]),
-            control=[[1.0]],
+            control_matrix=[[1.0]],
         )
         report = probe_model(model, Belief([0.0], [[1.0]]), ACTIONS)
         assert report.flattens
@@ -149,7 +149,7 @@ class TestProbeFlatModel:
 
     def test_noise_the_control_cannot_reach_flattens(self):
         """Declared state-dependent, but no action moves the mean off the prior."""
-        model, belief = chain(range_noise, control=0.0)
+        model, belief = chain(range_noise, control_matrix=0.0)
         report = probe_model(model, belief, ACTIONS)
         assert report.flattens
         assert report.noise_spread == pytest.approx(0.0)
@@ -211,7 +211,9 @@ class TestProbeGraphBackend:
             GaussianTransition([[1.0]], [[0.1]]),
             GaussianTransition([[1.0, 0.0], [0.0, 1.0]], [[0.1, 0.0], [0.0, 0.1]]),
         )
-        return CouplingGraphBackend(graph, transitions, control=[[0.0], [1.0], [0.0]])
+        return CouplingGraphBackend(
+            graph, transitions, control_matrix=[[0.0], [1.0], [0.0]]
+        )
 
     @staticmethod
     def belief():
@@ -240,7 +242,7 @@ class TestProbeGraphBackend:
         backend = CouplingGraphBackend(
             graph,
             (GaussianTransition([[1.0, 0.0], [0.0, 1.0]], [[0.1, 0.0], [0.0, 0.1]]),),
-            control=[[1.0], [0.0]],
+            control_matrix=[[1.0], [0.0]],
         )
         report = probe_model(backend, Belief(jnp.zeros(2), jnp.eye(2)), ACTIONS)
         assert not report.full_row_rank

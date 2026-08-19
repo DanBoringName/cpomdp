@@ -60,7 +60,7 @@ class TestBeliefs:
 # validation branch.
 def _valid_kwargs(**overrides):
     kwargs = {
-        "dynamics": [[1.0, 0.1], [0.0, 1.0]],  # 2x2  (n=2)
+        "dynamics_matrix": [[1.0, 0.1], [0.0, 1.0]],  # 2x2  (n=2)
         "observation_matrix": [[1.0, 0.0]],  # 1x2  (m=1)
         "dynamics_noise": [[0.1, 0.0], [0.0, 0.1]],  # 2x2
         "observation_noise": [[1.0]],  # 1x1
@@ -73,19 +73,21 @@ def _valid_kwargs(**overrides):
 class TestLinearGaussianModels:
     def test_valid_model_constructs(self):
         m = LinearGaussianModel(**_valid_kwargs())
-        np.testing.assert_array_equal(m.dynamics, [[1.0, 0.1], [0.0, 1.0]])
+        np.testing.assert_array_equal(m.dynamics_matrix, [[1.0, 0.1], [0.0, 1.0]])
         assert m.n_states == 2
         assert m.n_observations == 1
 
     def test_control_is_optional(self):
         m = LinearGaussianModel(**_valid_kwargs())
-        assert m.control is None
+        assert m.control_matrix is None
         assert m.B is None
         assert m.n_controls == 0
 
     def test_with_control(self):
-        m = LinearGaussianModel(**_valid_kwargs(control=[[0.0], [1.0]]))  # 2x1 (p=1)
-        np.testing.assert_array_equal(m.control, [[0.0], [1.0]])
+        m = LinearGaussianModel(
+            **_valid_kwargs(control_matrix=[[0.0], [1.0]])
+        )  # 2x1 (p=1)
+        np.testing.assert_array_equal(m.control_matrix, [[0.0], [1.0]])
         np.testing.assert_array_equal(m.B, [[0.0], [1.0]])
         assert m.n_controls == 1
 
@@ -98,7 +100,7 @@ class TestLinearGaussianModels:
         with pytest.raises(TypeError, match="positional"):
             # Making the call wrongly is the point, so ty's arity errors are expected.
             LinearGaussianModel(  # ty: ignore[missing-argument]
-                k["dynamics"],
+                k["dynamics_matrix"],
                 k["observation_matrix"],  # ty: ignore[too-many-positional-arguments]
                 k["dynamics_noise"],
                 k["observation_noise"],
@@ -107,7 +109,7 @@ class TestLinearGaussianModels:
 
     def test_letter_aliases_map_to_role_names(self):
         m = LinearGaussianModel(**_valid_kwargs())
-        np.testing.assert_array_equal(m.A, m.dynamics)
+        np.testing.assert_array_equal(m.A, m.dynamics_matrix)
         np.testing.assert_array_equal(m.C, m.observation_matrix)
         np.testing.assert_array_equal(m.Q, m.dynamics_noise)
         np.testing.assert_array_equal(m.R, m.observation_noise)
@@ -115,7 +117,7 @@ class TestLinearGaussianModels:
     def test_rejects_non_square_dynamics(self):
         with pytest.raises(ValueError, match="square"):
             LinearGaussianModel(
-                **_valid_kwargs(dynamics=[[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+                **_valid_kwargs(dynamics_matrix=[[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
             )
 
     def test_rejects_observation_matrix_wrong_columns(self):
@@ -153,7 +155,9 @@ class TestLinearGaussianModels:
 
     def test_rejects_control_wrong_rows(self):
         with pytest.raises(ValueError, match="control"):
-            LinearGaussianModel(**_valid_kwargs(control=[[0.0], [0.0], [0.0]]))  # 3x1
+            LinearGaussianModel(
+                **_valid_kwargs(control_matrix=[[0.0], [0.0], [0.0]])
+            )  # 3x1
 
     def test_rejects_prior_wrong_dimension(self):
         bad_prior = Belief(mean=[0.0, 0.0, 0.0], cov=np.eye(3))  # 3-D, but n=2
@@ -168,16 +172,16 @@ class TestLinearGaussianModels:
         # No observation given -> fixed sensor defined by the observation_matrix
         # and observation_noise fields
         # (the v0.2 semantics). None is the canonical "fixed" case.
-        assert LinearGaussianModel(**_valid_kwargs()).observation is None
+        assert LinearGaussianModel(**_valid_kwargs()).observation_model is None
 
     def test_accepts_an_observation_model(self):
         sensor = FixedSensor([[1.0, 0.0]], [[1.0]])
-        m = LinearGaussianModel(**_valid_kwargs(observation=sensor))
-        assert m.observation is sensor
+        m = LinearGaussianModel(**_valid_kwargs(observation_model=sensor))
+        assert m.observation_model is sensor
 
     def test_rejects_observation_not_an_observation_model(self):
         with pytest.raises(TypeError, match="ObservationModel"):
-            LinearGaussianModel(**_valid_kwargs(observation="not a sensor"))
+            LinearGaussianModel(**_valid_kwargs(observation_model="not a sensor"))
 
 
 class TestPytreeRegistration:
@@ -218,24 +222,24 @@ class TestPytreeRegistration:
         leaves, treedef = jax.tree_util.tree_flatten(m)
         restored = jax.tree_util.tree_unflatten(treedef, leaves)
         assert isinstance(restored, LinearGaussianModel)
-        assert restored.control is None
-        np.testing.assert_array_equal(restored.dynamics, m.dynamics)
+        assert restored.control_matrix is None
+        np.testing.assert_array_equal(restored.dynamics_matrix, m.dynamics_matrix)
         np.testing.assert_array_equal(restored.prior.mean, m.prior.mean)
 
     def test_model_round_trips_with_control(self):
-        m = LinearGaussianModel(**_valid_kwargs(control=[[0.0], [1.0]]))
+        m = LinearGaussianModel(**_valid_kwargs(control_matrix=[[0.0], [1.0]]))
         leaves, treedef = jax.tree_util.tree_flatten(m)
         restored = jax.tree_util.tree_unflatten(treedef, leaves)
-        np.testing.assert_array_equal(restored.control, m.control)
+        np.testing.assert_array_equal(restored.control_matrix, m.control_matrix)
 
     def test_model_round_trips_with_an_observation(self):
         # observation is a nullable child like control: a FixedSensor recurses
         # into its own array leaves and is rebuilt on unflatten.
         sensor = FixedSensor([[1.0, 0.0]], [[0.5]])
-        m = LinearGaussianModel(**_valid_kwargs(observation=sensor))
+        m = LinearGaussianModel(**_valid_kwargs(observation_model=sensor))
         leaves, treedef = jax.tree_util.tree_flatten(m)
         restored = jax.tree_util.tree_unflatten(treedef, leaves)
-        assert isinstance(restored.observation, FixedSensor)
-        c_out, r_out = restored.observation.linearize(jnp.zeros(2))
+        assert isinstance(restored.observation_model, FixedSensor)
+        c_out, r_out = restored.observation_model.linearize(jnp.zeros(2))
         np.testing.assert_array_equal(c_out, sensor.observation_matrix)
         np.testing.assert_array_equal(r_out, sensor.observation_noise)

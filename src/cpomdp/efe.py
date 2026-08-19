@@ -195,8 +195,9 @@ def expected_free_energy(
 
     Args:
         model: The generative model. Must have a control matrix (an action has no
-            meaning without one). Its ``observation`` supplies the local ``(C, R)``;
-            ``None`` means the fixed sensor ``(observation_matrix, observation_noise)``.
+            meaning without one). Its ``observation_model`` supplies the local
+            ``(C, R)``; ``None`` means the fixed sensor
+            ``(observation_matrix, observation_noise)``.
         belief: The current belief ``(μ, Σ)``.
         action: The candidate action ``a``, shape ``(p,)``.
         preference: The goal as an OBSERVATION-space ``Preference`` — ``goal`` is a
@@ -210,18 +211,18 @@ def expected_free_energy(
     Raises:
         ValueError: If the model has no control matrix.
     """
-    if model.control is None:
+    if model.control_matrix is None:
         raise ValueError(
             "expected_free_energy needs a model with a control matrix; an action "
             "has no effect on a control-free (pure-tracking) model."
         )
-    control = model.control  # narrowed to Array by the guard above
+    control_matrix = model.control_matrix  # narrowed to Array by the guard above
     action = jnp.asarray(action, dtype=float)
     step = _efe_step(
         model,
         belief.mean,
         belief.cov,
-        control,
+        control_matrix,
         action,
         preference.goal,
         preference.precision,
@@ -248,15 +249,15 @@ def policy_efe(
         ``(G, {"pragmatic": ..., "epistemic": ...})`` — the summed EFE and its
         summed components over the horizon.
     """
-    if model.control is None:
+    if model.control_matrix is None:
         raise ValueError(
             "policy_efe needs a model with a control matrix; an action has no "
             "effect on a control-free (pure-tracking) model."
         )
-    control = model.control
+    control_matrix = model.control_matrix
     goal, precision = preference.goal, preference.precision
     policy = jnp.asarray(policy, dtype=float)
-    body = _rollout_body(model, control, goal, precision)
+    body = _rollout_body(model, control_matrix, goal, precision)
 
     # Lean projection: keep only the three scalars in the scan's ys, so EFESelector's
     # vmap over |A|^H candidate policies never stacks the H×n×n covariances.
@@ -299,15 +300,15 @@ def policy_efe_trace(
     Returns:
         A ``PolicyEfeTrace`` of arrays stacked along a leading H axis.
     """
-    if model.control is None:
+    if model.control_matrix is None:
         raise ValueError(
             "policy_efe_trace needs a model with a control matrix; an action has no "
             "effect on a control-free (pure-tracking) model."
         )
-    control = model.control
+    control_matrix = model.control_matrix
     goal, precision = preference.goal, preference.precision
     policy = jnp.asarray(policy, dtype=float)
-    body = _rollout_body(model, control, goal, precision)
+    body = _rollout_body(model, control_matrix, goal, precision)
 
     _, trace = lax.scan(body, (belief.mean, belief.cov), policy)
     return trace
@@ -315,7 +316,7 @@ def policy_efe_trace(
 
 def _rollout_body(
     model: LinearGaussianModel,
-    control: Float64[Array, "n p"],
+    control_matrix: Float64[Array, "n p"],
     goal: Float64[Array, "m"],
     precision: Float64[Array, "m m"],
 ) -> _RolloutStep:
@@ -331,13 +332,13 @@ def _rollout_body(
 
     def step(carry, action):
         mu, sigma = carry
-        r = _efe_step(model, mu, sigma, control, action, goal, precision)
+        r = _efe_step(model, mu, sigma, control_matrix, action, goal, precision)
         # predict-only propagation: rollout fetches its OWN C (the one eval the
         # one-step wrapper never pays), reusing the (Σ⁺, S) r already returned.
         c = (
             model.C
-            if model.observation is None
-            else model.observation.linearize(r.mu_pred)[0]
+            if model.observation_model is None
+            else model.observation_model.linearize(r.mu_pred)[0]
         )
         p_xo = r.sigma_pred @ c.T
         sigma_post = r.sigma_pred - p_xo @ jnp.linalg.solve(r.s, p_xo.T)
@@ -632,7 +633,7 @@ def _efe_step(
     model: LinearGaussianModel,
     mu: Float64[Array, "n"],
     sigma: Float64[Array, "n n"],
-    control: Float64[Array, "n p"],
+    control_matrix: Float64[Array, "n p"],
     action: Float64[Array, "p"],
     goal: Float64[Array, "m"],
     precision: Float64[Array, "m m"],
@@ -645,11 +646,11 @@ def _efe_step(
     # posterior this step hands the next one, depend on where the action put the mean.
     # Over a horizon the covariance does move with the policy; only the one-step
     # predicted covariance is blind to it.
-    mu_pred = model.A @ mu + control @ action
+    mu_pred = model.A @ mu + control_matrix @ action
     process_q = (
         model.Q
-        if model.process_noise is None
-        else model.process_noise.noise_at(mu_pred)
+        if model.dynamics_noise_model is None
+        else model.dynamics_noise_model.noise_at(mu_pred)
     )
 
     sigma_pred = model.A @ sigma @ model.A.T + process_q  # Σ⁺ = AΣAᵀ + process_q
@@ -659,7 +660,7 @@ def _efe_step(
     # FRAGILE(lit) #4: everything is evaluated at μ⁺. Immaterial for a fixed sensor,
     # which is its own linearization everywhere; for a state-dependent R(x) this point
     # is what the action reaches, and so what the epistemic term ends up measuring.
-    if model.observation is None:
+    if model.observation_model is None:
         # FAST PATH — a bare matvec/matmul, byte-identical to Phase 1A. Kept inline
         # (no method dispatch) so the fixed-sensor hot path stays lean.
         observation_matrix, observation_noise = model.C, model.R
@@ -670,7 +671,7 @@ def _efe_step(
     else:
         # Linear sensors return exact (C·μ⁺, C·Σ⁺·Cᵀ+R, R); NonlinearSensor (2.5)
         # returns its 2nd-order moments. S feeds the pragmatic term, R the epistemic.
-        o_pred, pred_obs_cov, observation_noise = model.observation.gaussianize(
+        o_pred, pred_obs_cov, observation_noise = model.observation_model.gaussianize(
             mu_pred, sigma_pred
         )
 

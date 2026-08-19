@@ -31,7 +31,7 @@ class _PassthroughBackend:
 
 def _scalar_model():
     return LinearGaussianModel(
-        dynamics=[[0.9]],
+        dynamics_matrix=[[0.9]],
         observation_matrix=[[1.0]],
         dynamics_noise=[[0.5]],
         observation_noise=[[1.0]],

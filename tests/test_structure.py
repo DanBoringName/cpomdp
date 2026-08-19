@@ -27,7 +27,7 @@ def _kwargs(**over):
     guard instead of being rejected by ty at the ``**`` unpack.
     """
     kwargs = {
-        "dynamics": [[1.0, 0.1], [0.0, 1.0]],
+        "dynamics_matrix": [[1.0, 0.1], [0.0, 1.0]],
         "observation_matrix": [[1.0, 0.0]],
         "dynamics_noise": [[0.1, 0.0], [0.0, 0.1]],
         "observation_noise": [[1.0]],
@@ -52,7 +52,7 @@ def _block_kwargs(**over):
     typed constructor.)
     """
     kwargs = {
-        "dynamics": [
+        "dynamics_matrix": [
             [0.9, 0.1, 0.0, 0.0],
             [0.0, 0.9, 0.0, 0.0],
             [0.0, 0.0, 0.8, 0.2],
@@ -163,7 +163,7 @@ class TestStructureOnModel:
         leaves, treedef = jax.tree_util.tree_flatten(m)
         restored = jax.tree_util.tree_unflatten(treedef, leaves)
         assert restored.structure == s
-        np.testing.assert_array_equal(restored.dynamics, m.dynamics)
+        np.testing.assert_array_equal(restored.dynamics_matrix, m.dynamics_matrix)
 
     def test_differing_structure_gives_a_differing_treedef(self):
         # Locks the documented recompile caveat: two models identical but for their
@@ -176,7 +176,9 @@ class TestStructureOnModel:
         # jit hashes the treedef (which carries the structure aux) for its cache key —
         # a dict/list field would raise "unhashable" right here. A trace proves it runs.
         s = ModelStructure.from_dicts(factors={"pos": [0], "vel": [1]})
-        out = jax.jit(lambda model: jnp.trace(model.dynamics))(_model(structure=s))
+        out = jax.jit(lambda model: jnp.trace(model.dynamics_matrix))(
+            _model(structure=s)
+        )
         assert float(out) == pytest.approx(2.0)
 
 
@@ -190,8 +192,8 @@ class TestStructureIsInertArithmetic:
     _STRUCT = ModelStructure.from_dicts(factors={"a": [0], "b": [1]})
 
     def test_expected_free_energy_is_byte_identical(self):
-        plain = _model(control=[[1.0], [0.0]])
-        structured = _model(control=[[1.0], [0.0]], structure=self._STRUCT)
+        plain = _model(control_matrix=[[1.0], [0.0]])
+        structured = _model(control_matrix=[[1.0], [0.0]], structure=self._STRUCT)
         pref = Preference(goal=[0.5], precision=[[2.0]])
         action = jnp.array([0.3])
         g0, parts0 = expected_free_energy(plain, plain.prior, action, pref)
@@ -201,8 +203,8 @@ class TestStructureIsInertArithmetic:
         np.testing.assert_array_equal(parts0["epistemic"], parts1["epistemic"])
 
     def test_kalman_step_is_byte_identical(self):
-        plain = _model(control=[[1.0], [0.0]])
-        structured = _model(control=[[1.0], [0.0]], structure=self._STRUCT)
+        plain = _model(control_matrix=[[1.0], [0.0]])
+        structured = _model(control_matrix=[[1.0], [0.0]], structure=self._STRUCT)
         action = jnp.array([0.3])
         obs = jnp.array([0.7])
         b0 = KalmanBackend(plain).infer_states(obs, plain.prior, action)
@@ -232,7 +234,7 @@ class TestValidatePartition:
             roles={"internal": [0], "external": [1]},
             channels={"y": [0]},
         )
-        s.validate(_model(dynamics=[[1.0, 0.0], [0.0, 1.0]]))  # must not raise
+        s.validate(_model(dynamics_matrix=[[1.0, 0.0], [0.0, 1.0]]))  # must not raise
 
     def test_empty_structure_passes(self):
         ModelStructure().validate(_model())  # nothing declared → nothing to check
@@ -266,7 +268,7 @@ class TestValidatePartition:
         # channels need not cover all observation rows — only factors/roles must.
         # Diagonal A so the two-factor split is also sparsity-clean (class docstring).
         ModelStructure.from_dicts(factors={"a": [0], "b": [1]}).validate(
-            _model(dynamics=[[1.0, 0.0], [0.0, 1.0]])
+            _model(dynamics_matrix=[[1.0, 0.0], [0.0, 1.0]])
         )
 
 
@@ -284,7 +286,7 @@ class TestValidateSparsity:
 
     def test_off_block_dynamics_coupling_fails(self):
         bad = _block_model(
-            dynamics=[
+            dynamics_matrix=[
                 [0.9, 0.1, 0.3, 0.0],
                 [0.0, 0.9, 0.0, 0.0],
                 [0.0, 0.0, 0.8, 0.2],
@@ -323,7 +325,7 @@ class TestValidateSparsity:
         # A NaN in an off-block must not silently pass: NaN > atol is False, so the
         # old magnitude check certified a NaN-coupled model conditionally independent.
         bad = _block_model(
-            dynamics=[
+            dynamics_matrix=[
                 [0.9, 0.1, float("nan"), 0.0],
                 [0.0, 0.9, 0.0, 0.0],
                 [0.0, 0.0, 0.8, 0.2],

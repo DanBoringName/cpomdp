@@ -73,10 +73,11 @@ class ChainBackend:
         Build the ``GaussianObservation`` (from C, R) and ``GaussianTransition``
         (from A, Q) *once* here when they are data-independent — constructing them
         per step would burn compute the fixed regime doesn't need (RFC-001). Test
-        fixedness with the ``is_fixed`` flag, not ``is None`` (an ``observation`` can
-        be present but fixed, e.g. a ``FixedSensor``), mirroring ``KalmanBackend``::
+        fixedness with the ``is_fixed`` flag, not ``is None`` (an
+        ``observation_model`` can be present but fixed, e.g. a ``FixedSensor``),
+        mirroring ``KalmanBackend``::
 
-            sensor_fixed  = model.observation   is None or model.observation.is_fixed
+            fixed = model.observation_model is None or model.observation_model.is_fixed
             process_fixed = model.process_noise is None or model.process_noise.is_fixed
 
         When a side is *not* fixed, the corresponding factor is left ``None`` here
@@ -92,12 +93,14 @@ class ChainBackend:
             model: see the class docstring.
         """
         self.model = model
-        self._sensor_fixed = model.observation is None or model.observation.is_fixed
+        self._sensor_fixed = (
+            model.observation_model is None or model.observation_model.is_fixed
+        )
         self._process_fixed = (
-            model.process_noise is None or model.process_noise.is_fixed
+            model.dynamics_noise_model is None or model.dynamics_noise_model.is_fixed
         )
         self._transition: GaussianTransition | None = (
-            GaussianTransition(model.dynamics, model.dynamics_noise)  # A, Q
+            GaussianTransition(model.dynamics_matrix, model.dynamics_noise)  # A, Q
             if self._process_fixed
             else None
         )
@@ -151,19 +154,19 @@ class ChainBackend:
             self.model, observation, prior, action
         )
         model = self.model
-        control = model.control
-        if control is None:
+        control_matrix = model.control_matrix
+        if control_matrix is None:
             control_term = jnp.zeros(model.n_states)
         else:
             # validate_step_inputs guarantees a non-None action when control exists
             assert action is not None
-            control_term = control @ action
+            control_term = control_matrix @ action
 
         # μ⁻ is needed only to linearize a state-dependent sensor and/or process
         # noise; the fully-fixed hot path computes no extra matvec (mirrors
         # KalmanBackend, ADR-008).
         mean_pred = (
-            model.dynamics @ prior.mean + control_term
+            model.dynamics_matrix @ prior.mean + control_term
             if not (self._sensor_fixed and self._process_fixed)
             else prior.mean  # placeholder, unused on the fixed path
         )
@@ -172,17 +175,19 @@ class ChainBackend:
             assert self._transition is not None  # built in __init__ on this path
             transition = self._transition
         else:
-            assert model.process_noise is not None  # guaranteed by _process_fixed
+            assert (
+                model.dynamics_noise_model is not None
+            )  # guaranteed by _process_fixed
             transition = GaussianTransition(
-                model.dynamics, model.process_noise.noise_at(mean_pred)
+                model.dynamics_matrix, model.dynamics_noise_model.noise_at(mean_pred)
             )
 
         if self._sensor_fixed:
             assert self._observation is not None  # built in __init__ on this path
             observation_factor = self._observation
         else:
-            assert model.observation is not None  # guaranteed by _sensor_fixed
-            observation_matrix, observation_noise = model.observation.linearize(
+            assert model.observation_model is not None  # guaranteed by _sensor_fixed
+            observation_matrix, observation_noise = model.observation_model.linearize(
                 mean_pred
             )
             observation_factor = GaussianObservation(

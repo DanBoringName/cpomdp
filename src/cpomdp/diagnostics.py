@@ -293,29 +293,30 @@ def probe_model(
         ]
     else:  # a flat LinearGaussianModel
         observation_matrix = np.asarray(model.observation_matrix, dtype=float)
-        dynamics = np.asarray(model.dynamics, dtype=float)
+        dynamics_matrix = np.asarray(model.dynamics_matrix, dtype=float)
         prior_mean = np.asarray(belief.mean, dtype=float)
         prior_cov = np.asarray(belief.cov, dtype=float)
         # A control-free model goes nowhere under any action, which is itself an answer:
         # every sample lands on the same predicted mean and the noise cannot move.
-        if model.control is None:
-            means = np.asarray([dynamics @ prior_mean for _ in actions])
+        if model.control_matrix is None:
+            means = np.asarray([dynamics_matrix @ prior_mean for _ in actions])
         else:
-            control = np.asarray(model.control, dtype=float)
+            control_matrix = np.asarray(model.control_matrix, dtype=float)
             means = np.asarray(
                 [
-                    dynamics @ prior_mean + control @ np.asarray(a, dtype=float).ravel()
+                    dynamics_matrix @ prior_mean
+                    + control_matrix @ np.asarray(a, dtype=float).ravel()
                     for a in actions
                 ]
             )
-        cov = dynamics @ prior_cov @ dynamics.T + np.asarray(
+        cov = dynamics_matrix @ prior_cov @ dynamics_matrix.T + np.asarray(
             model.dynamics_noise, dtype=float
         )
         covs = [cov] * len(actions)
         fixed = np.asarray(model.observation_noise, dtype=float)
-        noises = _linearizations(model.observation, observation_matrix, means) or [
-            fixed
-        ] * len(actions)
+        noises = _linearizations(
+            model.observation_model, observation_matrix, means
+        ) or [fixed] * len(actions)
 
     rank = int(np.linalg.matrix_rank(observation_matrix))
     n_obs = int(observation_matrix.shape[0])
