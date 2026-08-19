@@ -44,7 +44,7 @@ from cpomdp.types import Belief, LinearGaussianModel
 def _model(observation=None):
     return LinearGaussianModel(
         dynamics=[[1.0, 0.1], [0.0, 1.0]],
-        sensor_model=[[1.0, 0.0]],
+        observation_matrix=[[1.0, 0.0]],
         dynamics_noise=[[0.1, 0.0], [0.0, 0.1]],
         observation_noise=[[0.5]],
         prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
@@ -67,7 +67,7 @@ def _state_noise(x, params):
 
 def _callable_model():
     sensor = CallableSensor(
-        sensor_model=[[1.0, 0.0]],
+        observation_matrix=[[1.0, 0.0]],
         noise_fn=_state_noise,
         noise_params={"base": jnp.array(0.2), "slope": jnp.array(0.5)},
     )
@@ -84,7 +84,7 @@ def _internal_q_model():
     )
     return LinearGaussianModel(
         dynamics=[[1.0]],
-        sensor_model=[[1.0]],
+        observation_matrix=[[1.0]],
         dynamics_noise=[[0.1]],
         observation_noise=[[0.3]],
         prior=Belief(mean=[0.0], cov=[[0.2]]),
@@ -149,7 +149,7 @@ def _numpy_policy_efe_trace(model, belief, policy, goal, precision):
         sigma_pred = a_mat @ sigma @ a_mat.T + q
 
         if model.observation is None:
-            c = np.asarray(model.sensor_model)
+            c = np.asarray(model.observation_matrix)
             r = np.asarray(model.observation_noise)
         else:
             c_arr, r_arr = model.observation.linearize(mu_pred)
@@ -271,7 +271,7 @@ class TestTraceH1MatchesEfeStep:
             pref.goal,
             pref.precision,
         )
-        c = np.asarray(model.sensor_model)
+        c = np.asarray(model.observation_matrix)
         sp = np.asarray(step.sigma_pred)
         p_xo = sp @ c.T
         expected = sp - p_xo @ np.linalg.solve(np.asarray(step.s), p_xo.T)

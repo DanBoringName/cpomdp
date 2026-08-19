@@ -15,7 +15,7 @@ from cpomdp.types import Belief, LinearGaussianModel
 # Scalar linear-Gaussian setup, matching the Phase-0 spike.
 # A/C/Q/R here are just terse local scalars for the hand-math below, NOT the
 # control-theory letters the public API deliberately renames away from
-# (dynamics/sensor_model/dynamics_noise/observation_noise). Inside one short test
+# (dynamics/observation_matrix/dynamics_noise/observation_noise). Inside one short test
 # module the letters keep the scalar Kalman recursion readable; they carry no
 # API meaning.
 A, C, Q, R = 0.9, 1.0, 0.5, 1.0
@@ -26,7 +26,7 @@ OBSERVATIONS = [1.2, 0.8, 1.5, 2.1, 1.9, 2.4, 2.0, 1.7]
 def _scalar_model():
     return LinearGaussianModel(
         dynamics=[[A]],
-        sensor_model=[[C]],
+        observation_matrix=[[C]],
         dynamics_noise=[[Q]],
         observation_noise=[[R]],
         prior=Belief(mean=[PRIOR_MEAN], cov=[[PRIOR_VAR]]),
@@ -39,7 +39,7 @@ def test_collinear_sensor_with_pd_noise_gives_finite_posterior():
     # (no NaN). The R-must-be-positive-definite construction check guarantees this.
     model = LinearGaussianModel(
         dynamics=[[1.0, 0.0], [0.0, 1.0]],
-        sensor_model=[[1.0, 0.0], [1.0, 0.0]],  # collinear rows -> rank-1 C·Σ·Cᵀ
+        observation_matrix=[[1.0, 0.0], [1.0, 0.0]],  # collinear rows -> rank-1 C·Σ·Cᵀ
         dynamics_noise=[[0.1, 0.0], [0.0, 0.1]],
         observation_noise=[[0.2, 0.0], [0.0, 0.2]],  # PD
         prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
@@ -149,7 +149,7 @@ class TestKalmanBackend:
         #   posterior mean = [2/3, 1/3];  posterior cov = [[2/3, 1/3], [1/3, 2/3]]
         model = LinearGaussianModel(
             dynamics=[[1.0, 1.0], [0.0, 1.0]],  # position advances by velocity
-            sensor_model=[[1.0, 0.0]],  # observe position only
+            observation_matrix=[[1.0, 0.0]],  # observe position only
             dynamics_noise=[[0.0, 0.0], [0.0, 0.0]],
             observation_noise=[[1.0]],
             prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
@@ -166,7 +166,7 @@ class TestKalmanBackend:
 def _control_model():
     return LinearGaussianModel(
         dynamics=[[1.0]],
-        sensor_model=[[1.0]],
+        observation_matrix=[[1.0]],
         dynamics_noise=[[0.5]],
         observation_noise=[[1.0]],
         prior=Belief(mean=[0.0], cov=[[10.0]]),
@@ -261,14 +261,14 @@ class TestJitReady:
         def step(observation, prior_mean, prior_cov):
             gain, cov_post = _gain_and_posterior_cov(
                 model.dynamics,
-                model.sensor_model,
+                model.observation_matrix,
                 model.dynamics_noise,
                 model.observation_noise,
                 prior_cov,
             )
             mean_post = _posterior_mean(
                 model.dynamics,
-                model.sensor_model,
+                model.observation_matrix,
                 prior_mean,
                 jnp.zeros(model.n_states),
                 gain,
@@ -287,7 +287,7 @@ class TestJitReady:
         gains, cov_posts = jax.vmap(
             lambda c: _gain_and_posterior_cov(
                 model.dynamics,
-                model.sensor_model,
+                model.observation_matrix,
                 model.dynamics_noise,
                 model.observation_noise,
                 c,
@@ -327,7 +327,7 @@ def _numpy_rx_filter(
     wrong point, so a test can assert the backend picked the right one.
     """
     a_mat = np.asarray(model.dynamics)
-    c_mat = np.asarray(model.sensor_model)
+    c_mat = np.asarray(model.observation_matrix)
     q_mat = np.asarray(model.dynamics_noise)
     b_mat = None if model.control is None else np.asarray(model.control)
     mean = np.asarray(model.prior.mean, dtype=float)
@@ -354,13 +354,13 @@ def _numpy_rx_filter(
 def _callable_scalar_model(noise_fn, params, *, observation_noise=None, control=None):
     return LinearGaussianModel(
         dynamics=[[0.9]],
-        sensor_model=[[1.0]],
+        observation_matrix=[[1.0]],
         dynamics_noise=[[0.5]],
         observation_noise=[[1.0]] if observation_noise is None else observation_noise,
         prior=Belief(mean=[0.0], cov=[[10.0]]),
         control=control,
         observation=CallableSensor(
-            sensor_model=[[1.0]], noise_fn=noise_fn, noise_params=params
+            observation_matrix=[[1.0]], noise_fn=noise_fn, noise_params=params
         ),
     )
 
@@ -373,7 +373,7 @@ class TestKalmanCallableSensor:
         r0 = [[1.0]]
         fixed = LinearGaussianModel(
             dynamics=[[0.9]],
-            sensor_model=[[1.0]],
+            observation_matrix=[[1.0]],
             dynamics_noise=[[0.5]],
             observation_noise=r0,
             prior=Belief(mean=[0.0], cov=[[10.0]]),
@@ -408,12 +408,14 @@ class TestKalmanCallableSensor:
         # the scalar case can't, with R varying through the position component.
         model = LinearGaussianModel(
             dynamics=[[1.0, 1.0], [0.0, 1.0]],
-            sensor_model=[[1.0, 0.0]],
+            observation_matrix=[[1.0, 0.0]],
             dynamics_noise=[[1e-3, 0.0], [0.0, 1e-3]],
             observation_noise=[[1.0]],
             prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
             observation=CallableSensor(
-                sensor_model=[[1.0, 0.0]], noise_fn=_quad_noise, noise_params=_QUAD
+                observation_matrix=[[1.0, 0.0]],
+                noise_fn=_quad_noise,
+                noise_params=_QUAD,
             ),
         )
         kf = KalmanBackend(model)
@@ -475,7 +477,7 @@ def _numpy_qx_filter(model, observations, q_fn, q_params, actions=None, q_point=
     backend must use — or at the incoming mean (``q_point="prior"``), the wrong one.
     """
     a_mat = np.asarray(model.dynamics)
-    c_mat = np.asarray(model.sensor_model)
+    c_mat = np.asarray(model.observation_matrix)
     r_mat = np.asarray(model.observation_noise)
     b_mat = None if model.control is None else np.asarray(model.control)
     mean = np.asarray(model.prior.mean, dtype=float)
@@ -502,7 +504,7 @@ def _numpy_qx_filter(model, observations, q_fn, q_params, actions=None, q_point=
 def _callable_q_scalar_model(q_fn, q_params, *, dynamics_noise=None, control=None):
     return LinearGaussianModel(
         dynamics=[[0.9]],
-        sensor_model=[[1.0]],
+        observation_matrix=[[1.0]],
         dynamics_noise=[[0.5]] if dynamics_noise is None else dynamics_noise,
         observation_noise=[[1.0]],
         prior=Belief(mean=[0.0], cov=[[10.0]]),
@@ -519,7 +521,7 @@ class TestKalmanCallableProcessNoise:
         q0 = [[0.5]]
         fixed = LinearGaussianModel(
             dynamics=[[0.9]],
-            sensor_model=[[1.0]],
+            observation_matrix=[[1.0]],
             dynamics_noise=q0,
             observation_noise=[[1.0]],
             prior=Belief(mean=[0.0], cov=[[10.0]]),
@@ -555,7 +557,7 @@ class TestKalmanCallableProcessNoise:
         q2d = {"base": jnp.eye(2) * 0.05, "scale": jnp.array(0.4)}
         model = LinearGaussianModel(
             dynamics=[[1.0, 1.0], [0.0, 1.0]],
-            sensor_model=[[1.0, 0.0]],
+            observation_matrix=[[1.0, 0.0]],
             dynamics_noise=[[1e-3, 0.0], [0.0, 1e-3]],
             observation_noise=[[1.0]],
             prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),

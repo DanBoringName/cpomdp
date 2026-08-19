@@ -97,7 +97,7 @@ def _infer_flattened(edges, obs_r) -> Belief:
     y = np.array([READINGS[node] for node in nodes])
     model = LinearGaussianModel(
         dynamics=np.eye(N_NODES),
-        sensor_model=c,
+        observation_matrix=c,
         dynamics_noise=np.zeros((N_NODES, N_NODES)),
         observation_noise=r,
         prior=Belief(mean=mean, cov=cov),

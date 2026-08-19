@@ -201,7 +201,7 @@ def _numpy_score(policy) -> float:
     of the scoring kernel, not of shared plumbing.
     """
     backend, belief, preference, target = _setup()
-    sensor_model = np.asarray(backend.observation_model[0])  # C
+    observation_matrix = np.asarray(backend.observation_model[0])  # C
     precision = np.asarray(preference.precision)  # Lambda
     goal = np.asarray(preference.goal)
     idx = np.array(target)
@@ -213,13 +213,14 @@ def _numpy_score(policy) -> float:
         mean = np.asarray(predicted.mean)  # mu+
         cov = np.asarray(predicted.cov)  # Sigma+
         noise = np.asarray(backend.observation_noise_at(predicted.mean))  # R(mu+)
-        obs = sensor_model @ mean  # o+ = C mu+
-        innovation = sensor_model @ cov @ sensor_model.T + noise  # S
+        obs = observation_matrix @ mean  # o+ = C mu+
+        innovation = observation_matrix @ cov @ observation_matrix.T + noise  # S
         pragmatic = 0.5 * (obs - goal) @ precision @ (obs - goal) + 0.5 * np.trace(
             precision @ innovation
         )
         post_info = (
-            np.linalg.inv(cov) + sensor_model.T @ np.linalg.inv(noise) @ sensor_model
+            np.linalg.inv(cov)
+            + observation_matrix.T @ np.linalg.inv(noise) @ observation_matrix
         )
         cov_post_info = np.linalg.inv(post_info)  # info-form posterior, the epistemic
         # `logdet_pd` is the host guard: slogdet behind a Cholesky, so a block with an
@@ -234,7 +235,12 @@ def _numpy_score(policy) -> float:
         total += pragmatic - epistemic
         # Kalman-form contraction for the carry; the mean stays predict-only.
         cov_post = (
-            cov - cov @ sensor_model.T @ np.linalg.inv(innovation) @ sensor_model @ cov
+            cov
+            - cov
+            @ observation_matrix.T
+            @ np.linalg.inv(innovation)
+            @ observation_matrix
+            @ cov
         )
         carry = Belief(mean=predicted.mean, cov=jnp.asarray(cov_post))
     return total

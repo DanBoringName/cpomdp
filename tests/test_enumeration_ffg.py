@@ -54,7 +54,7 @@ def _single_node_pair(*, state_dependent):
     backend = CouplingGraphBackend(graph, (GaussianTransition(a, q),), control=b)
     model = LinearGaussianModel(
         dynamics=a,
-        sensor_model=c,
+        observation_matrix=c,
         dynamics_noise=q,
         observation_noise=r0,
         prior=Belief(mean=np.zeros(2), cov=np.eye(2)),

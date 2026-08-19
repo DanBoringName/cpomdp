@@ -128,13 +128,13 @@ def test_epistemic_can_target_the_hidden_hub():
     # info gain the flat observation-space EFE is limited to.
     graph, transitions = chemotaxis_ffg(dt=0.01)
     backend = CouplingGraphBackend(graph, transitions)
-    sensor_model, observation_noise = backend.observation_model
+    observation_matrix, observation_noise = backend.observation_model
     prior = Belief(mean=np.zeros(5), cov=np.eye(5))
     sigma_pred = backend.predicted_belief(prior).cov  # Σ⁺
 
     def info_gain(target):
         return float(
-            _state_info_gain(sigma_pred, sensor_model, observation_noise, target)
+            _state_info_gain(sigma_pred, observation_matrix, observation_noise, target)
         )
 
     assert CHEA not in backend.graph.observations  # the hub is a hidden latent

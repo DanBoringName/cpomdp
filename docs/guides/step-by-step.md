@@ -72,7 +72,7 @@ observation = 1 x position + 0 x velocity
 It's one reading this time, so it's a single row, looking across both state variables position and velocity.
 
 ```python
-sensor_model = [[1, 0]]
+observation_matrix = [[1, 0]]
 ```
 
 Notice the 0. The agent can never measure its velocity, it can only *infer* it based on its position over time.
@@ -135,7 +135,7 @@ Notice that the uncertainty here in `cov` (1) is much larger than our `dynamics_
 
 ### The whole model
 
-Five pieces, one object. `LinearGaussianModel` takes each by name — and since you built every piece as a named variable, the assembly reads almost like a list of what you've made: dynamics=dynamics, sensor_model=sensor_model, and so on. This is the moment the world (how it moves, what's seen, how fuzzy it all is) and the agent's starting belief (the prior) fuse into a single thing you can hand to an agent and run. One piece is deliberately missing — a way to **act** — but a thing that only perceives doesn't need it yet; we'll add it the moment we start steering.
+Five pieces, one object. `LinearGaussianModel` takes each by name — and since you built every piece as a named variable, the assembly reads almost like a list of what you've made: dynamics=dynamics, observation_matrix=observation_matrix, and so on. This is the moment the world (how it moves, what's seen, how fuzzy it all is) and the agent's starting belief (the prior) fuse into a single thing you can hand to an agent and run. One piece is deliberately missing — a way to **act** — but a thing that only perceives doesn't need it yet; we'll add it the moment we start steering.
 
 The full code picture so far should look like this:
 
@@ -149,7 +149,7 @@ dt = 0.1
 dynamics = [[1, dt],
             [0, 1]]          # how the state drifts on its own (Newtonian kinematics)
 
-sensor_model = [[1, 0]]     # what the agent senses: position only (the 0 hides velocity)
+observation_matrix = [[1, 0]]     # what the agent senses: position only (the 0 hides velocity)
 
 dynamics_noise = jnp.eye(2) * 1e-6   # the world's own wobble
 observation_noise   = [[1e-2]]            # the sensor's wobble
@@ -161,7 +161,7 @@ prior = Belief(mean=[0, 0],
 # --- snap the world and the belief into one object ---
 model = LinearGaussianModel(
     dynamics=dynamics,
-    sensor_model=sensor_model,
+    observation_matrix=observation_matrix,
     dynamics_noise=dynamics_noise,
     observation_noise=observation_noise,
     prior=prior,
@@ -281,7 +281,7 @@ Now re-run the model definition with `control` added — the one new line that t
 model = LinearGaussianModel(
     dynamics=dynamics,
     control=control,          # <-- the new piece
-    sensor_model=sensor_model,
+    observation_matrix=observation_matrix,
     dynamics_noise=dynamics_noise,
     observation_noise=observation_noise,
     prior=prior,
@@ -321,7 +321,7 @@ To run it we play two parts — the **world** (moving the real bug) and the **ag
 real = jnp.array([0.0, 0.0])      # the bug's REAL position & velocity — the agent never sees this directly
 
 for _ in range(100):
-    obs    = model.sensor_model @ real                    # the world shows the agent a reading
+    obs    = model.observation_matrix @ real                    # the world shows the agent a reading
                                                           # '@' is matrix multiplication in python notation
     agent.infer_states(obs)                               # PERCEIVE: fold it in, sharpen the belief
     action = agent.sample_action()                        # ACT: how hard to wiggle the flagellum toward the food
@@ -354,7 +354,7 @@ dt = 0.1
 model = LinearGaussianModel(
     dynamics=[[1, dt], [0, 1]],
     control=[[0], [dt]],
-    sensor_model=[[1, 0]],
+    observation_matrix=[[1, 0]],
     dynamics_noise=jnp.eye(2) * 1e-6,
     observation_noise=[[1e-2]],
     prior=Belief(mean=[0, 0], cov=jnp.eye(2)),
@@ -363,7 +363,7 @@ agent = Agent(model, StateGoal([1.0, 0.0]))
 
 true = jnp.array([0.0, 0.0])
 for _ in range(100):
-    obs = model.sensor_model @ true     # what the agent gets to see
+    obs = model.observation_matrix @ true     # what the agent gets to see
     agent.infer_states(obs)             # perceive
     action = agent.sample_action()      # act
     true = model.dynamics @ true + model.control @ action

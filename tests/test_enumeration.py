@@ -60,7 +60,7 @@ def _model():
     """A plain fixed-sensor model, p = 1."""
     return LinearGaussianModel(
         dynamics=[[1.0, 0.1], [0.0, 1.0]],
-        sensor_model=[[1.0, 0.0]],
+        observation_matrix=[[1.0, 0.0]],
         dynamics_noise=[[0.1, 0.0], [0.0, 0.1]],
         observation_noise=[[0.5]],
         prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
@@ -78,7 +78,7 @@ def _beacon_model():
     optimum is to get to the beacon and hold, which no single held action can do.
     """
     sensor = CallableSensor(
-        sensor_model=[[1.0]],
+        observation_matrix=[[1.0]],
         noise_fn=lambda x, p: jnp.array(
             [[p["base"] + p["sharp"] * (x[0] - p["beacon"]) ** 2]]
         ),
@@ -90,7 +90,7 @@ def _beacon_model():
     )
     return LinearGaussianModel(
         dynamics=[[1.0]],
-        sensor_model=[[1.0]],
+        observation_matrix=[[1.0]],
         dynamics_noise=[[0.05]],
         observation_noise=[[0.5]],
         prior=Belief(mean=[0.0], cov=[[1.0]]),
@@ -291,7 +291,7 @@ class TestCostAndTransforms:
         # p = 2 — a set the grid EFESelector rejects (it is 1-D only).
         model = LinearGaussianModel(
             dynamics=[[1.0, 0.0], [0.0, 1.0]],
-            sensor_model=[[1.0, 0.0]],
+            observation_matrix=[[1.0, 0.0]],
             dynamics_noise=[[0.1, 0.0], [0.0, 0.1]],
             observation_noise=[[0.5]],
             prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
@@ -311,7 +311,7 @@ class TestValidation:
     def test_rejects_control_free_model(self):
         model = LinearGaussianModel(
             dynamics=[[1.0]],
-            sensor_model=[[1.0]],
+            observation_matrix=[[1.0]],
             dynamics_noise=[[0.1]],
             observation_noise=[[0.5]],
             prior=Belief(mean=[0.0], cov=[[1.0]]),

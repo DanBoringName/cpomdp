@@ -61,7 +61,7 @@ class TestBeliefs:
 def _valid_kwargs(**overrides):
     kwargs = {
         "dynamics": [[1.0, 0.1], [0.0, 1.0]],  # 2x2  (n=2)
-        "sensor_model": [[1.0, 0.0]],  # 1x2  (m=1)
+        "observation_matrix": [[1.0, 0.0]],  # 1x2  (m=1)
         "dynamics_noise": [[0.1, 0.0], [0.0, 0.1]],  # 2x2
         "observation_noise": [[1.0]],  # 1x1
         "prior": Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
@@ -92,7 +92,7 @@ class TestLinearGaussianModels:
     def test_letter_aliases_map_to_role_names(self):
         m = LinearGaussianModel(**_valid_kwargs())
         np.testing.assert_array_equal(m.A, m.dynamics)
-        np.testing.assert_array_equal(m.C, m.sensor_model)
+        np.testing.assert_array_equal(m.C, m.observation_matrix)
         np.testing.assert_array_equal(m.Q, m.dynamics_noise)
         np.testing.assert_array_equal(m.R, m.observation_noise)
 
@@ -102,9 +102,9 @@ class TestLinearGaussianModels:
                 **_valid_kwargs(dynamics=[[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
             )
 
-    def test_rejects_sensor_model_wrong_columns(self):
+    def test_rejects_observation_matrix_wrong_columns(self):
         with pytest.raises(ValueError, match="columns"):
-            LinearGaussianModel(**_valid_kwargs(sensor_model=[[1.0, 0.0, 0.0]]))
+            LinearGaussianModel(**_valid_kwargs(observation_matrix=[[1.0, 0.0, 0.0]]))
 
     def test_rejects_dynamics_noise_wrong_size(self):
         with pytest.raises(ValueError, match="dynamics_noise"):
@@ -149,7 +149,8 @@ class TestLinearGaussianModels:
             LinearGaussianModel(**_valid_kwargs(prior=[0.0, 0.0]))
 
     def test_observation_defaults_to_none(self):
-        # No observation given -> fixed sensor defined by sensor_model/observation_noise
+        # No observation given -> fixed sensor defined by the observation_matrix
+        # and observation_noise fields
         # (the v0.2 semantics). None is the canonical "fixed" case.
         assert LinearGaussianModel(**_valid_kwargs()).observation is None
 
@@ -220,5 +221,5 @@ class TestPytreeRegistration:
         restored = jax.tree_util.tree_unflatten(treedef, leaves)
         assert isinstance(restored.observation, FixedSensor)
         c_out, r_out = restored.observation.linearize(jnp.zeros(2))
-        np.testing.assert_array_equal(c_out, sensor.sensor_model)
+        np.testing.assert_array_equal(c_out, sensor.observation_matrix)
         np.testing.assert_array_equal(r_out, sensor.observation_noise)

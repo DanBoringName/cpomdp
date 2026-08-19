@@ -95,7 +95,7 @@ dt = 0.1
 model = LinearGaussianModel(
     dynamics=[[1, dt], [0, 1]],          # velocity carries position along
     control=[[0], [dt]],                 # a push nudges velocity
-    sensor_model=[[1, 0]],               # we observe position only
+    observation_matrix=[[1, 0]],               # we observe position only
     dynamics_noise=jnp.eye(2) * 1e-6,
     observation_noise=[[1e-2]],
     prior=Belief(mean=[0, 0], cov=jnp.eye(2)),
@@ -106,7 +106,7 @@ agent = Agent(model, StateGoal([1.0, 0.0]))
 
 true_state = jnp.array([0.0, 0.0])
 for _ in range(100):
-    obs = model.sensor_model @ true_state            # what the agent gets to see
+    obs = model.observation_matrix @ true_state            # what the agent gets to see
     agent.infer_states(obs)                           # perceive
     action = agent.sample_action()                    # act
     true_state = model.dynamics @ true_state + model.control @ action
@@ -140,7 +140,7 @@ A model with no `control` matrix is a pure tracker. Drop the goal and `infer_sta
 ```python
 tracker = LinearGaussianModel(        # no control matrix -> pure tracking
     dynamics=[[1, dt], [0, 1]],
-    sensor_model=[[1, 0]],
+    observation_matrix=[[1, 0]],
     dynamics_noise=jnp.eye(2) * 1e-6,
     observation_noise=[[1e-2]],
     prior=Belief(mean=[0, 0], cov=jnp.eye(2)),

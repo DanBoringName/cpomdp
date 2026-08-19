@@ -64,8 +64,8 @@ def _belief_as_canonical(mean, cov):
 class TestGaussianObservation:
     def test_stores_coerced_arrays(self):
         fac = GaussianObservation([[1.0, 0.0]], [[2.0]])
-        assert isinstance(fac.sensor_model, jax.Array)
-        np.testing.assert_array_equal(fac.sensor_model, [[1.0, 0.0]])
+        assert isinstance(fac.observation_matrix, jax.Array)
+        np.testing.assert_array_equal(fac.observation_matrix, [[1.0, 0.0]])
         np.testing.assert_array_equal(fac.observation_noise, [[2.0]])
 
     def test_rejects_singular_observation_noise(self):
@@ -133,8 +133,8 @@ class TestCallableGaussianObservation:
     def test_stores_coerced_arrays(self):
         params = {"R0": jnp.array([[2.0]]), "gain": 0.5}
         fac = CallableGaussianObservation([[1.0, 0.0]], _scaled_noise, params)
-        assert isinstance(fac.sensor_model, jax.Array)
-        np.testing.assert_array_equal(fac.sensor_model, [[1.0, 0.0]])
+        assert isinstance(fac.observation_matrix, jax.Array)
+        np.testing.assert_array_equal(fac.observation_matrix, [[1.0, 0.0]])
         assert fac.noise_fn is _scaled_noise
 
     def test_rejects_non_pd_noise_at_probe(self):
@@ -236,7 +236,9 @@ class TestCallableGaussianObservation:
         assert any(np.asarray(leaf).shape == (1, 1) for leaf in leaves)  # R0 is a leaf
         rebuilt = jax.tree_util.tree_unflatten(treedef, leaves)
         assert rebuilt.noise_fn is _scaled_noise
-        np.testing.assert_array_equal(rebuilt.sensor_model, fac.sensor_model)
+        np.testing.assert_array_equal(
+            rebuilt.observation_matrix, fac.observation_matrix
+        )
 
     def test_jit_and_grad_through_message(self):
         params = {"R0": jnp.array([[1.0]]), "gain": 0.5}

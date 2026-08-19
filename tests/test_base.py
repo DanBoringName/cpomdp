@@ -32,7 +32,7 @@ class _PassthroughBackend:
 def _scalar_model():
     return LinearGaussianModel(
         dynamics=[[0.9]],
-        sensor_model=[[1.0]],
+        observation_matrix=[[1.0]],
         dynamics_noise=[[0.5]],
         observation_noise=[[1.0]],
         prior=Belief(mean=[0.0], cov=[[10.0]]),

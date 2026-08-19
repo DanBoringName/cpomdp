@@ -20,7 +20,7 @@ __all__ = ["CallableSensor", "FixedSensor", "ObservationModel"]
 
 
 def _linear_gaussianize(
-    sensor_model: Float64[Array, "m n"],
+    observation_matrix: Float64[Array, "m n"],
     observation_noise: Float64[Array, "m m"],
     x: Float64[Array, "n"],
     sigma: Float64[Array, "n n"],
@@ -31,7 +31,10 @@ def _linear_gaussianize(
     moment-matching lives in one place. A sensor with a nonlinear mean would supply
     its own second-order ``gaussianize`` instead of calling this.
     """
-    return sensor_model @ x, sensor_model @ sigma @ sensor_model.T + observation_noise
+    return (
+        observation_matrix @ x,
+        observation_matrix @ sigma @ observation_matrix.T + observation_noise,
+    )
 
 
 @runtime_checkable
@@ -84,17 +87,21 @@ class FixedSensor:
     (DECISIONS.md ADR-003).
 
     Attributes:
-        sensor_model: the observation matrix ``C`` (shape ``m x n``), mapping
+        observation_matrix: the observation matrix ``C`` (shape ``m x n``), mapping
             the ``n``-D state to the ``m``-D observation mean.
         observation_noise: the observation-noise covariance ``R`` (shape ``m x m``).
     """
 
-    sensor_model: Float64[Array, "m n"]  # C
+    observation_matrix: Float64[Array, "m n"]  # C
     observation_noise: Float64[Array, "m m"]  # R
     is_fixed = True
 
-    def __init__(self, sensor_model: ArrayLike, observation_noise: ArrayLike) -> None:
-        object.__setattr__(self, "sensor_model", jnp.asarray(sensor_model, dtype=float))
+    def __init__(
+        self, observation_matrix: ArrayLike, observation_noise: ArrayLike
+    ) -> None:
+        object.__setattr__(
+            self, "observation_matrix", jnp.asarray(observation_matrix, dtype=float)
+        )
         object.__setattr__(
             self, "observation_noise", jnp.asarray(observation_noise, dtype=float)
         )
@@ -104,14 +111,14 @@ class FixedSensor:
         self, x: ArrayLike
     ) -> tuple[Float64[Array, "m n"], Float64[Array, "m m"]]:
         """Return the stored ``(C, R)`` unchanged — the same for every ``x``."""
-        return self.sensor_model, self.observation_noise
+        return self.observation_matrix, self.observation_noise
 
     def gaussianize(
         self, x: ArrayLike, sigma: Float64[Array, "n n"]
     ) -> tuple[Float64[Array, "m"], Float64[Array, "m m"], Float64[Array, "m m"]]:
         """Exact linear ingredients ``(C·x, C·Σ·Cᵀ + R, R)``."""
         o_pred, pred_obs_cov = _linear_gaussianize(
-            self.sensor_model,
+            self.observation_matrix,
             self.observation_noise,
             jnp.asarray(x, dtype=float),
             sigma,
@@ -119,28 +126,28 @@ class FixedSensor:
         return o_pred, pred_obs_cov, self.observation_noise
 
     def tree_flatten(self):
-        """Leaves: (sensor_model, observation_noise); no static aux."""
-        return (self.sensor_model, self.observation_noise), None
+        """Leaves: (observation_matrix, observation_noise); no static aux."""
+        return (self.observation_matrix, self.observation_noise), None
 
     @classmethod
     def tree_unflatten(cls, aux_data, children):
         """Rebuild without re-validating — leaves may be tracers."""
-        sensor_model, observation_noise = children
+        observation_matrix, observation_noise = children
         obj = object.__new__(cls)
-        object.__setattr__(obj, "sensor_model", sensor_model)
+        object.__setattr__(obj, "observation_matrix", observation_matrix)
         object.__setattr__(obj, "observation_noise", observation_noise)
         return obj
 
     def _validate(self) -> None:
-        if self.sensor_model.ndim != 2:
+        if self.observation_matrix.ndim != 2:
             raise ValueError(
-                f"sensor_model must be a 2-D (m x n) matrix, "
-                f"got shape {self.sensor_model.shape}"
+                f"observation_matrix must be a 2-D (m x n) matrix, "
+                f"got shape {self.observation_matrix.shape}"
             )
         validate_covariance(
             self.observation_noise, "observation_noise", require_definite=True
         )
-        m = self.sensor_model.shape[0]
+        m = self.observation_matrix.shape[0]
         if self.observation_noise.shape != (m, m):
             raise ValueError(
                 f"observation_noise must be {m}x{m} to match the {m}-D observation, "
@@ -173,18 +180,20 @@ class CallableSensor:
     closure/lambda is hashable only by identity and would defeat ``jit`` caching.
     """
 
-    sensor_model: Float64[Array, "m n"]  # C (constant) — leaf
+    observation_matrix: Float64[Array, "m n"]  # C (constant) — leaf
     noise_fn: Callable[[Float64[Array, "n"], PyTree], Float64[Array, "m m"]]  # aux
     noise_params: PyTree  # grad-able sensor parameters — leaf
     is_fixed = False
 
     def __init__(
         self,
-        sensor_model: ArrayLike,
+        observation_matrix: ArrayLike,
         noise_fn: Callable[[Float64[Array, "n"], PyTree], Float64[Array, "m m"]],
         noise_params: PyTree,
     ) -> None:
-        object.__setattr__(self, "sensor_model", jnp.asarray(sensor_model, dtype=float))
+        object.__setattr__(
+            self, "observation_matrix", jnp.asarray(observation_matrix, dtype=float)
+        )
         object.__setattr__(self, "noise_fn", noise_fn)
         object.__setattr__(self, "noise_params", noise_params)
         self._validate()
@@ -194,7 +203,7 @@ class CallableSensor:
     ) -> tuple[Float64[Array, "m n"], Float64[Array, "m m"]]:
         """Local ``(C, R(x))`` — constant ``C``, state-dependent noise."""
         x = jnp.asarray(x, dtype=float)
-        return self.sensor_model, self.noise_fn(x, self.noise_params)
+        return self.observation_matrix, self.noise_fn(x, self.noise_params)
 
     def gaussianize(
         self, x: ArrayLike, sigma: Float64[Array, "n n"]
@@ -202,32 +211,32 @@ class CallableSensor:
         """Linear ingredients ``(C·x, C·Σ·Cᵀ + R(x), R(x))`` (mean-exact, R plug-in)."""
         x = jnp.asarray(x, dtype=float)
         r = self.noise_fn(x, self.noise_params)
-        o_pred, pred_obs_cov = _linear_gaussianize(self.sensor_model, r, x, sigma)
+        o_pred, pred_obs_cov = _linear_gaussianize(self.observation_matrix, r, x, sigma)
         return o_pred, pred_obs_cov, r
 
     def tree_flatten(
         self,
     ) -> tuple[tuple[Float64[Array, "m n"], PyTree], Callable]:
-        """Children (traced): ``(sensor_model, noise_params)``; aux: ``noise_fn``."""
-        return (self.sensor_model, self.noise_params), self.noise_fn
+        """Traced children ``(observation_matrix, noise_params)``; aux ``noise_fn``."""
+        return (self.observation_matrix, self.noise_params), self.noise_fn
 
     @classmethod
     def tree_unflatten(cls, aux_data: Callable, children: tuple) -> "CallableSensor":
         """Rebuild without re-validating — leaves may be tracers."""
-        sensor_model, noise_params = children
+        observation_matrix, noise_params = children
         obj = object.__new__(cls)
-        object.__setattr__(obj, "sensor_model", sensor_model)
+        object.__setattr__(obj, "observation_matrix", observation_matrix)
         object.__setattr__(obj, "noise_params", noise_params)
         object.__setattr__(obj, "noise_fn", aux_data)
         return obj
 
     def _validate(self) -> None:
-        if self.sensor_model.ndim != 2:
+        if self.observation_matrix.ndim != 2:
             raise ValueError(
-                f"sensor_model must be a 2-D (m x n) matrix, "
-                f"got shape {self.sensor_model.shape}"
+                f"observation_matrix must be a 2-D (m x n) matrix, "
+                f"got shape {self.observation_matrix.shape}"
             )
-        m, n = self.sensor_model.shape
+        m, n = self.observation_matrix.shape
         # Probe noise_fn once, at the trust boundary, to catch shape bugs early.
         r0 = jnp.asarray(self.noise_fn(jnp.zeros(n), self.noise_params))
         if r0.shape != (m, m):

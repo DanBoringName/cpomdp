@@ -61,7 +61,7 @@ def _bump_q(x, params):
 def _model(process_noise=None):
     return LinearGaussianModel(
         dynamics=DYNAMICS,
-        sensor_model=SENSOR,
+        observation_matrix=SENSOR,
         dynamics_noise=FIXED_Q,
         observation_noise=FIXED_R,
         prior=BELIEF,

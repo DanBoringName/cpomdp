@@ -14,7 +14,7 @@ __all__ = ["KalmanBackend"]
 @jax.jit
 def _gain_and_posterior_cov(
     dynamics: Float64[Array, "n n"],
-    sensor_model: Float64[Array, "m n"],
+    observation_matrix: Float64[Array, "m n"],
     dynamics_noise: Float64[Array, "n n"],
     observation_noise: Float64[Array, "m m"],
     prior_cov: Float64[Array, "n n"],
@@ -29,7 +29,8 @@ def _gain_and_posterior_cov(
         gain     = cov_pred · Cᵀ · S⁻¹          # how far to trust the reading
         cov_post = (I − gain · C) · cov_pred    # update: the reading shrinks it
 
-    (A=dynamics, C=sensor_model, Q=dynamics_noise, R=observation_noise.) The gain is
+    (A=dynamics, C=observation_matrix, Q=dynamics_noise, R=observation_noise.)
+    The gain is
     obtained via ``jnp.linalg.solve`` against ``S`` rather than an explicit inverse,
     for numerical stability. Crucially this depends only on the model and
     ``prior_cov``, never on an observation — which is exactly what lets the
@@ -38,7 +39,7 @@ def _gain_and_posterior_cov(
 
     Args:
         dynamics: The state-transition matrix A, shape ``(n, n)``.
-        sensor_model: The observation matrix C, shape ``(m, n)``.
+        observation_matrix: The observation matrix C, shape ``(m, n)``.
         dynamics_noise: The process-noise covariance Q, shape ``(n, n)``.
         observation_noise: The observation-noise covariance R, shape ``(m, m)``.
         prior_cov: The incoming belief's covariance, shape ``(n, n)``.
@@ -48,16 +49,18 @@ def _gain_and_posterior_cov(
         covariance, shape ``(n, n)``, for this step.
     """
     cov_pred = dynamics @ prior_cov @ dynamics.T + dynamics_noise
-    prediction_error_cov = sensor_model @ cov_pred @ sensor_model.T + observation_noise
-    gain = jnp.linalg.solve(prediction_error_cov, sensor_model @ cov_pred).T
-    cov_post = (jnp.eye(dynamics.shape[0]) - gain @ sensor_model) @ cov_pred
+    prediction_error_cov = (
+        observation_matrix @ cov_pred @ observation_matrix.T + observation_noise
+    )
+    gain = jnp.linalg.solve(prediction_error_cov, observation_matrix @ cov_pred).T
+    cov_post = (jnp.eye(dynamics.shape[0]) - gain @ observation_matrix) @ cov_pred
     return gain, cov_post
 
 
 @jax.jit
 def _posterior_mean(
     dynamics: Float64[Array, "n n"],
-    sensor_model: Float64[Array, "m n"],
+    observation_matrix: Float64[Array, "m n"],
     prior_mean: Float64[Array, "n"],
     control_term: Float64[Array, "n"],
     gain: Float64[Array, "n m"],
@@ -70,7 +73,7 @@ def _posterior_mean(
     prediction error (the "innovation"). Pure and ``jit``-compiled.
     """
     mean_pred = dynamics @ prior_mean + control_term
-    prediction_error = observation - sensor_model @ mean_pred
+    prediction_error = observation - observation_matrix @ mean_pred
     return mean_pred + gain @ prediction_error
 
 
@@ -183,13 +186,15 @@ class KalmanBackend:
 
         if sensor_is_fixed:
             # fixed sensor: direct reads, byte-identical hot path (no linearize).
-            sensor_model, observation_noise = (
-                model.sensor_model,
+            observation_matrix, observation_noise = (
+                model.observation_matrix,
                 model.observation_noise,
             )
         else:
             # state-dependent R(x), linearized at μ⁻ (the EFE kernel's point).
-            sensor_model, observation_noise = model.observation.linearize(mean_pred)
+            observation_matrix, observation_noise = model.observation.linearize(
+                mean_pred
+            )
 
         if process_is_fixed:
             dynamics_noise = model.dynamics_noise
@@ -202,7 +207,7 @@ class KalmanBackend:
         else:
             gain, cov_post = _gain_and_posterior_cov(
                 model.dynamics,
-                sensor_model,
+                observation_matrix,
                 dynamics_noise,
                 observation_noise,
                 prior.cov,
@@ -210,7 +215,7 @@ class KalmanBackend:
 
         mean_post = _posterior_mean(
             model.dynamics,
-            sensor_model,
+            observation_matrix,
             prior.mean,
             control_term,
             gain,
@@ -255,7 +260,7 @@ class KalmanBackend:
         for _ in range(max_iter):
             gain, cov_post = _gain_and_posterior_cov(
                 model.dynamics,
-                model.sensor_model,
+                model.observation_matrix,
                 model.dynamics_noise,
                 model.observation_noise,
                 cov,

@@ -162,7 +162,7 @@ class RxInferBackend:
         mean_post, cov_post = self._jl.cpomdp_run_step(
             np.asarray(observation),
             np.asarray(model.dynamics),
-            np.asarray(model.sensor_model),
+            np.asarray(model.observation_matrix),
             np.asarray(model.dynamics_noise),
             np.asarray(model.observation_noise),
             np.asarray(prior.mean),

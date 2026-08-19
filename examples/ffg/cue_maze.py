@@ -270,7 +270,7 @@ def sensor_params(n_dims: int, cue: np.ndarray | None = None) -> dict:
     }
 
 
-def sensor_model(n_dims: int) -> np.ndarray:
+def observation_matrix(n_dims: int) -> np.ndarray:
     """`C`: a commit row per axis, plus an info row repeating axis 0.
 
     Each commit row reads `goal_belief[i] - position[i]`. Only axis 0 can carry context
@@ -335,7 +335,7 @@ def build_maze(
 
     arena_dim = 2 * n_dims
     params = sensor_params(n_dims, cue)
-    observed = sensor_model(n_dims)
+    observed = observation_matrix(n_dims)
     fixed_noise = np.asarray(
         cue_noise(
             jnp.asarray(np.zeros(arena_dim)), sensor_params(n_dims, _far_away(n_dims))

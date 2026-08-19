@@ -268,7 +268,7 @@ class FfgEfeSelector:
         # returns the same constant each time.
         self._backend = backend
         self._target = tuple(target)
-        self._sensor_model, _ = backend.observation_model  # C (constant)
+        self._observation_matrix, _ = backend.observation_model  # C (constant)
         self._candidates = jnp.linspace(lo, hi, n_candidates)[:, None]
 
     @staticmethod
@@ -293,7 +293,7 @@ class FfgEfeSelector:
             g, _ = _ffg_efe_step(
                 predicted.mean,
                 predicted.cov,
-                self._sensor_model,
+                self._observation_matrix,
                 observation_noise,
                 preference.goal,
                 preference.precision,

@@ -37,7 +37,7 @@ from cpomdp.types import Belief, LinearGaussianModel
 def _model():
     return LinearGaussianModel(
         dynamics=[[1.0, 0.1], [0.0, 1.0]],
-        sensor_model=[[1.0, 0.0]],
+        observation_matrix=[[1.0, 0.0]],
         dynamics_noise=[[0.1, 0.0], [0.0, 0.1]],
         observation_noise=[[0.5]],
         prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),

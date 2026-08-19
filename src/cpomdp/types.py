@@ -101,8 +101,8 @@ class LinearGaussianModel:
     The agent's assumed story for how a hidden state evolves and produces
     observations, under linear maps and Gaussian noise::
 
-        next_state  = dynamics @ state + control @ action + dynamics noise
-        observation = sensor_model @ state               + observation noise
+        next_state  = dynamics @ state         + control @ action + dynamics noise
+        observation = observation_matrix @ state                  + observation noise
 
     The noise terms are zero-mean Gaussians with covariances ``dynamics_noise``
     and ``observation_noise``; the initial state is drawn from ``prior``.
@@ -118,9 +118,9 @@ class LinearGaussianModel:
     | --- | --- | --- | --- | --- |
     | ``dynamics`` | A | state -> next state | (n,n) | state-transition |
     | ``control`` | B | action -> state (optional) | (n,p) | input/control matrix |
-    | ``sensor_model`` | C | state -> expected reading | (m,n) | observation/emission |
+    | ``observation_matrix`` | C | state -> reading | (m,n) | measurement/emission |
     | ``dynamics_noise`` | Q | dynamics-noise covariance | (n,n) | process noise |
-    | ``observation_noise`` | R | sensor-noise covariance | (m,m) | observation noise |
+    | ``observation_noise`` | R | reading-noise covariance | (m,m) | measurement noise |
     | ``prior`` | -- | initial belief over state | n-D | Belief / D (pymdp) |
 
     Dimensions: ``n`` = state, ``m`` = observation, ``p`` = action. A model with
@@ -135,7 +135,7 @@ class LinearGaussianModel:
     """
 
     dynamics: Float64[Array, "n n"]
-    sensor_model: Float64[Array, "m n"]
+    observation_matrix: Float64[Array, "m n"]
     dynamics_noise: Float64[Array, "n n"]
     observation_noise: Float64[Array, "m m"]
     prior: Belief
@@ -147,7 +147,7 @@ class LinearGaussianModel:
     def __init__(
         self,
         dynamics: ArrayLike,
-        sensor_model: ArrayLike,
+        observation_matrix: ArrayLike,
         dynamics_noise: ArrayLike,
         observation_noise: ArrayLike,
         prior: Belief,
@@ -157,7 +157,9 @@ class LinearGaussianModel:
         structure: ModelStructure | None = None,
     ) -> None:
         object.__setattr__(self, "dynamics", jnp.asarray(dynamics, dtype=float))
-        object.__setattr__(self, "sensor_model", jnp.asarray(sensor_model, dtype=float))
+        object.__setattr__(
+            self, "observation_matrix", jnp.asarray(observation_matrix, dtype=float)
+        )
         object.__setattr__(
             self, "dynamics_noise", jnp.asarray(dynamics_noise, dtype=float)
         )
@@ -184,11 +186,11 @@ class LinearGaussianModel:
             )
         n = self.n_states
 
-        # sensor_model maps state -> observation: (m, n). Its rows define m.
-        if self.sensor_model.ndim != 2 or self.sensor_model.shape[1] != n:
+        # observation_matrix maps state -> observation: (m, n). Its rows define m.
+        if self.observation_matrix.ndim != 2 or self.observation_matrix.shape[1] != n:
             raise ValueError(
-                f"sensor_model must have {n} columns to match the {n}-D state, "
-                f"got shape {self.sensor_model.shape}"
+                f"observation_matrix must have {n} columns to match the {n}-D state, "
+                f"got shape {self.observation_matrix.shape}"
             )
         m = self.n_observations
 
@@ -268,7 +270,7 @@ class LinearGaussianModel:
     @property
     def n_observations(self) -> int:
         """Dimension of an observation (m)."""
-        return self.sensor_model.shape[0]
+        return self.observation_matrix.shape[0]
 
     @property
     def n_controls(self) -> int:
@@ -288,8 +290,8 @@ class LinearGaussianModel:
 
     @property
     def C(self) -> Float64[Array, "m n"]:
-        """C: the observation matrix (alias of ``sensor_model``)."""
-        return self.sensor_model
+        """C: the observation matrix (alias of ``observation_matrix``)."""
+        return self.observation_matrix
 
     @property
     def Q(self) -> Float64[Array, "n n"]:
@@ -314,7 +316,7 @@ class LinearGaussianModel:
         """
         children = (
             self.dynamics,
-            self.sensor_model,
+            self.observation_matrix,
             self.dynamics_noise,
             self.observation_noise,
             self.prior,
@@ -337,7 +339,7 @@ class LinearGaussianModel:
         obj = object.__new__(cls)
         fields = (
             "dynamics",
-            "sensor_model",
+            "observation_matrix",
             "dynamics_noise",
             "observation_noise",
             "prior",

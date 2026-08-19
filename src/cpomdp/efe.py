@@ -196,7 +196,7 @@ def expected_free_energy(
     Args:
         model: The generative model. Must have a control matrix (an action has no
             meaning without one). Its ``observation`` supplies the local ``(C, R)``;
-            ``None`` means the fixed sensor ``(sensor_model, observation_noise)``.
+            ``None`` means the fixed sensor ``(observation_matrix, observation_noise)``.
         belief: The current belief ``(μ, Σ)``.
         action: The candidate action ``a``, shape ``(p,)``.
         preference: The goal as an OBSERVATION-space ``Preference`` — ``goal`` is a
@@ -463,7 +463,7 @@ def _ffg_rollout_body(
     re-read per step (it may be state-dependent). The carried mean is ``μ⁺`` — zero
     expected innovation, so the observation moves only the covariance.
     """
-    sensor_model, _ = backend.observation_model  # C (constant, front-loaded)
+    observation_matrix, _ = backend.observation_model  # C (constant, front-loaded)
 
     def step(belief, action):
         predicted = backend.predicted_belief(belief, action)  # μ⁺, Σ⁺
@@ -471,7 +471,7 @@ def _ffg_rollout_body(
         g, parts = _ffg_efe_step(
             predicted.mean,
             predicted.cov,
-            sensor_model,
+            observation_matrix,
             observation_noise,
             goal,
             precision,
@@ -482,9 +482,10 @@ def _ffg_rollout_body(
         # for the epistemic (information form); it is recomputed here in moment form to
         # carry the joint belief forward without widening that step's single-step API.
         s = (
-            sensor_model @ predicted.cov @ sensor_model.T + observation_noise
+            observation_matrix @ predicted.cov @ observation_matrix.T
+            + observation_noise
         )  # S=CΣ⁺Cᵀ+R
-        p_xo = predicted.cov @ sensor_model.T
+        p_xo = predicted.cov @ observation_matrix.T
         sigma_post = predicted.cov - p_xo @ jnp.linalg.solve(s, p_xo.T)
         sigma_post = 0.5 * (sigma_post + sigma_post.T)
         return Belief(mean=predicted.mean, cov=sigma_post), PolicyEfeTrace(
@@ -526,7 +527,7 @@ def _logdet_pd(matrix: Float64[Array, "k k"]) -> Float64[Array, ""]:
 
 def _state_info_gain(
     sigma_pred: Float64[Array, "n n"],
-    sensor_model: Float64[Array, "m n"],
+    observation_matrix: Float64[Array, "m n"],
     observation_noise: Float64[Array, "m m"],
     target: Sequence[int],
 ) -> Float64[Array, ""]:
@@ -546,7 +547,7 @@ def _state_info_gain(
 
     Args:
         sigma_pred: Σ⁺, the predicted joint state covariance (n x n).
-        sensor_model: C, the observation matrix (m x n).
+        observation_matrix: C, the observation matrix (m x n).
         observation_noise: R, the observation noise covariance (m x m).
         target: the state indices whose marginal the info gain is about.
 
@@ -556,7 +557,7 @@ def _state_info_gain(
     """
     prior_info = jnp.linalg.inv(sigma_pred)  # Σ⁺⁻¹
     obs_info = (
-        sensor_model.T @ jnp.linalg.inv(observation_noise) @ sensor_model
+        observation_matrix.T @ jnp.linalg.inv(observation_noise) @ observation_matrix
     )  # Cᵀ R⁻¹ C
     sigma_post = jnp.linalg.inv(prior_info + obs_info)
 
@@ -574,7 +575,7 @@ def _state_info_gain(
 def _ffg_efe_step(
     mu_plus: Float64[Array, "n"],
     sigma_plus: Float64[Array, "n n"],
-    sensor_model: Float64[Array, "m n"],
+    observation_matrix: Float64[Array, "m n"],
     observation_noise: Float64[Array, "m m"],
     goal: Float64[Array, "m"],
     precision: Float64[Array, "m m"],
@@ -601,7 +602,7 @@ def _ffg_efe_step(
     Args:
         mu_plus: μ⁺, the predicted joint mean under the candidate action (n-D).
         sigma_plus: Σ⁺, the predicted joint covariance (n x n) — couplings included.
-        sensor_model: C, the real observation matrix over the joint state (m x n).
+        observation_matrix: C, the real observation matrix over the joint state (m x n).
         observation_noise: R, the observation noise covariance (m x m).
         goal: g, the preferred observation (m-D).
         precision: Λ, how sharply the goal is preferred (m x m).
@@ -612,15 +613,17 @@ def _ffg_efe_step(
         ``(G, {"pragmatic": ..., "epistemic": ...})`` — the scalar EFE ``G = pragmatic −
         epistemic`` (minimised) and its two parts.
     """
-    o_pred = sensor_model @ mu_plus  # o⁺ = C·μ⁺
+    o_pred = observation_matrix @ mu_plus  # o⁺ = C·μ⁺
     s = (
-        sensor_model @ sigma_plus @ sensor_model.T + observation_noise
+        observation_matrix @ sigma_plus @ observation_matrix.T + observation_noise
     )  # S = C·Σ⁺·Cᵀ + R
 
     residual = o_pred - goal
     pragmatic = 0.5 * residual @ precision @ residual + 0.5 * jnp.trace(precision @ s)
 
-    epistemic = _state_info_gain(sigma_plus, sensor_model, observation_noise, target)
+    epistemic = _state_info_gain(
+        sigma_plus, observation_matrix, observation_noise, target
+    )
 
     return pragmatic - epistemic, {"pragmatic": pragmatic, "epistemic": epistemic}
 
@@ -659,9 +662,11 @@ def _efe_step(
     if model.observation is None:
         # FAST PATH — a bare matvec/matmul, byte-identical to Phase 1A. Kept inline
         # (no method dispatch) so the fixed-sensor hot path stays lean.
-        sensor_model, observation_noise = model.C, model.R
-        o_pred = sensor_model @ mu_pred
-        pred_obs_cov = sensor_model @ sigma_pred @ sensor_model.T + observation_noise
+        observation_matrix, observation_noise = model.C, model.R
+        o_pred = observation_matrix @ mu_pred
+        pred_obs_cov = (
+            observation_matrix @ sigma_pred @ observation_matrix.T + observation_noise
+        )
     else:
         # Linear sensors return exact (C·μ⁺, C·Σ⁺·Cᵀ+R, R); NonlinearSensor (2.5)
         # returns its 2nd-order moments. S feeds the pragmatic term, R the epistemic.

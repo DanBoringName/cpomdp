@@ -36,7 +36,7 @@ def test_fixed_sensor_satisfies_protocol():
     assert isinstance(sensor, ObservationModel)
 
 
-def test_fixed_sensor_rejects_non_2d_sensor_model():
+def test_fixed_sensor_rejects_non_2d_observation_matrix():
     with pytest.raises(ValueError, match="2-D"):
         FixedSensor(jnp.array([1.0, 0.0]), jnp.array([[0.5]]))
 
@@ -53,7 +53,9 @@ def test_FixedSensor_survives_a_flatten_unflatten_round_trip():
     leaves, treedef = jax.tree_util.tree_flatten(sensor)
     restored = jax.tree_util.tree_unflatten(treedef, leaves)
     assert isinstance(restored, FixedSensor)
-    np.testing.assert_array_equal(restored.sensor_model, sensor.sensor_model)
+    np.testing.assert_array_equal(
+        restored.observation_matrix, sensor.observation_matrix
+    )
     np.testing.assert_array_equal(restored.observation_noise, sensor.observation_noise)
 
 
@@ -81,7 +83,7 @@ def _well_params():
 
 def _callable_sensor():
     return CallableSensor(
-        sensor_model=[[1.0]], noise_fn=_well_noise, noise_params=_well_params()
+        observation_matrix=[[1.0]], noise_fn=_well_noise, noise_params=_well_params()
     )
 
 
@@ -119,7 +121,7 @@ class TestCallableSensor:
         # params is a pytree LEAF, so grad of R(x) w.r.t. params is finite.
         def scalar(params):
             s = CallableSensor(
-                sensor_model=[[1.0]], noise_fn=_well_noise, noise_params=params
+                observation_matrix=[[1.0]], noise_fn=_well_noise, noise_params=params
             )
             _, r = s.linearize(jnp.array([0.7]))
             return jnp.trace(r)
@@ -133,4 +135,6 @@ class TestCallableSensor:
             return jnp.array([1.0])  # 1-D, not (m, m)
 
         with pytest.raises(ValueError, match="noise_fn"):
-            CallableSensor(sensor_model=[[1.0]], noise_fn=bad_noise, noise_params={})
+            CallableSensor(
+                observation_matrix=[[1.0]], noise_fn=bad_noise, noise_params={}
+            )

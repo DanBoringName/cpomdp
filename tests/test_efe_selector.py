@@ -35,7 +35,7 @@ def _corridor_model(*, fixed=False):
         None
         if fixed
         else CallableSensor(
-            sensor_model=[[1.0]],
+            observation_matrix=[[1.0]],
             noise_fn=_well_noise,
             noise_params={
                 "beacon": jnp.array(1.5),
@@ -47,7 +47,7 @@ def _corridor_model(*, fixed=False):
     )
     return LinearGaussianModel(
         dynamics=[[1.0]],
-        sensor_model=[[1.0]],
+        observation_matrix=[[1.0]],
         dynamics_noise=[[0.05]],
         observation_noise=[[0.3]],  # fixed-sensor fallback / fixed-model noise
         prior=Belief(mean=[0.0], cov=[[0.5]]),
@@ -69,7 +69,7 @@ def _numpy_g(model, belief, action, goal, precision):
     sigma_pred = a_mat @ sigma @ a_mat.T + q_mat
     if model.observation is None:
         c_mat, r_mat = (
-            np.asarray(model.sensor_model),
+            np.asarray(model.observation_matrix),
             np.asarray(model.observation_noise),
         )
     else:
@@ -102,7 +102,7 @@ class TestEFESelector:
     def test_control_free_model_raises(self):
         control_free = LinearGaussianModel(
             dynamics=[[1.0]],
-            sensor_model=[[1.0]],
+            observation_matrix=[[1.0]],
             dynamics_noise=[[0.1]],
             observation_noise=[[0.3]],
             prior=Belief(mean=[0.0], cov=[[1.0]]),

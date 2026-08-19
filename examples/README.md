@@ -44,13 +44,13 @@ beacon mechanic itself untouched:
 ```python
 # v0.3: the state is the agent's position, and the one channel reads it. The noise
 # that channel carries is keyed on that SAME position — self-revealing.
-sensor_model = I                      # C: o = agent_xy            (2x2)
+observation_matrix = I                      # C: o = agent_xy            (2x2)
 noise_fn(x, p) = beacon_noise(x, p)   # R(x): keyed on the channel's own block
 
 # v0.4: the state gains the food's position as a latent, and a second pair of rows
 # reads the DISPLACEMENT to it. The noise is still keyed on the agent's own
 # position block, exactly as before.
-sensor_model = [[I, 0],               # C: rows 1-2  o = agent_xy   (4x4)
+observation_matrix = [[I, 0],               # C: rows 1-2  o = agent_xy   (4x4)
                 [-I, I]]              #    rows 3-4  o = food_xy − agent_xy
 noise_fn(x, p) = beacon_noise(x[:2], p)  # R(x): still keyed on agent_xy only
 ```

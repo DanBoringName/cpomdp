@@ -27,17 +27,19 @@ def test_full_state_info_gain_equals_observation_space_form():
     rng = np.random.default_rng(0)
     n, m = 4, 2
     sigma_pred = jnp.asarray(_spd(rng, n))  # Σ⁺, the predicted joint covariance
-    sensor_model = jnp.asarray(rng.standard_normal((m, n)))  # C
+    observation_matrix = jnp.asarray(rng.standard_normal((m, n)))  # C
     observation_noise = jnp.asarray(_spd(rng, m))  # R
 
     # The observation-space number the current kernel computes.
-    s = sensor_model @ sigma_pred @ sensor_model.T + observation_noise  # S
+    s = observation_matrix @ sigma_pred @ observation_matrix.T + observation_noise  # S
     _, logdet_s = np.linalg.slogdet(s)
     _, logdet_r = np.linalg.slogdet(observation_noise)
     expected = 0.5 * (logdet_s - logdet_r)
 
     # The new state-space route, restricted to the whole state (target = all indices).
-    got = _state_info_gain(sigma_pred, sensor_model, observation_noise, target=range(n))
+    got = _state_info_gain(
+        sigma_pred, observation_matrix, observation_noise, target=range(n)
+    )
     np.testing.assert_allclose(float(got), expected, atol=1e-10)
 
 
@@ -47,14 +49,14 @@ def test_node_info_gain_matches_independent_moment_update():
     rng = np.random.default_rng(1)
     n, m = 5, 2
     sigma_pred = _spd(rng, n)  # Σ⁺
-    sensor_model = rng.standard_normal((m, n))  # C
+    observation_matrix = rng.standard_normal((m, n))  # C
     observation_noise = _spd(rng, m)  # R
     target = [1, 2]  # a node occupying state indices 1..2
 
     # Independent (moment-form) posterior covariance, then the block log-det drop.
-    s = sensor_model @ sigma_pred @ sensor_model.T + observation_noise
-    gain = sigma_pred @ sensor_model.T @ np.linalg.inv(s)  # K
-    sigma_post = sigma_pred - gain @ sensor_model @ sigma_pred
+    s = observation_matrix @ sigma_pred @ observation_matrix.T + observation_noise
+    gain = sigma_pred @ observation_matrix.T @ np.linalg.inv(s)  # K
+    sigma_post = sigma_pred - gain @ observation_matrix @ sigma_pred
     block = np.ix_(target, target)
     _, logdet_pred = np.linalg.slogdet(sigma_pred[block])
     _, logdet_post = np.linalg.slogdet(sigma_post[block])
@@ -62,7 +64,7 @@ def test_node_info_gain_matches_independent_moment_update():
 
     got = _state_info_gain(
         jnp.asarray(sigma_pred),
-        jnp.asarray(sensor_model),
+        jnp.asarray(observation_matrix),
         jnp.asarray(observation_noise),
         target=target,
     )
@@ -74,11 +76,11 @@ def test_full_state_gain_matches_expected_free_energy_epistemic():
     # epistemic that `expected_free_energy` actually returns (Σ⁺ = A·Σ·Aᵀ + Q).
     dynamics = np.array([[1.0, 0.1], [0.0, 1.0]])  # A
     dynamics_noise = np.array([[0.1, 0.0], [0.0, 0.1]])  # Q
-    sensor_model = np.array([[1.0, 0.0]])  # C
+    observation_matrix = np.array([[1.0, 0.0]])  # C
     observation_noise = np.array([[0.5]])  # R
     model = LinearGaussianModel(
         dynamics=dynamics,
-        sensor_model=sensor_model,
+        observation_matrix=observation_matrix,
         dynamics_noise=dynamics_noise,
         observation_noise=observation_noise,
         prior=Belief(mean=[0.0, 0.0], cov=np.eye(2)),
@@ -94,7 +96,7 @@ def test_full_state_gain_matches_expected_free_energy_epistemic():
     sigma_pred = dynamics @ sigma @ dynamics.T + dynamics_noise  # Σ⁺
     got = _state_info_gain(
         jnp.asarray(sigma_pred),
-        jnp.asarray(sensor_model),
+        jnp.asarray(observation_matrix),
         jnp.asarray(observation_noise),
         target=range(2),
     )
@@ -106,12 +108,12 @@ def test_ffg_efe_step_reduces_to_expected_free_energy():
     # FFG EFE step must reproduce expected_free_energy — same pragmatic, epistemic, G.
     dynamics = np.array([[1.0, 0.1], [0.0, 1.0]])  # A
     dynamics_noise = np.array([[0.1, 0.0], [0.0, 0.1]])  # Q
-    sensor_model = np.array([[1.0, 0.0]])  # C
+    observation_matrix = np.array([[1.0, 0.0]])  # C
     observation_noise = np.array([[0.5]])  # R
     control = np.array([[0.0], [1.0]])  # B
     model = LinearGaussianModel(
         dynamics=dynamics,
-        sensor_model=sensor_model,
+        observation_matrix=observation_matrix,
         dynamics_noise=dynamics_noise,
         observation_noise=observation_noise,
         prior=Belief(mean=[0.0, 0.0], cov=np.eye(2)),
@@ -130,7 +132,7 @@ def test_ffg_efe_step_reduces_to_expected_free_energy():
     g, parts = _ffg_efe_step(
         jnp.asarray(mu_plus),
         jnp.asarray(sigma_plus),
-        jnp.asarray(sensor_model),
+        jnp.asarray(observation_matrix),
         jnp.asarray(observation_noise),
         preference.goal,
         preference.precision,

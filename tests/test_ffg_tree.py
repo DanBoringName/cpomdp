@@ -581,7 +581,7 @@ def _flattened_kalman_root(root, dims, edges, obs_specs, m0, p0, readings):
 
     model = LinearGaussianModel(
         dynamics=np.eye(dim),
-        sensor_model=np.vstack(c_rows),
+        observation_matrix=np.vstack(c_rows),
         dynamics_noise=np.zeros((dim, dim)),
         observation_noise=_block_diag(r_blocks),
         prior=Belief(mean=mu, cov=sig),

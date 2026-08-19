@@ -134,7 +134,7 @@ def infer_flattened() -> Belief:
     c, r, y = _stacked_observation()
     model = LinearGaussianModel(
         dynamics=np.eye(N_NODES),
-        sensor_model=c,
+        observation_matrix=c,
         dynamics_noise=np.zeros((N_NODES, N_NODES)),
         observation_noise=r,
         prior=Belief(mean=joint_mean, cov=joint_cov),
