@@ -5,7 +5,8 @@ The gap expands in prior spread as::
     gap(σ) = c₂σ² + c₄σ⁴ + c₆σ⁶ + O(σ⁸)
 
 `c₂` is derived and published: `(R'(μ)/2R(μ))²`, in the registration's RESULT
-2026-08-07. `c₄` is under analytic derivation. `c₆` is unmeasured.
+2026-08-07. `c₄` has a closed form too, in RESULT 2026-08-16, which AMENDMENT
+2026-08-17 pins to the reverse KL direction. `c₆` is unmeasured.
 
 **This module does not fit `c₄` or `c₆`, and that is a constraint rather than an
 omission.** A number extracted here before the derivation lands becomes the thing the
@@ -18,12 +19,14 @@ is *structure*, which a derivation must reproduce and which cannot stand in for 
 - the residual's **exponent** after each known term comes off, never its coefficient
 - the gap vanishing identically under fixed `R`
 
-When the derivation lands, pass its value in::
+Pass a derived value in, one family at a time, and G4 tries to refute it::
 
-    uv run --no-sync python -m research.checks.gap_expansion --check --c4 <derived>
+    uv run --no-sync python -m research.checks.gap_expansion --check \
+        --families tanh --c4 <derived>
 
-and G4 tries to refute it. Supplying a candidate is the only way a `c₄` figure enters
-this module. It never produces one.
+`--families` defaults to all five, and a single `--c4` applied to a run of several
+mis-tests all but one, so the parser refuses that combination. Supplying a candidate
+is the only way a `c₄` figure enters this module. It never produces one.
 
 Why an exponent test is a sharp falsifier. Subtract a candidate `ĉ₄` and the residual is
 `(c₄ − ĉ₄)σ⁴ + c₆σ⁶`. If the candidate is exact the quartic cancels and the residual
