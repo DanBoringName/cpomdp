@@ -371,11 +371,13 @@ def build_maze(
     transitions = (
         GaussianTransition(  # a near-static context
             np.eye(context_dim).tolist(),
-            (Q_CONTEXT * np.eye(context_dim)).tolist(),
+            dynamics_noise=(Q_CONTEXT * np.eye(context_dim)).tolist(),
         ),
         GaussianTransition(
             np.eye(arena_dim).tolist(),
-            np.diag([Q_POSITION] * n_dims + [Q_GOAL_BELIEF] * n_dims).tolist(),
+            dynamics_noise=np.diag(
+                [Q_POSITION] * n_dims + [Q_GOAL_BELIEF] * n_dims
+            ).tolist(),
         ),
     )
     # B: the action drives position, which is the arena node's first block, and the

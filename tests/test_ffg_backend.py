@@ -195,7 +195,7 @@ def _build(
     graph = CouplingGraph(
         root=0, dims=dims, couplings=couplings, observations=observations
     )
-    transitions = tuple(GaussianTransition(a, q) for a, q in dyn)
+    transitions = tuple(GaussianTransition(a, dynamics_noise=q) for a, q in dyn)
     kwargs = {"control_matrix": control_matrix, "readout_node": readout_node}
     if partition is not None:
         kwargs["partition"] = partition
@@ -809,7 +809,7 @@ def _build_rx(dims, edges, rx_obs, dyn, *, control_matrix=None, partition=None):
     graph = CouplingGraph(
         root=0, dims=dims, couplings=couplings, observations=observations
     )
-    transitions = tuple(GaussianTransition(a, q) for a, q in dyn)
+    transitions = tuple(GaussianTransition(a, dynamics_noise=q) for a, q in dyn)
     kwargs = {"control_matrix": control_matrix}
     if partition is not None:
         kwargs["partition"] = partition

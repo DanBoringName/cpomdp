@@ -323,7 +323,9 @@ class GaussianTransition:
     dynamics_matrix: Float64[Array, "n n"]
     dynamics_noise: Float64[Array, "n n"]
 
-    def __init__(self, dynamics_matrix: ArrayLike, dynamics_noise: ArrayLike) -> None:
+    def __init__(
+        self, dynamics_matrix: ArrayLike, *, dynamics_noise: ArrayLike
+    ) -> None:
         object.__setattr__(
             self, "dynamics_matrix", jnp.asarray(dynamics_matrix, dtype=float)
         )
@@ -356,7 +358,7 @@ class GaussianTransition:
 
     @classmethod
     def from_ou(
-        cls, tau: float, stationary_var: float, dt: float
+        cls, tau: float, *, stationary_var: float, dt: float
     ) -> "GaussianTransition":
         """Build a 1-D transition from Ornstein–Uhlenbeck (OU) parameters.
 
@@ -378,11 +380,12 @@ class GaussianTransition:
             dt: the discretisation step.
 
         Returns:
-            A ``GaussianTransition`` with 1×1 ``dynamics`` (A), ``dynamics_noise`` (Q).
+            A ``GaussianTransition`` with 1×1 ``dynamics_matrix`` (A) and
+            ``dynamics_noise`` (Q).
         """
         a = jnp.exp(-dt / tau)  # A = e^(−dt/τ)
         q = stationary_var * (1.0 - a * a)  # Q = Σ_stat (1 − A²)
-        return cls(jnp.reshape(a, (1, 1)), jnp.reshape(q, (1, 1)))
+        return cls(jnp.reshape(a, (1, 1)), dynamics_noise=jnp.reshape(q, (1, 1)))
 
     def predict(
         self,

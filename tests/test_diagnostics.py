@@ -208,8 +208,10 @@ class TestProbeGraphBackend:
             observations={1: cue},
         )
         transitions = (
-            GaussianTransition([[1.0]], [[0.1]]),
-            GaussianTransition([[1.0, 0.0], [0.0, 1.0]], [[0.1, 0.0], [0.0, 0.1]]),
+            GaussianTransition([[1.0]], dynamics_noise=[[0.1]]),
+            GaussianTransition(
+                [[1.0, 0.0], [0.0, 1.0]], dynamics_noise=[[0.1, 0.0], [0.0, 0.1]]
+            ),
         )
         return CouplingGraphBackend(
             graph, transitions, control_matrix=[[0.0], [1.0], [0.0]]
@@ -241,7 +243,11 @@ class TestProbeGraphBackend:
         )
         backend = CouplingGraphBackend(
             graph,
-            (GaussianTransition([[1.0, 0.0], [0.0, 1.0]], [[0.1, 0.0], [0.0, 0.1]]),),
+            (
+                GaussianTransition(
+                    [[1.0, 0.0], [0.0, 1.0]], dynamics_noise=[[0.1, 0.0], [0.0, 0.1]]
+                ),
+            ),
             control_matrix=[[1.0], [0.0]],
         )
         report = probe_model(backend, Belief(jnp.zeros(2), jnp.eye(2)), ACTIONS)

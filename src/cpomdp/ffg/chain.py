@@ -100,7 +100,9 @@ class ChainBackend:
             model.dynamics_noise_model is None or model.dynamics_noise_model.is_fixed
         )
         self._transition: GaussianTransition | None = (
-            GaussianTransition(model.dynamics_matrix, model.dynamics_noise)  # A, Q
+            GaussianTransition(
+                model.dynamics_matrix, dynamics_noise=model.dynamics_noise
+            )  # A, Q
             if self._process_fixed
             else None
         )
@@ -179,7 +181,8 @@ class ChainBackend:
                 model.dynamics_noise_model is not None
             )  # guaranteed by _process_fixed
             transition = GaussianTransition(
-                model.dynamics_matrix, model.dynamics_noise_model.noise_at(mean_pred)
+                model.dynamics_matrix,
+                dynamics_noise=model.dynamics_noise_model.noise_at(mean_pred),
             )
 
         if self._sensor_fixed:

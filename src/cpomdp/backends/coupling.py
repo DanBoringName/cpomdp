@@ -254,7 +254,7 @@ class CouplingGraphBackend:
         force_noise = jax.scipy.linalg.block_diag(
             *[t.dynamics_noise for t in self.transitions]
         )
-        return GaussianTransition(force, force_noise)
+        return GaussianTransition(force, dynamics_noise=force_noise)
 
     def _build_observation_layout(
         self,

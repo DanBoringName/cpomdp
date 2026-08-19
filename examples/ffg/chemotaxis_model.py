@@ -49,7 +49,9 @@ def chemotaxis_ffg(dt):
     to ``CouplingGraphBackend(graph, transitions)``.
     """
     transitions = tuple(
-        GaussianTransition.from_ou(TAU[node], STATIONARY_VAR[node], dt)
+        GaussianTransition.from_ou(
+            TAU[node], stationary_var=STATIONARY_VAR[node], dt=dt
+        )
         for node in range(_NODES)
     )
 

@@ -51,7 +51,9 @@ def _single_node_pair(*, state_dependent):
         obs_ffg = GaussianObservation(c, r0)
         obs_flat = None
     graph = CouplingGraph(root=0, dims=(2,), couplings=(), observations={0: obs_ffg})
-    backend = CouplingGraphBackend(graph, (GaussianTransition(a, q),), control_matrix=b)
+    backend = CouplingGraphBackend(
+        graph, (GaussianTransition(a, dynamics_noise=q),), control_matrix=b
+    )
     model = LinearGaussianModel(
         dynamics_matrix=a,
         observation_matrix=c,
@@ -72,8 +74,8 @@ def _coupled_backend():
         observations={1: GaussianObservation([[1.0]], [[0.1]])},
     )
     transitions = (
-        GaussianTransition([[0.7]], [[0.1]]),
-        GaussianTransition([[0.5]], [[0.08]]),
+        GaussianTransition([[0.7]], dynamics_noise=[[0.1]]),
+        GaussianTransition([[0.5]], dynamics_noise=[[0.08]]),
     )
     return CouplingGraphBackend(graph, transitions, control_matrix=[[1.0], [0.0]])
 

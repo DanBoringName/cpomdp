@@ -56,9 +56,9 @@ def _hub_graph(*, fast_relevant=True, slow_relevant=False):
 
 def _backend(graph, partition=None):
     transitions = (
-        GaussianTransition([[0.7]], [[0.1]]),
-        GaussianTransition([[0.5]], [[0.08]]),
-        GaussianTransition([[0.9]], [[0.02]]),
+        GaussianTransition([[0.7]], dynamics_noise=[[0.1]]),
+        GaussianTransition([[0.5]], dynamics_noise=[[0.08]]),
+        GaussianTransition([[0.9]], dynamics_noise=[[0.02]]),
     )
     return CouplingGraphBackend(
         graph, transitions, control_matrix=[[1.0], [0.0], [0.0]], partition=partition

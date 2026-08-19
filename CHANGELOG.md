@@ -94,6 +94,14 @@ an exposure rather than a result.
   share a name on two classes: the field holds the declaration, the method returns the
   `(C, R)` it resolves to. The `.A`/`.B`/`.C`/`.Q`/`.R` aliases are unchanged, and no
   numerical behaviour moved.
+- **Breaking:** `GaussianTransition` takes `dynamics_noise` by keyword, and
+  `GaussianTransition.from_ou` takes `stationary_var` and `dt` by keyword. Both follow
+  `LinearGaussianModel` for the same reason, and the transition factor is the worse of
+  the two: its `dynamics_matrix` and `dynamics_noise` are both (n, n) at *every*
+  dimension, so a transposed pair needs no square-shape coincidence to pass. Only the
+  noise is content-checked. `from_ou`'s `tau` and `dt` are both positive scalars in the
+  same time unit and `A = exp(-dt/tau)` is finite either way round. 45 call sites moved
+  to keywords.
 - **Breaking:** every `LinearGaussianModel` argument after `dynamics` is keyword-only.
   The four matrices are two maps and two covariances of the same rank, and only the
   covariances are content-checked, so a transposed pair constructed in silence whenever

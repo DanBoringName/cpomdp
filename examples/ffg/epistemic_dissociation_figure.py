@@ -161,9 +161,11 @@ def build_backend(
         observations={ARM_NODE: cue},
     )
     transitions = (
-        GaussianTransition([[1.0]], [[Q_CONTEXT]]),  # node 0: context, near-static
+        GaussianTransition(
+            [[1.0]], dynamics_noise=[[Q_CONTEXT]]
+        ),  # node 0: context, near-static
         GaussianTransition(  # node 1: [position, arm]
-            [[1.0, 0.0], [0.0, 1.0]], [[Q_POSITION, 0.0], [0.0, Q_ARM]]
+            [[1.0, 0.0], [0.0, 1.0]], dynamics_noise=[[Q_POSITION, 0.0], [0.0, Q_ARM]]
         ),
     )
     control_matrix = [
