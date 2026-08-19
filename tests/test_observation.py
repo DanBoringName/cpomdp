@@ -8,10 +8,23 @@ import pytest
 from cpomdp.observation import CallableSensor, FixedSensor, ObservationModel
 
 
+def test_fixed_sensor_observation_noise_is_keyword_only():
+    # C is (m, n) and R is (m, m), so whenever m == n the two are interchangeable by
+    # shape. Only R is content-checked, and a square symmetric C passes that check, so
+    # a transposed pair builds a sensor whose Jacobian is the noise. Keywords remove
+    # the route; a 1-D sensor is the common case where the shapes coincide.
+    with pytest.raises(TypeError, match="positional"):
+        # Calling it wrongly is the test, so ty's arity errors are expected.
+        FixedSensor(  # ty: ignore[missing-argument]
+            jnp.eye(2),
+            jnp.eye(2) * 0.1,  # ty: ignore[too-many-positional-arguments]
+        )
+
+
 def test_fixed_sensor_linearize_returns_stored_matrices():
     C = jnp.array([[1.0, 0.0]])
     R = jnp.array([[0.5]])
-    sensor = FixedSensor(C, R)
+    sensor = FixedSensor(C, observation_noise=R)
 
     C_out, R_out = sensor.linearize(jnp.array([3.0, 7.0]))
 
@@ -20,7 +33,7 @@ def test_fixed_sensor_linearize_returns_stored_matrices():
 
 
 def test_fixed_sensor_is_state_independent():
-    sensor = FixedSensor(jnp.array([[1.0, 0.0]]), jnp.array([[0.5]]))
+    sensor = FixedSensor(jnp.array([[1.0, 0.0]]), observation_noise=jnp.array([[0.5]]))
 
     C0, R0 = sensor.linearize(jnp.array([0.0, 0.0]))
     C1, R1 = sensor.linearize(jnp.array([99.0, -99.0]))
@@ -31,25 +44,25 @@ def test_fixed_sensor_is_state_independent():
 
 
 def test_fixed_sensor_satisfies_protocol():
-    sensor = FixedSensor(jnp.array([[1.0]]), jnp.array([[1.0]]))
+    sensor = FixedSensor(jnp.array([[1.0]]), observation_noise=jnp.array([[1.0]]))
 
     assert isinstance(sensor, ObservationModel)
 
 
 def test_fixed_sensor_rejects_non_2d_observation_matrix():
     with pytest.raises(ValueError, match="2-D"):
-        FixedSensor(jnp.array([1.0, 0.0]), jnp.array([[0.5]]))
+        FixedSensor(jnp.array([1.0, 0.0]), observation_noise=jnp.array([[0.5]]))
 
 
 def test_fixed_sensor_rejects_mismatched_dims():
     C = jnp.array([[1.0, 0.0], [0.0, 1.0]])  # m=2
     R = jnp.array([[0.5]])  # m=1
     with pytest.raises(ValueError, match="match the 2-D observation"):
-        FixedSensor(C, R)
+        FixedSensor(C, observation_noise=R)
 
 
 def test_FixedSensor_survives_a_flatten_unflatten_round_trip():
-    sensor = FixedSensor(jnp.array([[1.0]]), jnp.array([[1.0]]))
+    sensor = FixedSensor(jnp.array([[1.0]]), observation_noise=jnp.array([[1.0]]))
     leaves, treedef = jax.tree_util.tree_flatten(sensor)
     restored = jax.tree_util.tree_unflatten(treedef, leaves)
     assert isinstance(restored, FixedSensor)

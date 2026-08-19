@@ -2,7 +2,8 @@
 
 ``policy_efe_ffg`` is the FFG counterpart of ``policy_efe``: it drives ``_ffg_efe_step``
 over the backend's predicted joint each step, aiming the epistemic at a node's block
-(``target``) rather than the whole observation. ``policy_efe_ffg_trace`` keeps the whole
+(``info_block``) rather than the whole observation. ``policy_efe_ffg_trace`` keeps
+the whole
 per-step record instead of summing it, so the crossover statistic and the rollout
 diagnostics can read the per-step pragmatic/epistemic split and the covariance path.
 
@@ -11,7 +12,7 @@ Two oracles pin it, mirroring the flat rollout's:
 - **H=1 reduces to ``_ffg_efe_step``** — one rollout step is one single-step FFG EFE, so
   the summed scalars are byte-identical to a hand-run ``_ffg_efe_step`` on the backend's
   ``predicted_belief``. This holds *with* couplings.
-- **No couplings + whole-state target reduces to ``policy_efe``** — a single-node
+- **No couplings + whole-state info block reduces to ``policy_efe``** — a single-node
   backend is the flat linear-Gaussian model, so the FFG rollout must agree with
   ``policy_efe`` step for step, under both a fixed sensor and ``R(x)``. Agreement is
   numerical (``allclose``), not byte-identical: the FFG predicts through the precision
@@ -54,7 +55,8 @@ def _rx_noise(x, params):
 def _single_node_pair(*, state_dependent):
     """An equivalent (FFG backend, flat model) pair — one node, no couplings.
 
-    With no couplings μ⁺ = μ⁻, so the FFG rollout with the whole-state target must match
+    With no couplings μ⁺ = μ⁻, so the FFG rollout with the whole-state info block
+    must match
     the flat ``policy_efe`` rollout. ``state_dependent`` swaps the fixed sensor for the
     matched R(x) sensor on both sides.
     """
@@ -68,18 +70,20 @@ def _single_node_pair(*, state_dependent):
         obs_ffg = CallableGaussianObservation(c, _rx_noise, params)
         obs_flat = CallableSensor(c, _rx_noise, params)
     else:
-        obs_ffg = GaussianObservation(c, r0)
+        obs_ffg = GaussianObservation(c, observation_noise=r0)
         obs_flat = None
     graph = CouplingGraph(root=0, dims=(2,), couplings=(), observations={0: obs_ffg})
-    backend = CouplingGraphBackend(graph, (GaussianTransition(a, q),), control=b)
+    backend = CouplingGraphBackend(
+        graph, (GaussianTransition(a, dynamics_noise=q),), control_matrix=b
+    )
     model = LinearGaussianModel(
-        dynamics=a,
+        dynamics_matrix=a,
         observation_matrix=c,
         dynamics_noise=q,
         observation_noise=r0,  # placeholder under a callable sensor; ignored there
         prior=Belief(mean=np.zeros(2), cov=np.eye(2)),
-        control=b,
-        observation=obs_flat,
+        control_matrix=b,
+        observation_model=obs_flat,
     )
     return backend, model
 
@@ -90,13 +94,13 @@ def _coupled_backend():
         root=0,
         dims=(1, 1),
         couplings=(Coupling(0, 1, GaussianCoupling([[0.8]], [[0.05]]), 1.0),),
-        observations={1: GaussianObservation([[1.0]], [[0.1]])},
+        observations={1: GaussianObservation([[1.0]], observation_noise=[[0.1]])},
     )
     transitions = (
-        GaussianTransition([[0.7]], [[0.1]]),
-        GaussianTransition([[0.5]], [[0.08]]),
+        GaussianTransition([[0.7]], dynamics_noise=[[0.1]]),
+        GaussianTransition([[0.5]], dynamics_noise=[[0.08]]),
     )
-    return CouplingGraphBackend(graph, transitions, control=[[1.0], [0.0]])
+    return CouplingGraphBackend(graph, transitions, control_matrix=[[1.0], [0.0]])
 
 
 def _coupled_belief():
@@ -121,11 +125,15 @@ class TestFfgSumsEqualScalars:
 
     def test_matches_across_horizons(self):
         backend, belief, pref = _coupled_backend(), _coupled_belief(), _pref()
-        target = tuple(backend.block(0))
+        info_block = tuple(backend.block(0))
         for h in (1, 2, 3):
             policy = _policy([0.4, -0.3, 0.1][:h])
-            g, parts = policy_efe_ffg(backend, belief, policy, pref, target=target)
-            trace = policy_efe_ffg_trace(backend, belief, policy, pref, target=target)
+            g, parts = policy_efe_ffg(
+                backend, belief, policy, pref, info_block=info_block
+            )
+            trace = policy_efe_ffg_trace(
+                backend, belief, policy, pref, info_block=info_block
+            )
             np.testing.assert_array_equal(g, jnp.sum(trace.g))
             np.testing.assert_array_equal(parts["pragmatic"], jnp.sum(trace.pragmatic))
             np.testing.assert_array_equal(parts["epistemic"], jnp.sum(trace.epistemic))
@@ -135,9 +143,9 @@ class TestFfgSumsEqualScalars:
 class TestFfgH1ReducesToFfgEfeStep:
     def test_scalars_byte_identical_to_single_step(self):
         backend, belief, pref = _coupled_backend(), _coupled_belief(), _pref()
-        target = tuple(backend.block(0))
+        info_block = tuple(backend.block(0))
         policy = _policy([0.6])
-        g, parts = policy_efe_ffg(backend, belief, policy, pref, target=target)
+        g, parts = policy_efe_ffg(backend, belief, policy, pref, info_block=info_block)
 
         predicted = backend.predicted_belief(belief, policy[0])
         observation_noise = backend.observation_noise_at(predicted.mean)
@@ -149,7 +157,7 @@ class TestFfgH1ReducesToFfgEfeStep:
             observation_noise,
             pref.goal,
             pref.precision,
-            target,
+            info_block,
         )
         np.testing.assert_array_equal(g, g_ref)
         np.testing.assert_array_equal(parts["pragmatic"], parts_ref["pragmatic"])
@@ -157,9 +165,11 @@ class TestFfgH1ReducesToFfgEfeStep:
 
     def test_trace_moments_match_predicted_belief(self):
         backend, belief, pref = _coupled_backend(), _coupled_belief(), _pref()
-        target = tuple(backend.block(0))
+        info_block = tuple(backend.block(0))
         policy = _policy([0.6])
-        trace = policy_efe_ffg_trace(backend, belief, policy, pref, target=target)
+        trace = policy_efe_ffg_trace(
+            backend, belief, policy, pref, info_block=info_block
+        )
         predicted = backend.predicted_belief(belief, policy[0])
         np.testing.assert_array_equal(trace.mu_pred[0], predicted.mean)
         np.testing.assert_array_equal(trace.sigma_pred[0], predicted.cov)
@@ -169,11 +179,13 @@ class TestFfgH1ReducesToFfgEfeStep:
 class TestFfgNoCouplingReducesToPolicyEfe:
     def _check(self, *, state_dependent):
         backend, model = _single_node_pair(state_dependent=state_dependent)
-        belief, target = _single_belief(), range(2)
+        belief, info_block = _single_belief(), range(2)
         pref = Preference(goal=[1.0], precision=[[2.0]])
         for h in (2, 3):
             policy = _policy([0.5, -0.4, 0.2][:h])
-            g, parts = policy_efe_ffg(backend, belief, policy, pref, target=target)
+            g, parts = policy_efe_ffg(
+                backend, belief, policy, pref, info_block=info_block
+            )
             g_ref, parts_ref = policy_efe(model, belief, policy, pref)
             np.testing.assert_allclose(float(g), float(g_ref), atol=1e-9)
             np.testing.assert_allclose(
@@ -196,9 +208,11 @@ class TestFfgNoCouplingReducesToPolicyEfe:
 class TestFfgTraceShape:
     def test_field_shapes(self):
         backend, belief, pref = _coupled_backend(), _coupled_belief(), _pref()
-        target = tuple(backend.block(0))
+        info_block = tuple(backend.block(0))
         policy = _policy([0.4, -0.3, 0.1])
-        trace = policy_efe_ffg_trace(backend, belief, policy, pref, target=target)
+        trace = policy_efe_ffg_trace(
+            backend, belief, policy, pref, info_block=info_block
+        )
         assert trace.g.shape == (3,)
         assert trace.pragmatic.shape == (3,)
         assert trace.epistemic.shape == (3,)
@@ -209,18 +223,22 @@ class TestFfgTraceShape:
 
     def test_is_policy_efe_trace_pytree(self):
         backend, belief, pref = _coupled_backend(), _coupled_belief(), _pref()
-        target = tuple(backend.block(0))
+        info_block = tuple(backend.block(0))
         policy = _policy([0.4, -0.3])
-        trace = policy_efe_ffg_trace(backend, belief, policy, pref, target=target)
+        trace = policy_efe_ffg_trace(
+            backend, belief, policy, pref, info_block=info_block
+        )
         assert isinstance(trace, PolicyEfeTrace)
         assert len(jax.tree_util.tree_leaves(trace)) == 7
 
     def test_sigma_post_is_tighter_than_sigma_pred(self):
         # Observing can only shrink uncertainty: Σ_post ≼ Σ⁺ (trace of the drop ≥ 0).
         backend, belief, pref = _coupled_backend(), _coupled_belief(), _pref()
-        target = tuple(backend.block(0))
+        info_block = tuple(backend.block(0))
         policy = _policy([0.4, -0.3])
-        trace = policy_efe_ffg_trace(backend, belief, policy, pref, target=target)
+        trace = policy_efe_ffg_trace(
+            backend, belief, policy, pref, info_block=info_block
+        )
         drop = np.asarray(trace.sigma_pred) - np.asarray(trace.sigma_post)
         for step in drop:
             assert np.trace(step) >= -1e-12
@@ -230,33 +248,39 @@ class TestFfgTraceShape:
 class TestFfgTraceTransforms:
     def test_jit_agrees_with_eager(self):
         backend, belief, pref = _coupled_backend(), _coupled_belief(), _pref()
-        target = tuple(backend.block(0))
+        info_block = tuple(backend.block(0))
         policy = _policy([0.4, -0.2])
         run = jax.jit(
-            lambda b, p: policy_efe_ffg_trace(backend, b, p, pref, target=target)
+            lambda b, p: policy_efe_ffg_trace(
+                backend, b, p, pref, info_block=info_block
+            )
         )
-        eager = policy_efe_ffg_trace(backend, belief, policy, pref, target=target)
+        eager = policy_efe_ffg_trace(
+            backend, belief, policy, pref, info_block=info_block
+        )
         jitted = run(belief, policy)
         np.testing.assert_allclose(jitted.g, eager.g, atol=1e-12)
         np.testing.assert_allclose(jitted.sigma_post, eager.sigma_post, atol=1e-12)
 
     def test_vmap_over_policies_adds_a_batch_axis(self):
         backend, belief, pref = _coupled_backend(), _coupled_belief(), _pref()
-        target = tuple(backend.block(0))
+        info_block = tuple(backend.block(0))
         policies = jnp.stack([_policy([0.4, -0.2]), _policy([-0.3, 0.5])])  # (2, 2, 1)
         batched = jax.vmap(
-            lambda p: policy_efe_ffg_trace(backend, belief, p, pref, target=target)
+            lambda p: policy_efe_ffg_trace(
+                backend, belief, p, pref, info_block=info_block
+            )
         )(policies)
         assert batched.g.shape == (2, 2)
         assert batched.sigma_pred.shape == (2, 2, 2, 2)
 
     def test_grad_of_summed_g_is_finite(self):
         backend, belief, pref = _coupled_backend(), _coupled_belief(), _pref()
-        target = tuple(backend.block(0))
+        info_block = tuple(backend.block(0))
         policy = _policy([0.4, -0.2])
         grad = jax.grad(
             lambda p: jnp.sum(
-                policy_efe_ffg_trace(backend, belief, p, pref, target=target).g
+                policy_efe_ffg_trace(backend, belief, p, pref, info_block=info_block).g
             )
         )(policy)
         assert np.all(np.isfinite(np.asarray(grad)))

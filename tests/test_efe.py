@@ -22,16 +22,16 @@ from cpomdp.selection import Preference
 from cpomdp.types import Belief, LinearGaussianModel
 
 
-def _model(observation=None):
+def _model(observation_model=None):
     # 2-state, 1-observation, 1-action, controllable.
     return LinearGaussianModel(
-        dynamics=[[1.0, 0.1], [0.0, 1.0]],
+        dynamics_matrix=[[1.0, 0.1], [0.0, 1.0]],
         observation_matrix=[[1.0, 0.0]],
         dynamics_noise=[[0.1, 0.0], [0.0, 0.1]],
         observation_noise=[[0.5]],
         prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
-        control=[[0.0], [1.0]],
-        observation=observation,
+        control_matrix=[[0.0], [1.0]],
+        observation_model=observation_model,
     )
 
 
@@ -50,8 +50,8 @@ def _numpy_efe(model, belief, action, goal, precision):
     Deliberately mirrors efe.py's math in a separate library (NumPy) and a separate
     code path — no import of the kernel, no shared helpers.
     """
-    A = np.asarray(model.dynamics)
-    B = np.asarray(model.control)
+    A = np.asarray(model.dynamics_matrix)
+    B = np.asarray(model.control_matrix)
     Q = np.asarray(model.dynamics_noise)
     C = np.asarray(model.observation_matrix)
     R = np.asarray(model.observation_noise)
@@ -96,7 +96,7 @@ class TestAgainstNumpyOracle:
 
     def test_raises_without_control(self):
         control_free = LinearGaussianModel(
-            dynamics=[[1.0]],
+            dynamics_matrix=[[1.0]],
             observation_matrix=[[1.0]],
             dynamics_noise=[[0.1]],
             observation_noise=[[0.5]],
@@ -184,7 +184,7 @@ def _callable_model():
         noise_fn=_state_noise,
         noise_params={"base": jnp.array(0.2), "slope": jnp.array(0.5)},
     )
-    return _model(observation=sensor)
+    return _model(observation_model=sensor)
 
 
 class TestCallableSensorBreaksCollapse:
@@ -208,7 +208,7 @@ class TestCallableSensorBreaksCollapse:
         def efe_of_params(params):
             sensor = CallableSensor([[1.0, 0.0]], _state_noise, params)
             return expected_free_energy(
-                _model(observation=sensor), belief, action, pref
+                _model(observation_model=sensor), belief, action, pref
             )[0]
 
         grads = jax.tree_util.tree_leaves(
@@ -226,7 +226,7 @@ class TestCallableSensorBreaksCollapse:
             # cannot catch, where the kept slogdet sign must yield NaN.
             return jnp.array([[1.0 - 10.0 * x[1]]])
 
-        model = _model(observation=CallableSensor([[1.0, 0.0]], neg_noise, {}))
+        model = _model(observation_model=CallableSensor([[1.0, 0.0]], neg_noise, {}))
         epi = expected_free_energy(
             model, _belief(), jnp.array([0.4]), _obs_preference()
         )[1]["epistemic"]
@@ -247,13 +247,13 @@ class TestPrecisionControlsBalance:
             return jnp.array([[0.05 + 0.8 * (1.0 - sharp)]])
 
         model = LinearGaussianModel(
-            dynamics=[[1.0]],
-            control=[[1.0]],
+            dynamics_matrix=[[1.0]],
+            control_matrix=[[1.0]],
             observation_matrix=[[1.0]],
             dynamics_noise=[[0.05]],
             observation_noise=[[0.3]],
             prior=Belief(mean=[0.0], cov=[[0.5]]),
-            observation=CallableSensor([[1.0]], beacon_noise, {}),
+            observation_model=CallableSensor([[1.0]], beacon_noise, {}),
         )
         belief = model.prior
         actions = jnp.linspace(-3.0, 3.0, 121)
@@ -278,14 +278,16 @@ class TestPrecisionControlsBalance:
 
 class TestGaussianizeDispatch:
     def test_none_fast_path_matches_equivalent_fixed_sensor(self):
-        # observation=None (inline fast path) and an equivalent FixedSensor (routed
-        # through gaussianize) must give a byte-identical G — the dispatch is
+        # observation_model=None (inline fast path) and an equivalent FixedSensor
+        # (routed through gaussianize) must give a byte-identical G — the dispatch is
         # behaviour-preserving on the linear case.
         belief, pref = _belief(), _obs_preference()
         action = jnp.array([0.4])
         g_none = expected_free_energy(_model(), belief, action, pref)[0]
         g_fixed = expected_free_energy(
-            _model(observation=FixedSensor([[1.0, 0.0]], [[0.5]])),
+            _model(
+                observation_model=FixedSensor([[1.0, 0.0]], observation_noise=[[0.5]])
+            ),
             belief,
             action,
             pref,
@@ -314,13 +316,13 @@ def _ramp_model():
         noise_params={"base": jnp.array(0.5), "rate": jnp.array(0.4)},
     )
     return LinearGaussianModel(
-        dynamics=[[1.0]],
+        dynamics_matrix=[[1.0]],
         observation_matrix=[[1.0]],
         dynamics_noise=[[0.1]],
         observation_noise=[[0.5]],
         prior=Belief(mean=[0.0], cov=[[0.4]]),
-        control=[[1.0]],
-        observation=sensor,
+        control_matrix=[[1.0]],
+        observation_model=sensor,
     )
 
 
@@ -332,13 +334,13 @@ def _form_components(model, belief, action):
     """Recompute the three rival EFE forms in NumPy (independent of the kernel)."""
     a = np.asarray(action, dtype=float)
     mu_pred = (
-        np.asarray(model.dynamics) @ np.asarray(belief.mean)
-        + np.asarray(model.control) @ a
+        np.asarray(model.dynamics_matrix) @ np.asarray(belief.mean)
+        + np.asarray(model.control_matrix) @ a
     )
-    sigma_pred = np.asarray(model.dynamics) @ np.asarray(belief.cov) @ np.asarray(
-        model.dynamics
-    ).T + np.asarray(model.dynamics_noise)
-    c, r = model.observation.linearize(mu_pred)
+    sigma_pred = np.asarray(model.dynamics_matrix) @ np.asarray(
+        belief.cov
+    ) @ np.asarray(model.dynamics_matrix).T + np.asarray(model.dynamics_noise)
+    c, r = model.observation_model.linearize(mu_pred)
     c, r = np.asarray(c), np.asarray(r)
     o = c @ mu_pred
     s = c @ sigma_pred @ c.T + r
@@ -428,13 +430,13 @@ def _internal_q_model():
         q_fn=_q_well, q_params={"base": jnp.array(0.05), "slope": jnp.array(0.4)}
     )
     return LinearGaussianModel(
-        dynamics=[[1.0]],
+        dynamics_matrix=[[1.0]],
         observation_matrix=[[1.0]],
         dynamics_noise=[[0.1]],
         observation_noise=[[0.3]],  # R is FIXED (observation=None)
         prior=Belief(mean=[0.0], cov=[[0.2]]),
-        control=[[1.0]],
-        process_noise=pn,
+        control_matrix=[[1.0]],
+        dynamics_noise_model=pn,
     )
 
 
@@ -485,12 +487,12 @@ class TestInternalProcessNoise:
     def test_fixed_path_unchanged_when_process_noise_none(self):
         # process_noise=None must give a byte-identical Σ⁺/G to the matrix path.
         base = LinearGaussianModel(
-            dynamics=[[1.0]],
+            dynamics_matrix=[[1.0]],
             observation_matrix=[[1.0]],
             dynamics_noise=[[0.1]],
             observation_noise=[[0.3]],
             prior=Belief(mean=[0.0], cov=[[0.2]]),
-            control=[[1.0]],
+            control_matrix=[[1.0]],
         )
         action = jnp.array([0.7])
         g_ref = _numpy_efe(
@@ -511,13 +513,13 @@ class TestInternalProcessNoise:
         def efe_of_params(params):
             pn = CallableProcessNoise(_q_well, params)
             model = LinearGaussianModel(
-                dynamics=[[1.0]],
+                dynamics_matrix=[[1.0]],
                 observation_matrix=[[1.0]],
                 dynamics_noise=[[0.1]],
                 observation_noise=[[0.3]],
                 prior=Belief(mean=[0.0], cov=[[0.2]]),
-                control=[[1.0]],
-                process_noise=pn,
+                control_matrix=[[1.0]],
+                dynamics_noise_model=pn,
             )
             return expected_free_energy(
                 model, _INTERNAL_BELIEF, action, _INTERNAL_PREF
@@ -542,13 +544,13 @@ def _flip_model():
         _q_ramp, {"base": jnp.array(1.2), "slope": jnp.array(-0.5)}
     )
     return LinearGaussianModel(
-        dynamics=[[1.0]],
+        dynamics_matrix=[[1.0]],
         observation_matrix=[[1.0]],
         dynamics_noise=[[0.1]],
         observation_noise=[[0.2]],
         prior=Belief(mean=[0.0], cov=[[0.1]]),
-        control=[[1.0]],
-        process_noise=pn,
+        control_matrix=[[1.0]],
+        dynamics_noise_model=pn,
     )
 
 
@@ -562,7 +564,7 @@ class TestStraddledSFlip:
         def s_of(action):
             a = np.asarray(action, dtype=float)
             mu_pred = np.array([[1.0]]) @ np.array([0.0]) + np.array([[1.0]]) @ a
-            q = np.asarray(model.process_noise.noise_at(mu_pred))
+            q = np.asarray(model.dynamics_noise_model.noise_at(mu_pred))
             sp = np.array([[1.0]]) @ np.array([[0.1]]) @ np.array([[1.0]]).T + q
             s = np.array([[1.0]]) @ sp @ np.array([[1.0]]).T + np.array([[0.2]])
             return float(s[0, 0])

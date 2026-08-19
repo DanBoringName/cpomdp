@@ -114,7 +114,8 @@ def _reach(horizon):
 def _flat_pair():
     """An equivalent (single-node FFG backend, flat model) pair at n=4, m=3, p=2.
 
-    With no couplings and a whole-state target the FFG rollout must agree with the flat
+    With no couplings and a whole-state info block the FFG rollout must agree with
+    the flat
     ``policy_efe``, so this is a cross-implementation check at ``p > 1``. The FFG
     predicts through the precision form, the flat model through ``AΣAᵀ + Q``.
     """
@@ -132,17 +133,19 @@ def _flat_pair():
     b[1, 1] = 1.0
     sensor = CallableGaussianObservation(_ARENA_C, _cue_noise, _CUE_PARAMS)
     graph = CouplingGraph(root=0, dims=(4,), couplings=(), observations={0: sensor})
-    backend = CouplingGraphBackend(graph, (GaussianTransition(a, q),), control=b)
+    backend = CouplingGraphBackend(
+        graph, (GaussianTransition(a, dynamics_noise=q),), control_matrix=b
+    )
     model = LinearGaussianModel(
-        dynamics=a,
+        dynamics_matrix=a,
         observation_matrix=_ARENA_C,
         dynamics_noise=q,
         observation_noise=np.eye(
             3
         ),  # placeholder under a callable sensor, ignored there
         prior=Belief(mean=np.zeros(4), cov=np.eye(4)),
-        control=b,
-        observation=CallableSensor(_ARENA_C, _cue_noise, _CUE_PARAMS),
+        control_matrix=b,
+        observation_model=CallableSensor(_ARENA_C, _cue_noise, _CUE_PARAMS),
     )
     return backend, model
 
@@ -156,8 +159,10 @@ def _action_set():
 class TestFfgRolloutAtMultiDimAction:
     def test_trace_shapes_track_each_dimension_separately(self):
         backend, belief, pref = _coupled_backend(), _coupled_belief(), _pref()
-        target = tuple(backend.block(CONTEXT))
-        trace = policy_efe_ffg_trace(backend, belief, _walk(4), pref, target=target)
+        info_block = tuple(backend.block(CONTEXT))
+        trace = policy_efe_ffg_trace(
+            backend, belief, _walk(4), pref, info_block=info_block
+        )
         assert trace.g.shape == (4,)  # H
         assert trace.mu_pred.shape == (4, 6)  # H, n
         assert trace.sigma_pred.shape == (4, 6, 6)
@@ -166,19 +171,23 @@ class TestFfgRolloutAtMultiDimAction:
 
     def test_sums_equal_the_summed_rollout(self):
         backend, belief, pref = _coupled_backend(), _coupled_belief(), _pref()
-        target = tuple(backend.block(CONTEXT))
+        info_block = tuple(backend.block(CONTEXT))
         for h in (1, 2, 4):
-            g, parts = policy_efe_ffg(backend, belief, _walk(h), pref, target=target)
-            trace = policy_efe_ffg_trace(backend, belief, _walk(h), pref, target=target)
+            g, parts = policy_efe_ffg(
+                backend, belief, _walk(h), pref, info_block=info_block
+            )
+            trace = policy_efe_ffg_trace(
+                backend, belief, _walk(h), pref, info_block=info_block
+            )
             np.testing.assert_array_equal(g, jnp.sum(trace.g))
             np.testing.assert_array_equal(parts["pragmatic"], jnp.sum(trace.pragmatic))
             np.testing.assert_array_equal(parts["epistemic"], jnp.sum(trace.epistemic))
 
     def test_h1_reduces_to_one_ffg_step(self):
         backend, belief, pref = _coupled_backend(), _coupled_belief(), _pref()
-        target = tuple(backend.block(CONTEXT))
+        info_block = tuple(backend.block(CONTEXT))
         policy = _walk(1)
-        g, parts = policy_efe_ffg(backend, belief, policy, pref, target=target)
+        g, parts = policy_efe_ffg(backend, belief, policy, pref, info_block=info_block)
 
         predicted = backend.predicted_belief(belief, policy[0])
         observation_matrix, _ = backend.observation_model
@@ -189,7 +198,7 @@ class TestFfgRolloutAtMultiDimAction:
             backend.observation_noise_at(predicted.mean),
             pref.goal,
             pref.precision,
-            target,
+            info_block,
         )
         np.testing.assert_array_equal(g, g_ref)
         np.testing.assert_array_equal(parts["pragmatic"], parts_ref["pragmatic"])
@@ -208,10 +217,12 @@ class TestFfgRolloutAtMultiDimAction:
 
     def test_grad_and_vmap_carry_the_action_width(self):
         backend, belief, pref = _coupled_backend(), _coupled_belief(), _pref()
-        target = tuple(backend.block(CONTEXT))
+        info_block = tuple(backend.block(CONTEXT))
 
         def score(policy):
-            return policy_efe_ffg(backend, belief, policy, pref, target=target)[0]
+            return policy_efe_ffg(backend, belief, policy, pref, info_block=info_block)[
+                0
+            ]
 
         grad = jax.grad(score)(_walk(4))
         assert grad.shape == (4, 2)  # H, p
@@ -223,8 +234,10 @@ class TestFfgRolloutAtMultiDimAction:
 
     def test_conditioning_diagnostics_accept_the_wider_rollout(self):
         backend, belief, pref = _coupled_backend(), _coupled_belief(), _pref()
-        target = tuple(backend.block(CONTEXT))
-        trace = policy_efe_ffg_trace(backend, belief, _walk(4), pref, target=target)
+        info_block = tuple(backend.block(CONTEXT))
+        trace = policy_efe_ffg_trace(
+            backend, belief, _walk(4), pref, info_block=info_block
+        )
         rc = rollout_conditioning(trace)
         assert rc.all_positive_definite
         assert rc.cond_sigma_pred.shape == (4,)
@@ -239,7 +252,9 @@ class TestFfgReducesToFlatAtMultiDimAction:
         pref = _pref()
         for h in (2, 3):
             policy = _policy([[0.5, -0.4], [-0.3, 0.2], [0.1, 0.6]], h)
-            g, parts = policy_efe_ffg(backend, belief, policy, pref, target=range(4))
+            g, parts = policy_efe_ffg(
+                backend, belief, policy, pref, info_block=range(4)
+            )
             g_ref, parts_ref = policy_efe(model, belief, policy, pref)
             np.testing.assert_allclose(float(g), float(g_ref), atol=1e-9)
             np.testing.assert_allclose(
@@ -254,13 +269,17 @@ class TestFfgReducesToFlatAtMultiDimAction:
 class TestCrossoverAtMultiDimAction:
     def test_delta_g_is_the_difference_of_the_two_rollouts(self):
         backend, belief, pref = _coupled_backend(), _coupled_belief(), _pref()
-        target = tuple(backend.block(CONTEXT))
+        info_block = tuple(backend.block(CONTEXT))
         for h in (1, 3, 5):
             stat = crossover_statistic(
-                backend, belief, _walk(h), _reach(h), pref, target=target
+                backend, belief, _walk(h), _reach(h), pref, info_block=info_block
             )
-            g_walk = policy_efe_ffg(backend, belief, _walk(h), pref, target=target)[0]
-            g_reach = policy_efe_ffg(backend, belief, _reach(h), pref, target=target)[0]
+            g_walk = policy_efe_ffg(
+                backend, belief, _walk(h), pref, info_block=info_block
+            )[0]
+            g_reach = policy_efe_ffg(
+                backend, belief, _reach(h), pref, info_block=info_block
+            )[0]
             assert stat.horizon == h
             np.testing.assert_allclose(
                 float(stat.delta_g), float(g_walk) - float(g_reach), atol=1e-9
@@ -275,12 +294,12 @@ class TestCrossoverAtMultiDimAction:
         # would give zero, which this test does *not* catch on its own (0 == -0); the
         # non-zero assertion below and the difference-of-rollouts test above do.
         backend, belief, pref = _coupled_backend(), _coupled_belief(), _pref()
-        target = tuple(backend.block(CONTEXT))
+        info_block = tuple(backend.block(CONTEXT))
         forward = crossover_statistic(
-            backend, belief, _walk(4), _reach(4), pref, target=target
+            backend, belief, _walk(4), _reach(4), pref, info_block=info_block
         )
         reversed_ = crossover_statistic(
-            backend, belief, _reach(4), _walk(4), pref, target=target
+            backend, belief, _reach(4), _walk(4), pref, info_block=info_block
         )
         np.testing.assert_allclose(
             float(forward.delta_g), -float(reversed_.delta_g), atol=1e-12
@@ -295,11 +314,16 @@ class TestCrossoverAtMultiDimAction:
         # defined over rather than against a tuned geometry. Whatever the sign pattern,
         # H* is the first horizon where ΔG < 0, and None when there is none.
         backend, belief, pref = _coupled_backend(), _coupled_belief(), _pref()
-        target = tuple(backend.block(CONTEXT))
+        info_block = tuple(backend.block(CONTEXT))
         for walk_of, reach_of in ((_walk, _reach), (_reach, _walk)):
             scan = [
                 crossover_statistic(
-                    backend, belief, walk_of(h), reach_of(h), pref, target=target
+                    backend,
+                    belief,
+                    walk_of(h),
+                    reach_of(h),
+                    pref,
+                    info_block=info_block,
                 ).walk_wins
                 for h in range(1, MAX_H + 1)
             ]
@@ -310,7 +334,7 @@ class TestCrossoverAtMultiDimAction:
                 walk_of,
                 reach_of,
                 pref,
-                target=target,
+                info_block=info_block,
                 max_horizon=MAX_H,
             )
             assert got == want
@@ -327,8 +351,8 @@ class TestCrossoverAtMultiDimAction:
         pattern = {1: +1.0, 2: +0.5, 3: -0.2, 4: -1.0}
         seen = []
 
-        def fake_statistic(_backend, _belief, walk, _reach, _pref, *, target):
-            del target
+        def fake_statistic(_backend, _belief, walk, _reach, _pref, *, info_block):
+            del info_block
             horizon = int(np.asarray(walk).shape[0])
             seen.append(horizon)
             delta_g = jnp.asarray(pattern[horizon])
@@ -341,7 +365,7 @@ class TestCrossoverAtMultiDimAction:
             _walk,
             _reach,
             _pref(),
-            target=(0,),
+            info_block=(0,),
             max_horizon=MAX_H,
         )
         assert got == 3  # the *first* negative, not merely some negative
@@ -353,12 +377,12 @@ class TestCrossoverAtMultiDimAction:
         # axis, so the pull is bought by action dim 1 alone. A rollout that dropped the
         # second action component would read Δε ≈ 0 rather than fail a shape check.
         backend, belief, pref = _coupled_backend(), _coupled_belief(), _pref()
-        target = tuple(backend.block(CONTEXT))
+        info_block = tuple(backend.block(CONTEXT))
         near = crossover_statistic(
-            backend, belief, _walk(4), _reach(4), pref, target=target
+            backend, belief, _walk(4), _reach(4), pref, info_block=info_block
         )
         far = crossover_statistic(
-            backend, belief, _walk(8), _reach(8), pref, target=target
+            backend, belief, _walk(8), _reach(8), pref, info_block=info_block
         )
         assert float(near.delta_epsilon) > 0.1
         assert float(far.delta_c) < float(near.delta_c)
@@ -367,18 +391,18 @@ class TestCrossoverAtMultiDimAction:
         # A control on the finder at p = 2: ΔG(H) = 0 for all H, so there is no flip and
         # None comes back rather than a spurious H*.
         backend, belief, pref = _coupled_backend(), _coupled_belief(), _pref()
-        target = tuple(backend.block(CONTEXT))
+        info_block = tuple(backend.block(CONTEXT))
         h_star = crossover_horizon(
-            backend, belief, _walk, _walk, pref, target=target, max_horizon=3
+            backend, belief, _walk, _walk, pref, info_block=info_block, max_horizon=3
         )
         assert h_star is None
 
     def test_mismatched_horizons_are_rejected(self):
         backend, belief, pref = _coupled_backend(), _coupled_belief(), _pref()
-        target = tuple(backend.block(CONTEXT))
+        info_block = tuple(backend.block(CONTEXT))
         with np.testing.assert_raises(ValueError):
             crossover_statistic(
-                backend, belief, _walk(3), _reach(2), pref, target=target
+                backend, belief, _walk(3), _reach(2), pref, info_block=info_block
             )
 
 
@@ -388,7 +412,7 @@ class TestEnumeratedSearchAtMultiDimAction:
         backend, belief, pref = _coupled_backend(), _coupled_belief(), _pref()
         action_set = _action_set()
         search = EnumeratedEfeSearch.over_backend(
-            backend, action_set, target=tuple(backend.block(CONTEXT)), horizon=3
+            backend, action_set, info_block=tuple(backend.block(CONTEXT)), horizon=3
         )
         result = search.evaluate(belief, pref)
         assert search.certificate.complete
@@ -404,7 +428,7 @@ class TestEnumeratedSearchAtMultiDimAction:
         backend = _coupled_backend()
         action_set = _action_set()
         search = EnumeratedEfeSearch.over_backend(
-            backend, action_set, target=tuple(backend.block(CONTEXT)), horizon=2
+            backend, action_set, info_block=tuple(backend.block(CONTEXT)), horizon=2
         )
         policies = np.asarray(search.policies)
         assert policies.shape == (25, 2, 2)  # |A|^H, H, p

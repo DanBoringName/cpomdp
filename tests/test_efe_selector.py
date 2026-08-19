@@ -46,13 +46,13 @@ def _corridor_model(*, fixed=False):
         )
     )
     return LinearGaussianModel(
-        dynamics=[[1.0]],
+        dynamics_matrix=[[1.0]],
         observation_matrix=[[1.0]],
         dynamics_noise=[[0.05]],
         observation_noise=[[0.3]],  # fixed-sensor fallback / fixed-model noise
         prior=Belief(mean=[0.0], cov=[[0.5]]),
-        control=[[1.0]],
-        observation=sensor,
+        control_matrix=[[1.0]],
+        observation_model=sensor,
     )
 
 
@@ -61,19 +61,19 @@ _PREF = Preference(goal=[0.0], precision=[[0.4]])  # obs-space: prefer to observ
 
 def _numpy_g(model, belief, action, goal, precision):
     """Independent NumPy (G, pragmatic) — reads R(μ⁺) via the sensor, no kernel code."""
-    a_mat, b_mat = np.asarray(model.dynamics), np.asarray(model.control)
+    a_mat, b_mat = np.asarray(model.dynamics_matrix), np.asarray(model.control_matrix)
     q_mat = np.asarray(model.dynamics_noise)
     mu, sigma = np.asarray(belief.mean), np.asarray(belief.cov)
     a = np.asarray(action, dtype=float)
     mu_pred = a_mat @ mu + b_mat @ a
     sigma_pred = a_mat @ sigma @ a_mat.T + q_mat
-    if model.observation is None:
+    if model.observation_model is None:
         c_mat, r_mat = (
             np.asarray(model.observation_matrix),
             np.asarray(model.observation_noise),
         )
     else:
-        c_jax, r_jax = model.observation.linearize(mu_pred)
+        c_jax, r_jax = model.observation_model.linearize(mu_pred)
         c_mat, r_mat = np.asarray(c_jax), np.asarray(r_jax)
     o = c_mat @ mu_pred
     s = c_mat @ sigma_pred @ c_mat.T + r_mat
@@ -101,7 +101,7 @@ class TestEFESelector:
 
     def test_control_free_model_raises(self):
         control_free = LinearGaussianModel(
-            dynamics=[[1.0]],
+            dynamics_matrix=[[1.0]],
             observation_matrix=[[1.0]],
             dynamics_noise=[[0.1]],
             observation_noise=[[0.3]],

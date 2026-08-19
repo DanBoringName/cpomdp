@@ -205,10 +205,10 @@ class _FlatScorer:
 
 @dataclass(frozen=True)
 class _FfgScorer:
-    """Scores with ``policy_efe_ffg`` on an FFG backend, aimed at ``target``."""
+    """Scores with ``policy_efe_ffg`` on an FFG backend, aimed at ``info_block``."""
 
     backend: "EfeBackend"
-    target: tuple[int, ...]
+    info_block: tuple[int, ...]
 
     @property
     def action_dim(self) -> int:
@@ -218,7 +218,7 @@ class _FfgScorer:
         self, belief: Belief, policy: Float64[Array, "H p"], preference: "Preference"
     ) -> Float64[Array, ""]:
         return policy_efe_ffg(
-            self.backend, belief, policy, preference, target=self.target
+            self.backend, belief, policy, preference, info_block=self.info_block
         )[0]
 
 
@@ -248,7 +248,7 @@ class EnumeratedEfeSearch:
         *,
         horizon: int,
     ) -> None:
-        if model.control is None:
+        if model.control_matrix is None:
             raise ValueError(
                 "EnumeratedEfeSearch needs a model with a control matrix; an "
                 "action has no effect on a control-free (pure-tracking) model."
@@ -261,24 +261,24 @@ class EnumeratedEfeSearch:
         backend: "EfeBackend",
         action_set: FiniteActionSet,
         *,
-        target: Sequence[int],
+        info_block: Sequence[int],
         horizon: int,
     ) -> "EnumeratedEfeSearch":
         """Exhaustive search that scores on an FFG ``backend`` via ``policy_efe_ffg``.
 
         The FFG counterpart of the flat constructor: it enumerates the same ``A^H`` set
         with the same completeness certificate, but scores each policy on a coupling
-        graph with the epistemic aimed at ``target`` — a node's block (via
+        graph with the epistemic aimed at ``info_block`` — a node's block (via
         ``backend.block``) or the whole state. This runs the coupled-tree model the flat
         constructor cannot express.
         """
-        if backend.model.control is None:
+        if backend.model.control_matrix is None:
             raise ValueError(
                 "EnumeratedEfeSearch.over_backend needs a backend with a control "
                 "matrix; an action has no effect without one."
             )
         search = cls.__new__(cls)
-        search._setup(_FfgScorer(backend, tuple(target)), action_set, horizon)
+        search._setup(_FfgScorer(backend, tuple(info_block)), action_set, horizon)
         return search
 
     def _setup(
@@ -461,7 +461,7 @@ class ChunkedEfeSearch:
         horizon: int,
         chunk: int = DEFAULT_CHUNK,
     ) -> None:
-        if model.control is None:
+        if model.control_matrix is None:
             raise ValueError(
                 "ChunkedEfeSearch needs a model with a control matrix; an action has "
                 "no effect on a control-free (pure-tracking) model."
@@ -474,18 +474,20 @@ class ChunkedEfeSearch:
         backend: "EfeBackend",
         action_set: FiniteActionSet,
         *,
-        target: Sequence[int],
+        info_block: Sequence[int],
         horizon: int,
         chunk: int = DEFAULT_CHUNK,
     ) -> "ChunkedEfeSearch":
         """Chunked search that scores on an FFG ``backend`` via ``policy_efe_ffg``."""
-        if backend.model.control is None:
+        if backend.model.control_matrix is None:
             raise ValueError(
                 "ChunkedEfeSearch.over_backend needs a backend with a control "
                 "matrix; an action has no effect without one."
             )
         search = cls.__new__(cls)
-        search._setup(_FfgScorer(backend, tuple(target)), action_set, horizon, chunk)
+        search._setup(
+            _FfgScorer(backend, tuple(info_block)), action_set, horizon, chunk
+        )
         return search
 
     def _setup(

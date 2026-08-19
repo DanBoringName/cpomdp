@@ -43,15 +43,15 @@ from cpomdp.types import Belief, LinearGaussianModel
 
 
 # --- fixtures: one model per branch the rollout exercises -------------------------
-def _model(observation=None):
+def _model(observation_model=None):
     return LinearGaussianModel(
-        dynamics=[[1.0, 0.1], [0.0, 1.0]],
+        dynamics_matrix=[[1.0, 0.1], [0.0, 1.0]],
         observation_matrix=[[1.0, 0.0]],
         dynamics_noise=[[0.1, 0.0], [0.0, 0.1]],
         observation_noise=[[0.5]],
         prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
-        control=[[0.0], [1.0]],
-        observation=observation,
+        control_matrix=[[0.0], [1.0]],
+        observation_model=observation_model,
     )
 
 
@@ -73,7 +73,7 @@ def _callable_model():
         noise_fn=_state_noise,
         noise_params={"base": jnp.array(0.2), "slope": jnp.array(0.5)},
     )
-    return _model(observation=sensor)
+    return _model(observation_model=sensor)
 
 
 def _q_well(x, params):
@@ -85,13 +85,13 @@ def _internal_q_model():
         q_fn=_q_well, q_params={"base": jnp.array(0.05), "slope": jnp.array(0.4)}
     )
     return LinearGaussianModel(
-        dynamics=[[1.0]],
+        dynamics_matrix=[[1.0]],
         observation_matrix=[[1.0]],
         dynamics_noise=[[0.1]],
         observation_noise=[[0.3]],
         prior=Belief(mean=[0.0], cov=[[0.2]]),
-        control=[[1.0]],
-        process_noise=pn,
+        control_matrix=[[1.0]],
+        dynamics_noise_model=pn,
     )
 
 
@@ -121,8 +121,8 @@ def _numpy_policy_efe(model, belief, policy, goal, precision):
     independent confirmation. Returns `(G, covs)`: the summed EFE and the per-step
     propagated covariances (for the PSD check).
     """
-    a_mat = np.asarray(model.dynamics)
-    b_mat = np.asarray(model.control)
+    a_mat = np.asarray(model.dynamics_matrix)
+    b_mat = np.asarray(model.control_matrix)
     g = np.asarray(goal, dtype=float)
     lam = np.asarray(precision, dtype=float)
     mu = np.asarray(belief.mean, dtype=float)
@@ -132,17 +132,17 @@ def _numpy_policy_efe(model, belief, policy, goal, precision):
     covs = []
     for a in np.asarray(policy, dtype=float):
         mu_pred = a_mat @ mu + b_mat @ a
-        if model.process_noise is None:
+        if model.dynamics_noise_model is None:
             q = np.asarray(model.dynamics_noise)
         else:
-            q = np.asarray(model.process_noise.noise_at(mu_pred))
+            q = np.asarray(model.dynamics_noise_model.noise_at(mu_pred))
         sigma_pred = a_mat @ sigma @ a_mat.T + q
 
-        if model.observation is None:
+        if model.observation_model is None:
             c = np.asarray(model.observation_matrix)
             r = np.asarray(model.observation_noise)
         else:
-            c_arr, r_arr = model.observation.linearize(mu_pred)
+            c_arr, r_arr = model.observation_model.linearize(mu_pred)
             c, r = np.asarray(c_arr), np.asarray(r_arr)
         o_pred = c @ mu_pred
         s = c @ sigma_pred @ c.T + r

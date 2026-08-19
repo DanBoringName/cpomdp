@@ -115,7 +115,9 @@ class Agent:
         self.model = model
         self.belief = model.prior
         self._backend = backend
-        sensor_is_fixed = model.observation is None or model.observation.is_fixed
+        sensor_is_fixed = (
+            model.observation_model is None or model.observation_model.is_fixed
+        )
 
         if objective is None:
             # perceive-only tracker: nothing to act toward.
@@ -151,7 +153,7 @@ class Agent:
         elif isinstance(objective, ObservationGoal):
             # observation-space goal -> EFE. Needs control to act; on a fixed sensor it
             # is output regulation (deferred), so require an explicit selector there.
-            if model.control is None:
+            if model.control_matrix is None:
                 raise ValueError(
                     "an ObservationGoal needs a model with a control matrix to act."
                 )
@@ -162,9 +164,9 @@ class Agent:
                     "(deferred); pass a StateGoal for the LQR path, or "
                     "selector=EFESelector(...) to opt into H=1 EFE."
                 )
-            if objective.info_target is not None and not is_ffg:
+            if objective.info_node is not None and not is_ffg:
                 raise ValueError(
-                    "info_target aims the epistemic at an FFG node; it needs a "
+                    "info_node aims the epistemic at an FFG node; it needs a "
                     "CouplingGraphBackend, not a flat backend."
                 )
             m = model.n_observations
@@ -199,7 +201,7 @@ class Agent:
     def _build_ffg_selector(self, objective: ObservationGoal) -> FfgEfeSelector:
         """The EFE selector for an ObservationGoal on a branching backend (issue #26).
 
-        ``info_target`` names the latent *node* whose marginal info gain is the
+        ``info_node`` names the latent *node* whose marginal info gain is the
         epistemic value; ``None`` aims at the whole joint state. Translate that node to
         its joint-state block and hand it to the ``FfgEfeSelector``.
         """
@@ -210,19 +212,19 @@ class Agent:
                 "H-step EFE on the FFG backend is deferred; ObservationGoal.horizon "
                 "must be 1 with a CouplingGraphBackend."
             )
-        if objective.info_target is None:
-            target: range = range(backend.n_total)  # whole-state info gain
+        if objective.info_node is None:
+            info_block: range = range(backend.n_total)  # whole-state info gain
         else:
             n_nodes = len(backend.dims)
-            if not 0 <= objective.info_target < n_nodes:
+            if not 0 <= objective.info_node < n_nodes:
                 raise ValueError(
-                    f"info_target {objective.info_target} is not a node index "
+                    f"info_node {objective.info_node} is not a node index "
                     f"(0..{n_nodes - 1})."
                 )
-            target = backend.block(objective.info_target)
+            info_block = backend.block(objective.info_node)
         return FfgEfeSelector(
             backend,
-            target=target,
+            info_block=info_block,
             n_candidates=objective.n_candidates,
             action_bounds=objective.action_bounds,
         )

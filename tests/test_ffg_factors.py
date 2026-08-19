@@ -62,8 +62,18 @@ def _belief_as_canonical(mean, cov):
 
 
 class TestGaussianObservation:
+    def test_observation_noise_is_keyword_only(self):
+        # Same pair as FixedSensor, same reason: (m, n) against (m, m) is only
+        # distinguishable when m != n, and the factor validates just the noise.
+        with pytest.raises(TypeError, match="positional"):
+            # Calling it wrongly is the test, so ty's arity errors are expected.
+            GaussianObservation(  # ty: ignore[missing-argument]
+                jnp.eye(2),
+                jnp.eye(2) * 0.1,  # ty: ignore[too-many-positional-arguments]
+            )
+
     def test_stores_coerced_arrays(self):
-        fac = GaussianObservation([[1.0, 0.0]], [[2.0]])
+        fac = GaussianObservation([[1.0, 0.0]], observation_noise=[[2.0]])
         assert isinstance(fac.observation_matrix, jax.Array)
         np.testing.assert_array_equal(fac.observation_matrix, [[1.0, 0.0]])
         np.testing.assert_array_equal(fac.observation_noise, [[2.0]])
@@ -71,12 +81,14 @@ class TestGaussianObservation:
     def test_rejects_singular_observation_noise(self):
         # R is inverted in the message, so a singular R is rejected at construction.
         with pytest.raises(ValueError, match="positive-definite"):
-            GaussianObservation([[1.0]], [[0.0]])
+            GaussianObservation([[1.0]], observation_noise=[[0.0]])
 
     def test_rejects_observation_noise_shape_mismatch(self):
         # C is 1xn (m=1) but R is 2x2 — R must be m x m.
         with pytest.raises(ValueError, match="match"):
-            GaussianObservation([[1.0, 0.0]], [[1.0, 0.0], [0.0, 1.0]])
+            GaussianObservation(
+                [[1.0, 0.0]], observation_noise=[[1.0, 0.0], [0.0, 1.0]]
+            )
 
     def test_message_is_information_form_of_likelihood(self):
         rng = np.random.default_rng(0)
@@ -84,7 +96,7 @@ class TestGaussianObservation:
         C = rng.standard_normal((m, n))
         R = _spd(rng, m)
         y = rng.standard_normal(m)
-        msg = GaussianObservation(C, R).message(y)
+        msg = GaussianObservation(C, observation_noise=R).message(y)
         Rinv = np.linalg.inv(R)
         np.testing.assert_allclose(msg.precision, C.T @ Rinv @ C, atol=1e-10)
         np.testing.assert_allclose(msg.potential, C.T @ Rinv @ y, atol=1e-10)
@@ -102,13 +114,17 @@ class TestGaussianObservation:
         mean_post = mean + gain @ (y - C @ mean)
         cov_post = (np.eye(n) - gain @ C) @ cov
 
-        post = _belief_as_canonical(mean, cov) + GaussianObservation(C, R).message(y)
+        post = _belief_as_canonical(mean, cov) + GaussianObservation(
+            C, observation_noise=R
+        ).message(y)
         out_mean, out_cov = post.to_moment()
         np.testing.assert_allclose(out_mean, mean_post, atol=1e-8)
         np.testing.assert_allclose(out_cov, cov_post, atol=1e-8)
 
     def test_jit_and_grad_through_message(self):
-        fac = GaussianObservation([[1.0, 0.5], [0.0, 1.0]], [[1.0, 0.0], [0.0, 1.0]])
+        fac = GaussianObservation(
+            [[1.0, 0.5], [0.0, 1.0]], observation_noise=[[1.0, 0.0], [0.0, 1.0]]
+        )
         y = jnp.array([1.0, -1.0])
         eager = fac.message(y).potential
         jitted = jax.jit(lambda yy: fac.message(yy).potential)(y)
@@ -160,7 +176,7 @@ class TestCallableGaussianObservation:
         y = rng.standard_normal(m)
         params = {"R0": jnp.asarray(R0), "gain": 0.0}
         callable_fac = CallableGaussianObservation(C, _constant_noise, params)
-        fixed = GaussianObservation(C, R0)
+        fixed = GaussianObservation(C, observation_noise=R0)
         states = (np.zeros(n), rng.standard_normal(n), 3.0 * rng.standard_normal(n))
         for state in states:
             msg = callable_fac.message(y, jnp.asarray(state))
@@ -266,18 +282,40 @@ class TestCallableGaussianObservation:
 
 class TestGaussianTransition:
     def test_stores_coerced_arrays(self):
-        fac = GaussianTransition([[1.0]], [[2.0]])
-        assert isinstance(fac.dynamics, jax.Array)
-        np.testing.assert_array_equal(fac.dynamics, [[1.0]])
+        fac = GaussianTransition([[1.0]], dynamics_noise=[[2.0]])
+        assert isinstance(fac.dynamics_matrix, jax.Array)
+        np.testing.assert_array_equal(fac.dynamics_matrix, [[1.0]])
+
+    def test_dynamics_noise_is_keyword_only(self):
+        # A and Q are both (n, n) at every dimension, and only Q is content-checked, so
+        # a transposed pair builds a factor whose predict step is quietly wrong. Unlike
+        # the sensor pair this needs no square-shape coincidence to go silent.
+        with pytest.raises(TypeError, match="positional"):
+            # Calling it wrongly is the test, so ty's arity errors are expected.
+            GaussianTransition(  # ty: ignore[missing-argument]
+                jnp.eye(2),
+                jnp.eye(2) * 0.1,  # ty: ignore[too-many-positional-arguments]
+            )
+
+    def test_from_ou_parameters_after_tau_are_keyword_only(self):
+        # tau and dt are both positive scalars in the same time unit, and nothing in
+        # the body can tell them apart: A = exp(-dt/tau) is finite either way.
+        with pytest.raises(TypeError, match="positional"):
+            # Calling it wrongly is the test, so ty's arity errors are expected.
+            GaussianTransition.from_ou(  # ty: ignore[missing-argument]
+                2.0,
+                0.5,  # ty: ignore[too-many-positional-arguments]
+                0.1,
+            )
 
     def test_rejects_singular_process_noise(self):
         # Q is inverted in the joint, so a singular Q is rejected at construction.
         with pytest.raises(ValueError, match="positive-definite"):
-            GaussianTransition([[1.0]], [[0.0]])
+            GaussianTransition([[1.0]], dynamics_noise=[[0.0]])
 
     def test_rejects_nonsquare_dynamics(self):
         with pytest.raises(ValueError, match="square"):
-            GaussianTransition([[1.0, 0.0]], [[1.0]])
+            GaussianTransition([[1.0, 0.0]], dynamics_noise=[[1.0]])
 
     @pytest.mark.parametrize("n", [1, 2, 3])
     def test_predict_matches_moment_form(self, n):
@@ -290,7 +328,9 @@ class TestGaussianTransition:
         cov_pred = A @ cov @ A.T + Q
         mean_pred = A @ mean
 
-        pred = GaussianTransition(A, Q).predict(_belief_as_canonical(mean, cov))
+        pred = GaussianTransition(A, dynamics_noise=Q).predict(
+            _belief_as_canonical(mean, cov)
+        )
         out_mean, out_cov = pred.to_moment()
         np.testing.assert_allclose(out_mean, mean_pred, atol=1e-7)
         np.testing.assert_allclose(out_cov, cov_pred, atol=1e-7)
@@ -300,9 +340,9 @@ class TestGaussianTransition:
     )
     def test_from_ou_exact_discretisation(self, tau, var, dt):
         # Exact OU discretisation (ADR-017): A_i = exp(-dt/τ), Q_i = Σ_stat (1 − A²).
-        t = GaussianTransition.from_ou(tau, var, dt)
+        t = GaussianTransition.from_ou(tau, stationary_var=var, dt=dt)
         a = np.exp(-dt / tau)
-        np.testing.assert_allclose(np.asarray(t.dynamics), [[a]], atol=1e-12)
+        np.testing.assert_allclose(np.asarray(t.dynamics_matrix), [[a]], atol=1e-12)
         np.testing.assert_allclose(
             np.asarray(t.dynamics_noise), [[var * (1.0 - a * a)]], atol=1e-12
         )
@@ -311,8 +351,8 @@ class TestGaussianTransition:
         # The property oracle: the discrete stationary variance P = Q/(1−A²) must equal
         # the requested Σ_stat at any τ, dt (a wrong Q, e.g. Σ(1−A), fails this).
         for tau, var, dt in [(0.05, 1.7, 0.01), (9.9, 0.4, 0.01), (9.9, 0.4, 2.0)]:
-            t = GaussianTransition.from_ou(tau, var, dt)
-            a = float(np.asarray(t.dynamics)[0, 0])
+            t = GaussianTransition.from_ou(tau, stationary_var=var, dt=dt)
+            a = float(np.asarray(t.dynamics_matrix)[0, 0])
             q = float(np.asarray(t.dynamics_noise)[0, 0])
             np.testing.assert_allclose(q / (1.0 - a * a), var, atol=1e-10)
 
@@ -320,8 +360,10 @@ class TestGaussianTransition:
         # Fast (τ=0.05s) and slow (τ=9.9s) on ONE dt both give A∈(0,1) and a PD Q (it
         # constructs) — no blow-up at the stiff slow mode (exact, not Euler; ADR-017).
         for tau in (0.05, 9.9):
-            t = GaussianTransition.from_ou(tau, 1.0, dt=0.01)  # builds ⇒ Q is PD
-            assert 0.0 < float(np.asarray(t.dynamics)[0, 0]) < 1.0
+            t = GaussianTransition.from_ou(
+                tau, stationary_var=1.0, dt=0.01
+            )  # builds ⇒ Q is PD
+            assert 0.0 < float(np.asarray(t.dynamics_matrix)[0, 0]) < 1.0
 
     def test_predict_applies_control_term(self):
         # The control shifts the predicted mean by b; the covariance is unchanged.
@@ -335,7 +377,7 @@ class TestGaussianTransition:
         mean_pred = A @ mean + b
         cov_pred = A @ cov @ A.T + Q
 
-        pred = GaussianTransition(A, Q).predict(
+        pred = GaussianTransition(A, dynamics_noise=Q).predict(
             _belief_as_canonical(mean, cov), control_term=b
         )
         out_mean, out_cov = pred.to_moment()
@@ -343,7 +385,9 @@ class TestGaussianTransition:
         np.testing.assert_allclose(out_cov, cov_pred, atol=1e-7)
 
     def test_jit_and_grad_through_predict(self):
-        fac = GaussianTransition([[1.0, 0.1], [0.0, 1.0]], [[1.0, 0.0], [0.0, 1.0]])
+        fac = GaussianTransition(
+            [[1.0, 0.1], [0.0, 1.0]], dynamics_noise=[[1.0, 0.0], [0.0, 1.0]]
+        )
         msg = CanonicalGaussian([[2.0, 0.0], [0.0, 2.0]], [1.0, 0.0])
         eager = fac.predict(msg).potential
         jitted = jax.jit(
@@ -405,7 +449,7 @@ class TestGaussianCoupling:
         cov_post = (np.eye(p + c) - gain @ H) @ cov_j
         parent_mean, parent_cov = mean_post[:p], cov_post[:p, :p]
 
-        child_msg = GaussianObservation(np.eye(c), R).message(y)
+        child_msg = GaussianObservation(np.eye(c), observation_noise=R).message(y)
         up = GaussianCoupling(W, Q).message_to_parent(child_msg)
         out_mean, out_cov = (_belief_as_canonical(m0, P0) + up).to_moment()
 

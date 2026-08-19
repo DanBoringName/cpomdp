@@ -62,14 +62,15 @@ def crossover_statistic(
     reach: Float64[Array, "H p"],
     preference: "Preference",
     *,
-    target,
+    info_block,
 ) -> CrossoverStatistic:
     """The crossover contrast between two equal-length policies at their horizon.
 
     Runs the FFG rollout (``policy_efe_ffg``) for ``walk`` and ``reach``, then
     contrasts the summed components: ``Δε = ε(walk) − ε(reach)``,
     ``Δc = c(walk) − c(reach)``, ``ΔG = Δc − Δε``. The epistemic reading follows
-    ``target`` - a node's block (via ``backend.block``) for the node-restricted pull,
+    ``info_block`` - a node's block (via ``backend.block``) for the node-restricted
+    pull,
     or the whole state.
 
     Raises:
@@ -83,8 +84,12 @@ def crossover_statistic(
             f"{walk.shape[0]} and {reach.shape[0]}"
         )
 
-    _, walk_parts = policy_efe_ffg(backend, belief, walk, preference, target=target)
-    _, reach_parts = policy_efe_ffg(backend, belief, reach, preference, target=target)
+    _, walk_parts = policy_efe_ffg(
+        backend, belief, walk, preference, info_block=info_block
+    )
+    _, reach_parts = policy_efe_ffg(
+        backend, belief, reach, preference, info_block=info_block
+    )
 
     delta_epsilon = walk_parts["epistemic"] - reach_parts["epistemic"]
     delta_c = walk_parts["pragmatic"] - reach_parts["pragmatic"]
@@ -100,7 +105,7 @@ def crossover_horizon(
     reach_of: Callable[[int], Float64[Array, "H p"]],
     preference: "Preference",
     *,
-    target,
+    info_block,
     max_horizon: int,
 ) -> int | None:
     """H* — the first horizon at which the walk overtakes the reach.
@@ -118,7 +123,7 @@ def crossover_horizon(
             walk_of(horizon),
             reach_of(horizon),
             preference,
-            target=target,
+            info_block=info_block,
         )
         if bool(stat.delta_g < 0):
             return horizon

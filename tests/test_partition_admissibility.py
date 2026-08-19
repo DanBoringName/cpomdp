@@ -48,26 +48,26 @@ def _hub_graph(*, fast_relevant=True, slow_relevant=False):
             ),
         ),
         observations={
-            1: GaussianObservation([[1.0]], [[0.1]]),
-            2: GaussianObservation([[1.0]], [[0.1]]),
+            1: GaussianObservation([[1.0]], observation_noise=[[0.1]]),
+            2: GaussianObservation([[1.0]], observation_noise=[[0.1]]),
         },
     )
 
 
 def _backend(graph, partition=None):
     transitions = (
-        GaussianTransition([[0.7]], [[0.1]]),
-        GaussianTransition([[0.5]], [[0.08]]),
-        GaussianTransition([[0.9]], [[0.02]]),
+        GaussianTransition([[0.7]], dynamics_noise=[[0.1]]),
+        GaussianTransition([[0.5]], dynamics_noise=[[0.08]]),
+        GaussianTransition([[0.9]], dynamics_noise=[[0.02]]),
     )
     return CouplingGraphBackend(
-        graph, transitions, control=[[1.0], [0.0], [0.0]], partition=partition
+        graph, transitions, control_matrix=[[1.0], [0.0], [0.0]], partition=partition
     )
 
 
 def _selector(backend):
     return FfgEfeSelector(
-        backend, target=range(3), n_candidates=11, action_bounds=(-2.0, 2.0)
+        backend, info_block=range(3), n_candidates=11, action_bounds=(-2.0, 2.0)
     )
 
 
@@ -119,7 +119,10 @@ def test_agent_rejects_inadmissible_partition():
     # The Agent builds the FFG selector, so the guard reaches the user-facing path too.
     backend = _backend(_hub_graph(), partition=[[0, 2], [1]])
     with pytest.raises(InadmissiblePartitionError):
-        Agent(objective=ObservationGoal([0.5, 0.5], (-2.0, 2.0)), backend=backend)
+        Agent(
+            objective=ObservationGoal([0.5, 0.5], action_bounds=(-2.0, 2.0)),
+            backend=backend,
+        )
 
 
 def test_selector_still_selects_on_admissible_partition():

@@ -14,7 +14,7 @@ precision constraint lives in internal processing rather than the sensor.
   gain move with it. R is the SAME constant as on the left — the whole effect is
   internal.
 
-Run: `uv run python examples/internal_noise_figure.py`
+Run: `uv run --extra examples python examples/internal_noise_figure.py`
 Output: docs/assets/internal_noise.png
 """
 
@@ -34,11 +34,11 @@ OUT = Path(__file__).resolve().parent.parent / "docs" / "assets" / "internal_noi
 # 1-D single integrator: μ⁺ = μ + a, so the action moves the state directly and a
 # one-step sweep is clean. R (observation noise) is fixed throughout — the only thing
 # that varies between the panels is Q.
-DYNAMICS = [[1.0]]
-CONTROL = [[1.0]]
-SENSOR = [[1.0]]
-FIXED_R = [[0.3]]  # the SAME on both panels
-FIXED_Q = [[0.2]]
+DYNAMICS_MATRIX = [[1.0]]
+CONTROL_MATRIX = [[1.0]]
+OBSERVATION_MATRIX = [[1.0]]
+OBSERVATION_NOISE = [[0.3]]  # the SAME on both panels
+DYNAMICS_NOISE = [[0.2]]
 BELIEF = Belief(mean=[0.0], cov=[[0.4]])
 GOAL = Preference(goal=[0.0], precision=[[0.15]])
 ACTIONS = jnp.linspace(-2.5, 3.5, 400)
@@ -58,15 +58,15 @@ def _bump_q(x, params):
     )
 
 
-def _model(process_noise=None):
+def _model(dynamics_noise_model=None):
     return LinearGaussianModel(
-        dynamics=DYNAMICS,
-        observation_matrix=SENSOR,
-        dynamics_noise=FIXED_Q,
-        observation_noise=FIXED_R,
+        dynamics_matrix=DYNAMICS_MATRIX,
+        observation_matrix=OBSERVATION_MATRIX,
+        dynamics_noise=DYNAMICS_NOISE,
+        observation_noise=OBSERVATION_NOISE,
         prior=BELIEF,
-        control=CONTROL,
-        process_noise=process_noise,
+        control_matrix=CONTROL_MATRIX,
+        dynamics_noise_model=dynamics_noise_model,
     )
 
 
@@ -101,7 +101,7 @@ def main():
             "width": jnp.array(0.6),
         },
     )
-    prag_s, epi_s, g_s = _sweep(_model(process_noise=q_well))
+    prag_s, epi_s, g_s = _sweep(_model(dynamics_noise_model=q_well))
 
     fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(12.5, 5.2), sharex=True)
     fig.suptitle(

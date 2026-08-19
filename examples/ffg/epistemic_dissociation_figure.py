@@ -142,7 +142,9 @@ def build_backend(
     cue = (
         CallableGaussianObservation(observation_matrix, cue_noise, _cue_params(cue_x))
         if epistemic_alive
-        else GaussianObservation(observation_matrix, _fixed_noise_at_prior(cue_x))
+        else GaussianObservation(
+            observation_matrix, observation_noise=_fixed_noise_at_prior(cue_x)
+        )
     )
     context_to_arm = Coupling(
         parent=CONTEXT,
@@ -161,13 +163,19 @@ def build_backend(
         observations={ARM_NODE: cue},
     )
     transitions = (
-        GaussianTransition([[1.0]], [[Q_CONTEXT]]),  # node 0: context, near-static
+        GaussianTransition(
+            [[1.0]], dynamics_noise=[[Q_CONTEXT]]
+        ),  # node 0: context, near-static
         GaussianTransition(  # node 1: [position, arm]
-            [[1.0, 0.0], [0.0, 1.0]], [[Q_POSITION, 0.0], [0.0, Q_ARM]]
+            [[1.0, 0.0], [0.0, 1.0]], dynamics_noise=[[Q_POSITION, 0.0], [0.0, Q_ARM]]
         ),
     )
-    control = [[0.0], [1.0], [0.0]]  # B: the 1-D action drives position (joint idx 1)
-    return CouplingGraphBackend(graph, transitions, control=control)
+    control_matrix = [
+        [0.0],
+        [1.0],
+        [0.0],
+    ]  # B: the 1-D action drives position (joint idx 1)
+    return CouplingGraphBackend(graph, transitions, control_matrix=control_matrix)
 
 
 def start_belief() -> Belief:
@@ -182,7 +190,7 @@ def build_agent(backend: CouplingGraphBackend) -> Agent:
 
     Because the predicted commit reading is ``E[f]+ - x+`` and f tracks the context,
     "observe zero displacement" drives ``x -> E[context]`` -- resolving the context
-    changes where the agent heads. ``info_target`` aims the epistemic at the context.
+    changes where the agent heads. ``info_node`` aims the epistemic at the context.
     """
     objective = ObservationGoal(
         target=[0.0, 0.0],  # observe zero displacement on both channels
@@ -190,7 +198,7 @@ def build_agent(backend: CouplingGraphBackend) -> Agent:
         precision=[[GOAL_PRECISION, 0.0], [0.0, INFO_PRECISION]],  # weight commit only
         n_candidates=GRID_N,
         horizon=1,
-        info_target=CONTEXT,
+        info_node=CONTEXT,
     )
     agent = Agent(objective=objective, backend=backend)
     agent.belief = start_belief()  # the FFG backend's model.prior is a placeholder

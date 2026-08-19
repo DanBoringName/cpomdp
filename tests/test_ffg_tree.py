@@ -55,10 +55,10 @@ class TestSharedNodeTwoBranches:
         # --- FFG: combine the prior with each branch's upward message ---
         prior = _belief_as_canonical(m0, P0)
         msg1 = GaussianCoupling(W1, Q1).message_to_parent(
-            GaussianObservation(np.eye(c1), R1).message(y1)
+            GaussianObservation(np.eye(c1), observation_noise=R1).message(y1)
         )
         msg2 = GaussianCoupling(W2, Q2).message_to_parent(
-            GaussianObservation(np.eye(c2), R2).message(y2)
+            GaussianObservation(np.eye(c2), observation_noise=R2).message(y2)
         )
         out_mean, out_cov = (prior + msg1 + msg2).to_moment()
 
@@ -99,10 +99,10 @@ class TestSharedNodeTwoBranches:
 
         prior = _belief_as_canonical(m0, P0)
         msg1 = GaussianCoupling(W1, Q1).message_to_parent(
-            GaussianObservation(np.eye(1), R1).message(y1)
+            GaussianObservation(np.eye(1), observation_noise=R1).message(y1)
         )
         msg2 = GaussianCoupling(W2, Q2).message_to_parent(
-            GaussianObservation(np.eye(1), R2).message(y2)
+            GaussianObservation(np.eye(1), observation_noise=R2).message(y2)
         )
         a_mean, a_cov = (prior + msg1 + msg2).to_moment()
         b_mean, b_cov = (msg2 + (msg1 + prior)).to_moment()
@@ -170,7 +170,10 @@ def _check_infer(root, dims, edges, obs_specs, m0, P0, readings, atol=1e-8):
         Coupling(parent, child, GaussianCoupling(w, q), 1.0)
         for parent, child, w, q in edges
     )
-    observations = {n: GaussianObservation(c, r) for n, (c, r) in obs_specs.items()}
+    observations = {
+        n: GaussianObservation(c, observation_noise=r)
+        for n, (c, r) in obs_specs.items()
+    }
     graph = CouplingGraph(
         root=root, dims=dims, couplings=couplings, observations=observations
     )
@@ -334,7 +337,7 @@ class TestCouplingGraphInfer:
                     1.0,
                 ),
             ),
-            {1: GaussianObservation(jnp.eye(1), jnp.array([[0.2]]))},
+            {1: GaussianObservation(jnp.eye(1), observation_noise=jnp.array([[0.2]]))},
         )
         prior = Belief(mean=jnp.zeros(2), cov=jnp.eye(2))
 
@@ -450,7 +453,7 @@ class TestCouplingGraphValidation:
             0,
             (2, 1, 1),
             (Coupling(0, 1, self._w(1, 2), 1.0), Coupling(0, 2, self._w(1, 2), 1.0)),
-            {1: GaussianObservation(np.eye(1), np.eye(1))},
+            {1: GaussianObservation(np.eye(1), observation_noise=np.eye(1))},
         )
         assert g.root == 0
         assert g.dims == (2, 1, 1)
@@ -510,7 +513,7 @@ class TestCouplingGraphValidation:
                 0,
                 (1, 1),
                 (Coupling(0, 1, self._w(1, 1), 1.0),),
-                {9: GaussianObservation(np.eye(1), np.eye(1))},
+                {9: GaussianObservation(np.eye(1), observation_noise=np.eye(1))},
             )
 
 
@@ -580,7 +583,7 @@ def _flattened_kalman_root(root, dims, edges, obs_specs, m0, p0, readings):
         y_parts.append(np.asarray(readings[node], float))
 
     model = LinearGaussianModel(
-        dynamics=np.eye(dim),
+        dynamics_matrix=np.eye(dim),
         observation_matrix=np.vstack(c_rows),
         dynamics_noise=np.zeros((dim, dim)),
         observation_noise=_block_diag(r_blocks),
@@ -607,7 +610,10 @@ class TestFlattenedKalmanParity:
         couplings = tuple(
             Coupling(p, c, GaussianCoupling(w, q), 1.0) for p, c, w, q in edges
         )
-        observations = {n: GaussianObservation(c, r) for n, (c, r) in obs_specs.items()}
+        observations = {
+            n: GaussianObservation(c, observation_noise=r)
+            for n, (c, r) in obs_specs.items()
+        }
         graph = CouplingGraph(
             root=root, dims=dims, couplings=couplings, observations=observations
         )

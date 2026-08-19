@@ -89,7 +89,8 @@ class Belief:
 
 
 # A pytree leaf of a LinearGaussianModel: a matrix, the prior Belief, a child
-# sensor/process-noise model, or None (an absent control/observation/process_noise).
+# sensor/process-noise model, or None (an absent control_matrix,
+# observation_model or dynamics_noise_model).
 _ModelLeaf = Array | Belief | ObservationModel | DynamicsNoise | None
 
 
@@ -116,53 +117,55 @@ class LinearGaussianModel:
 
     | role name | letter | meaning | shape | also known as |
     | --- | --- | --- | --- | --- |
-    | ``dynamics`` | A | state -> next state | (n,n) | state-transition |
-    | ``control`` | B | action -> state (optional) | (n,p) | input/control matrix |
+    | ``dynamics_matrix`` | A | state -> next state | (n,n) | state-transition |
+    | ``control_matrix`` | B | action -> state (optional) | (n,p) | input/control |
     | ``observation_matrix`` | C | state -> reading | (m,n) | measurement/emission |
     | ``dynamics_noise`` | Q | dynamics-noise covariance | (n,n) | process noise |
     | ``observation_noise`` | R | reading-noise covariance | (m,m) | measurement noise |
     | ``prior`` | -- | initial belief over state | n-D | Belief / D (pymdp) |
 
     Dimensions: ``n`` = state, ``m`` = observation, ``p`` = action. A model with
-    no ``control`` is a pure filtering (tracking) model.
+    no ``control_matrix`` is a pure filtering (tracking) model.
 
-    Everything after ``dynamics`` is keyword-only. Two of the four matrices are maps and
-    two are covariances, all of the same rank, and only the covariances are
+    Everything after ``dynamics_matrix`` is keyword-only. Two of the four matrices
+    are maps and two are covariances, all of the same rank, and only the covariances are
     content-checked. A transposed pair therefore constructs in silence whenever the maps
     are square and symmetric. Naming them at the call site rules that out.
 
     Three optional fields (all default ``None`` → the plain fixed-matrix model)
-    extend it: ``observation`` (an [`ObservationModel`][cpomdp.ObservationModel] for
-    state-dependent sensing ``R(x)``), ``process_noise`` (a
+    extend it: ``observation_model`` (an [`ObservationModel`][cpomdp.ObservationModel]
+    for state-dependent sensing ``R(x)``), ``dynamics_noise_model`` (a
     [`DynamicsNoise`][cpomdp.DynamicsNoise] for state-dependent process noise
     ``Q(x)``), and ``structure`` (a [`ModelStructure`][cpomdp.ModelStructure]
     declaring the factor / Markov-blanket partition).
     """
 
-    dynamics: Float64[Array, "n n"]
+    dynamics_matrix: Float64[Array, "n n"]
     observation_matrix: Float64[Array, "m n"]
     dynamics_noise: Float64[Array, "n n"]
     observation_noise: Float64[Array, "m m"]
     prior: Belief
-    control: Float64[Array, "n p"] | None
-    observation: ObservationModel | None
-    process_noise: DynamicsNoise | None
+    control_matrix: Float64[Array, "n p"] | None
+    observation_model: ObservationModel | None
+    dynamics_noise_model: DynamicsNoise | None
     structure: ModelStructure | None
 
     def __init__(
         self,
-        dynamics: ArrayLike,
+        dynamics_matrix: ArrayLike,
         *,
         observation_matrix: ArrayLike,
         dynamics_noise: ArrayLike,
         observation_noise: ArrayLike,
         prior: Belief,
-        control: ArrayLike | None = None,
-        observation: ObservationModel | None = None,
-        process_noise: DynamicsNoise | None = None,
+        control_matrix: ArrayLike | None = None,
+        observation_model: ObservationModel | None = None,
+        dynamics_noise_model: DynamicsNoise | None = None,
         structure: ModelStructure | None = None,
     ) -> None:
-        object.__setattr__(self, "dynamics", jnp.asarray(dynamics, dtype=float))
+        object.__setattr__(
+            self, "dynamics_matrix", jnp.asarray(dynamics_matrix, dtype=float)
+        )
         object.__setattr__(
             self, "observation_matrix", jnp.asarray(observation_matrix, dtype=float)
         )
@@ -175,20 +178,25 @@ class LinearGaussianModel:
         object.__setattr__(self, "prior", prior)
         object.__setattr__(
             self,
-            "control",
-            None if control is None else jnp.asarray(control, dtype=float),
+            "control_matrix",
+            None
+            if control_matrix is None
+            else jnp.asarray(control_matrix, dtype=float),
         )
-        object.__setattr__(self, "observation", observation)
-        object.__setattr__(self, "process_noise", process_noise)
+        object.__setattr__(self, "observation_model", observation_model)
+        object.__setattr__(self, "dynamics_noise_model", dynamics_noise_model)
         object.__setattr__(self, "structure", structure)
         self._validate()
 
     def _validate(self) -> None:
         # dynamics is square and defines the state dimension n.
-        if self.dynamics.ndim != 2 or self.dynamics.shape[0] != self.dynamics.shape[1]:
+        if (
+            self.dynamics_matrix.ndim != 2
+            or self.dynamics_matrix.shape[0] != self.dynamics_matrix.shape[1]
+        ):
             raise ValueError(
                 f"dynamics must be a square (n x n) matrix, "
-                f"got shape {self.dynamics.shape}"
+                f"got shape {self.dynamics_matrix.shape}"
             )
         n = self.n_states
 
@@ -218,36 +226,36 @@ class LinearGaussianModel:
                 f"got shape {self.observation_noise.shape}"
             )
 
-        # control (optional) maps action -> state: (n, p). Rows must match n.
-        if self.control is not None and (
-            self.control.ndim != 2 or self.control.shape[0] != n
+        # control_matrix (optional) maps action -> state: (n, p). Rows match n.
+        if self.control_matrix is not None and (
+            self.control_matrix.ndim != 2 or self.control_matrix.shape[0] != n
         ):
             raise ValueError(
-                f"control must have {n} rows to match the {n}-D state, "
-                f"got shape {self.control.shape}"
+                f"control_matrix must have {n} rows to match the {n}-D state, "
+                f"got shape {self.control_matrix.shape}"
             )
-        if self.observation is not None and not isinstance(
-            self.observation, ObservationModel
+        if self.observation_model is not None and not isinstance(
+            self.observation_model, ObservationModel
         ):
             raise TypeError(
-                f"observation must be an ObservationModel, "
-                f"got {type(self.observation).__name__}"
+                f"observation_model must be an ObservationModel, "
+                f"got {type(self.observation_model).__name__}"
             )
 
-        # process_noise (optional): state-dependent Q(x). CallableProcessNoise can't
+        # dynamics_noise_model (optional): state-dependent Q(x). CallableProcessNoise
         # check its own shape (no n), so probe it here, where n is known.
-        if self.process_noise is not None:
-            if not isinstance(self.process_noise, DynamicsNoise):
+        if self.dynamics_noise_model is not None:
+            if not isinstance(self.dynamics_noise_model, DynamicsNoise):
                 raise TypeError(
-                    f"process_noise must be a DynamicsNoise, "
-                    f"got {type(self.process_noise).__name__}"
+                    f"dynamics_noise_model must be a DynamicsNoise, "
+                    f"got {type(self.dynamics_noise_model).__name__}"
                 )
-            q_probe = jnp.asarray(self.process_noise.noise_at(jnp.zeros(n)))
-            validate_covariance(q_probe, "process_noise.noise_at(x)")
+            q_probe = jnp.asarray(self.dynamics_noise_model.noise_at(jnp.zeros(n)))
+            validate_covariance(q_probe, "dynamics_noise_model.noise_at(x)")
             if q_probe.shape != (n, n):
                 raise ValueError(
-                    f"process_noise.noise_at(x) must return an {n}x{n} covariance "
-                    f"to match the {n}-D state, got shape {q_probe.shape}"
+                    f"dynamics_noise_model.noise_at(x) must return an {n}x{n} "
+                    f"covariance to match the {n}-D state, got shape {q_probe.shape}"
                 )
 
         # structure (optional): declarative metadata; validated opt-in via
@@ -271,7 +279,7 @@ class LinearGaussianModel:
     @property
     def n_states(self) -> int:
         """Dimension of the hidden state (n)."""
-        return self.dynamics.shape[0]
+        return self.dynamics_matrix.shape[0]
 
     @property
     def n_observations(self) -> int:
@@ -281,18 +289,18 @@ class LinearGaussianModel:
     @property
     def n_controls(self) -> int:
         """Dimension of an action (p); 0 if the model has no control."""
-        return 0 if self.control is None else self.control.shape[1]
+        return 0 if self.control_matrix is None else self.control_matrix.shape[1]
 
     # --- control-theory letter aliases (for backend/maths internals) ---
     @property
     def A(self) -> Float64[Array, "n n"]:
-        """A: the state-transition matrix (alias of ``dynamics``)."""
-        return self.dynamics
+        """A: the state-transition matrix (alias of ``dynamics_matrix``)."""
+        return self.dynamics_matrix
 
     @property
     def B(self) -> Float64[Array, "n p"] | None:
-        """B: the control matrix (alias of ``control``); ``None`` if uncontrolled."""
-        return self.control
+        """B: the control matrix (alias of ``control_matrix``); ``None`` if unset."""
+        return self.control_matrix
 
     @property
     def C(self) -> Float64[Array, "m n"]:
@@ -312,23 +320,25 @@ class LinearGaussianModel:
     def tree_flatten(self) -> tuple[tuple[_ModelLeaf, ...], ModelStructure | None]:
         """Leaves for JAX: every matrix plus the ``prior`` belief; ``structure`` is aux.
 
-        ``control``, ``observation`` and ``process_noise`` are included as (possibly
+        ``control_matrix``, ``observation_model`` and ``dynamics_noise_model`` are
+        included as (possibly
         ``None``) children; an uncontrolled / fixed-sensor / fixed-Q model contributes
         no leaf there and the ``None`` is restored on rebuild. A non-``None``
-        ``observation``/``process_noise`` is itself a pytree and recurses into its own
+        ``observation_model``/``dynamics_noise_model`` is itself a pytree and recurses
+        into its own
         leaves. ``structure`` (declarative metadata, no array leaves) rides in the
         static aux_data, so two models differing only in ``structure`` are different
         pytrees and a jit keyed on the model re-specialises when it changes.
         """
         children = (
-            self.dynamics,
+            self.dynamics_matrix,
             self.observation_matrix,
             self.dynamics_noise,
             self.observation_noise,
             self.prior,
-            self.control,
-            self.observation,
-            self.process_noise,
+            self.control_matrix,
+            self.observation_model,
+            self.dynamics_noise_model,
         )
         return children, self.structure
 
@@ -344,14 +354,14 @@ class LinearGaussianModel:
         """
         obj = object.__new__(cls)
         fields = (
-            "dynamics",
+            "dynamics_matrix",
             "observation_matrix",
             "dynamics_noise",
             "observation_noise",
             "prior",
-            "control",
-            "observation",
-            "process_noise",
+            "control_matrix",
+            "observation_model",
+            "dynamics_noise_model",
         )
         for name, value in zip(fields, children, strict=True):
             object.__setattr__(obj, name, value)

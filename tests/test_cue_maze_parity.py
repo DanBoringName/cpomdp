@@ -57,7 +57,9 @@ def test_dynamics_and_control_agree(pair):
     pairs = zip(maze.transitions, registered.transitions, strict=True)
     for node, (mine, theirs) in enumerate(pairs):
         np.testing.assert_allclose(
-            mine.dynamics, theirs.dynamics, err_msg=f"A differs at node {node}"
+            mine.dynamics_matrix,
+            theirs.dynamics_matrix,
+            err_msg=f"A differs at node {node}",
         )
         np.testing.assert_allclose(
             mine.dynamics_noise,

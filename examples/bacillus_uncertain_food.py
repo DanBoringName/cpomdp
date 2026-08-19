@@ -171,7 +171,7 @@ def _beacon_params() -> dict[str, float]:
     """The beacon falloff's tunables — shared by ``build_model`` and ``simulate``.
 
     Single source of truth so the model's filtering noise and the simulator's
-    truth-process noise can never drift apart (``model.observation`` is typed as
+    truth-process noise can never drift apart (``model.observation_model`` is typed as
     the ``ObservationModel`` Protocol).
     """
     return {
@@ -211,8 +211,8 @@ def build_model() -> LinearGaussianModel:
         noise_params=beacon_params,
     )
 
-    dynamics = jnp.eye(4)  # agent: single integrator; food: stationary
-    control = jnp.array(
+    dynamics_matrix = jnp.eye(4)  # agent: single integrator; food: stationary
+    control_matrix = jnp.array(
         [[DT, 0.0], [0.0, DT], [0.0, 0.0], [0.0, 0.0]]
     )  # control only drives the agent block
     dynamics_noise = jnp.diag(jnp.array([Q_AGENT, Q_AGENT, Q_FOOD, Q_FOOD]))
@@ -223,14 +223,14 @@ def build_model() -> LinearGaussianModel:
     )
 
     return LinearGaussianModel(
-        dynamics=dynamics,
-        control=control,
+        dynamics_matrix=dynamics_matrix,
+        control_matrix=control_matrix,
         observation_matrix=observation_matrix,
         dynamics_noise=dynamics_noise,
         observation_noise=R_SELF
         * jnp.eye(4),  # nominal; the live R comes from `sensor`
         prior=Belief(mean=prior_mean, cov=prior_cov),
-        observation=sensor,
+        observation_model=sensor,
     )
 
 

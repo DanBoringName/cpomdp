@@ -38,16 +38,16 @@ from cpomdp.types import Belief, LinearGaussianModel
 
 
 # --- fixtures: one model per branch the extraction touches ------------------------
-def _model(observation=None):
+def _model(observation_model=None):
     # 2-state, 1-observation, 1-action, controllable (mirrors test_efe.py).
     return LinearGaussianModel(
-        dynamics=[[1.0, 0.1], [0.0, 1.0]],
+        dynamics_matrix=[[1.0, 0.1], [0.0, 1.0]],
         observation_matrix=[[1.0, 0.0]],
         dynamics_noise=[[0.1, 0.0], [0.0, 0.1]],
         observation_noise=[[0.5]],
         prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
-        control=[[0.0], [1.0]],
-        observation=observation,
+        control_matrix=[[0.0], [1.0]],
+        observation_model=observation_model,
     )
 
 
@@ -69,7 +69,7 @@ def _callable_model():
         noise_fn=_state_noise,
         noise_params={"base": jnp.array(0.2), "slope": jnp.array(0.5)},
     )
-    return _model(observation=sensor)
+    return _model(observation_model=sensor)
 
 
 def _q_well(x, params):
@@ -81,13 +81,13 @@ def _internal_q_model():
         q_fn=_q_well, q_params={"base": jnp.array(0.05), "slope": jnp.array(0.4)}
     )
     return LinearGaussianModel(
-        dynamics=[[1.0]],
+        dynamics_matrix=[[1.0]],
         observation_matrix=[[1.0]],
         dynamics_noise=[[0.1]],
         observation_noise=[[0.3]],
         prior=Belief(mean=[0.0], cov=[[0.2]]),
-        control=[[1.0]],
-        process_noise=pn,
+        control_matrix=[[1.0]],
+        dynamics_noise_model=pn,
     )
 
 
@@ -141,7 +141,7 @@ def _frozen_efe(model, belief, action, preference):
     one line that has moved since the snapshot is the epistemic determinant guard; see
     `_frozen_logdet_pd`.
     """
-    control = model.control
+    control = model.control_matrix
     assert control is not None  # mirrors the kernel arithmetic past the control guard
     action = jnp.asarray(action, dtype=float)
     mu, sigma = belief.mean, belief.cov
@@ -149,19 +149,19 @@ def _frozen_efe(model, belief, action, preference):
     mu_pred = model.A @ mu + control @ action
     process_q = (
         model.Q
-        if model.process_noise is None
-        else model.process_noise.noise_at(mu_pred)
+        if model.dynamics_noise_model is None
+        else model.dynamics_noise_model.noise_at(mu_pred)
     )
     sigma_pred = model.A @ sigma @ model.A.T + process_q
 
-    if model.observation is None:
+    if model.observation_model is None:
         observation_matrix, observation_noise = model.C, model.R
         o_pred = observation_matrix @ mu_pred
         pred_obs_cov = (
             observation_matrix @ sigma_pred @ observation_matrix.T + observation_noise
         )
     else:
-        o_pred, pred_obs_cov, observation_noise = model.observation.gaussianize(
+        o_pred, pred_obs_cov, observation_noise = model.observation_model.gaussianize(
             mu_pred, sigma_pred
         )
 
@@ -214,7 +214,7 @@ class TestEfeStepContract:
             model,
             belief.mean,
             belief.cov,
-            model.control,
+            model.control_matrix,
             action,
             pref.goal,
             pref.precision,
@@ -233,8 +233,8 @@ class TestEfeStepContract:
         assert step.s.shape == (1, 1)
 
         # the three intermediates are the real moments B2 consumes (vs NumPy).
-        a_mat = np.asarray(model.dynamics)
-        b_mat = np.asarray(model.control)
+        a_mat = np.asarray(model.dynamics_matrix)
+        b_mat = np.asarray(model.control_matrix)
         q_mat = np.asarray(model.dynamics_noise)
         c_mat = np.asarray(model.observation_matrix)
         r_mat = np.asarray(model.observation_noise)
@@ -257,7 +257,7 @@ class TestEfeStepContract:
             model,
             belief.mean,
             belief.cov,
-            model.control,
+            model.control_matrix,
             action,
             pref.goal,
             pref.precision,

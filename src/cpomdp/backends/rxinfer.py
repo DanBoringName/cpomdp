@@ -149,19 +149,19 @@ class RxInferBackend:
         """
         model = self.model
         observation, action = validate_step_inputs(model, observation, prior, action)
-        control = model.control
-        if control is None:
+        control_matrix = model.control_matrix
+        if control_matrix is None:
             control_term = jnp.zeros(model.n_states)
         else:
             # validate_step_inputs guarantees a non-None action when control exists
             assert action is not None
-            control_term = control @ action
+            control_term = control_matrix @ action
 
         # juliacall speaks numpy, not jax.Array, so coerce every array as it
         # crosses into Julia and coerce the posteriors back on the way out.
         mean_post, cov_post = self._jl.cpomdp_run_step(
             np.asarray(observation),
-            np.asarray(model.dynamics),
+            np.asarray(model.dynamics_matrix),
             np.asarray(model.observation_matrix),
             np.asarray(model.dynamics_noise),
             np.asarray(model.observation_noise),

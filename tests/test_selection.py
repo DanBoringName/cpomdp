@@ -23,12 +23,12 @@ EFFORT_PENALTY = [[0.1]]
 
 def _point_mass_model():
     return LinearGaussianModel(
-        dynamics=DYNAMICS,
+        dynamics_matrix=DYNAMICS,
         observation_matrix=[[1.0, 0.0]],
         dynamics_noise=[[1e-4, 0.0], [0.0, 1e-4]],
         observation_noise=[[1e-2]],
         prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
-        control=CONTROL,
+        control_matrix=CONTROL,
     )
 
 
@@ -133,32 +133,44 @@ class TestStateGoal:
 
 
 class TestObservationGoal:
+    def test_action_bounds_is_keyword_only(self):
+        # StateGoal already keyword-onlys everything after its first argument, so this
+        # was the odd one out in a public pair. The two positional slots also transpose
+        # without raising when the target is 2-D and increasing, since (lo, hi) then
+        # passes the target's own shape check and the target passes lo < hi.
+        with pytest.raises(TypeError, match="positional"):
+            # Calling it wrongly is the test, so ty's arity errors are expected.
+            ObservationGoal(  # ty: ignore[missing-argument]
+                [1.0],
+                (-2.0, 2.0),  # ty: ignore[too-many-positional-arguments]
+            )
+
     def test_stores_target_and_search_config(self):
-        g = ObservationGoal([0.5], (-2.0, 2.0), n_candidates=15)
+        g = ObservationGoal([0.5], action_bounds=(-2.0, 2.0), n_candidates=15)
         np.testing.assert_array_equal(g.target, [0.5])
         assert g.action_bounds == (-2.0, 2.0)
         assert g.n_candidates == 15
 
     def test_precision_defaults_to_identity(self):
-        g = ObservationGoal([0.0], (-1.0, 1.0))
+        g = ObservationGoal([0.0], action_bounds=(-1.0, 1.0))
         np.testing.assert_array_equal(g.precision, np.eye(1))
 
     def test_n_candidates_defaults_to_21(self):
-        assert ObservationGoal([0.0], (-1.0, 1.0)).n_candidates == 21
+        assert ObservationGoal([0.0], action_bounds=(-1.0, 1.0)).n_candidates == 21
 
     def test_rejects_non_1d_target(self):
         with pytest.raises(ValueError, match="1-D"):
-            ObservationGoal([[0.0]], (-1.0, 1.0))
+            ObservationGoal([[0.0]], action_bounds=(-1.0, 1.0))
 
     def test_rejects_inverted_action_bounds(self):
         with pytest.raises(ValueError, match="bound"):
-            ObservationGoal([0.0], (1.0, -1.0))
+            ObservationGoal([0.0], action_bounds=(1.0, -1.0))
 
     def test_rejects_too_few_candidates(self):
         with pytest.raises(ValueError, match="candidate"):
-            ObservationGoal([0.0], (-1.0, 1.0), n_candidates=1)
+            ObservationGoal([0.0], action_bounds=(-1.0, 1.0), n_candidates=1)
 
     def test_rejects_lqr_effort_knob(self):
         # Unrepresentable: an observation goal carries no LQR effort weight.
         with pytest.raises(TypeError):
-            ObservationGoal([0.0], (-1.0, 1.0), effort=[[1.0]])  # ty: ignore[unknown-argument]
+            ObservationGoal([0.0], action_bounds=(-1.0, 1.0), effort=[[1.0]])  # ty: ignore[unknown-argument]

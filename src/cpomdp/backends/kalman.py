@@ -13,7 +13,7 @@ __all__ = ["KalmanBackend"]
 
 @jax.jit
 def _gain_and_posterior_cov(
-    dynamics: Float64[Array, "n n"],
+    dynamics_matrix: Float64[Array, "n n"],
     observation_matrix: Float64[Array, "m n"],
     dynamics_noise: Float64[Array, "n n"],
     observation_noise: Float64[Array, "m m"],
@@ -38,7 +38,7 @@ def _gain_and_posterior_cov(
     each step. Pure and ``jit``-compiled, so it also drops into ``vmap``/``grad``.
 
     Args:
-        dynamics: The state-transition matrix A, shape ``(n, n)``.
+        dynamics_matrix: The state-transition matrix A, shape ``(n, n)``.
         observation_matrix: The observation matrix C, shape ``(m, n)``.
         dynamics_noise: The process-noise covariance Q, shape ``(n, n)``.
         observation_noise: The observation-noise covariance R, shape ``(m, m)``.
@@ -48,18 +48,20 @@ def _gain_and_posterior_cov(
         ``(gain, cov_post)``: the Kalman gain, shape ``(n, m)``, and the posterior
         covariance, shape ``(n, n)``, for this step.
     """
-    cov_pred = dynamics @ prior_cov @ dynamics.T + dynamics_noise
+    cov_pred = dynamics_matrix @ prior_cov @ dynamics_matrix.T + dynamics_noise
     prediction_error_cov = (
         observation_matrix @ cov_pred @ observation_matrix.T + observation_noise
     )
     gain = jnp.linalg.solve(prediction_error_cov, observation_matrix @ cov_pred).T
-    cov_post = (jnp.eye(dynamics.shape[0]) - gain @ observation_matrix) @ cov_pred
+    cov_post = (
+        jnp.eye(dynamics_matrix.shape[0]) - gain @ observation_matrix
+    ) @ cov_pred
     return gain, cov_post
 
 
 @jax.jit
 def _posterior_mean(
-    dynamics: Float64[Array, "n n"],
+    dynamics_matrix: Float64[Array, "n n"],
     observation_matrix: Float64[Array, "m n"],
     prior_mean: Float64[Array, "n"],
     control_term: Float64[Array, "n"],
@@ -72,7 +74,7 @@ def _posterior_mean(
     ``control_term``), then nudges it toward ``observation`` by the gain times the
     prediction error (the "innovation"). Pure and ``jit``-compiled.
     """
-    mean_pred = dynamics @ prior_mean + control_term
+    mean_pred = dynamics_matrix @ prior_mean + control_term
     prediction_error = observation - observation_matrix @ mean_pred
     return mean_pred + gain @ prediction_error
 
@@ -116,8 +118,13 @@ class KalmanBackend:
         self.model = model
         self.steady_state = steady_state
         if steady_state:
-            sensor_fixed = model.observation is None or model.observation.is_fixed
-            process_fixed = model.process_noise is None or model.process_noise.is_fixed
+            sensor_fixed = (
+                model.observation_model is None or model.observation_model.is_fixed
+            )
+            process_fixed = (
+                model.dynamics_noise_model is None
+                or model.dynamics_noise_model.is_fixed
+            )
             if not (sensor_fixed and process_fixed):
                 raise ValueError(
                     "steady_state=True needs fixed sensor and process noise; a "
@@ -165,21 +172,25 @@ class KalmanBackend:
         """
         model = self.model
         observation, action = validate_step_inputs(model, observation, prior, action)
-        control = model.control
-        if control is None:
+        control_matrix = model.control_matrix
+        if control_matrix is None:
             control_term = jnp.zeros(model.n_states)
         else:
             # validate_step_inputs guarantees a non-None action when control exists
             assert action is not None
-            control_term = control @ action
+            control_term = control_matrix @ action
 
-        sensor_is_fixed = model.observation is None or model.observation.is_fixed
-        process_is_fixed = model.process_noise is None or model.process_noise.is_fixed
+        sensor_is_fixed = (
+            model.observation_model is None or model.observation_model.is_fixed
+        )
+        process_is_fixed = (
+            model.dynamics_noise_model is None or model.dynamics_noise_model.is_fixed
+        )
 
         # μ⁻ is needed only to linearize a state-dependent sensor and/or process
         # noise; the fully-fixed hot path computes no extra matvec.
         mean_pred = (
-            model.dynamics @ prior.mean + control_term
+            model.dynamics_matrix @ prior.mean + control_term
             if not (sensor_is_fixed and process_is_fixed)
             else prior.mean  # placeholder, unused on the fixed path
         )
@@ -192,7 +203,7 @@ class KalmanBackend:
             )
         else:
             # state-dependent R(x), linearized at μ⁻ (the EFE kernel's point).
-            observation_matrix, observation_noise = model.observation.linearize(
+            observation_matrix, observation_noise = model.observation_model.linearize(
                 mean_pred
             )
 
@@ -200,13 +211,13 @@ class KalmanBackend:
             dynamics_noise = model.dynamics_noise
         else:
             # state-dependent Q(x), evaluated at μ⁻ — the dual of the R(x) gate.
-            dynamics_noise = model.process_noise.noise_at(mean_pred)
+            dynamics_noise = model.dynamics_noise_model.noise_at(mean_pred)
 
         if self.steady_state:
             gain, cov_post = self._steady_gain, self._steady_cov  # frozen
         else:
             gain, cov_post = _gain_and_posterior_cov(
-                model.dynamics,
+                model.dynamics_matrix,
                 observation_matrix,
                 dynamics_noise,
                 observation_noise,
@@ -214,7 +225,7 @@ class KalmanBackend:
             )
 
         mean_post = _posterior_mean(
-            model.dynamics,
+            model.dynamics_matrix,
             observation_matrix,
             prior.mean,
             control_term,
@@ -259,7 +270,7 @@ class KalmanBackend:
         cov = model.prior.cov
         for _ in range(max_iter):
             gain, cov_post = _gain_and_posterior_cov(
-                model.dynamics,
+                model.dynamics_matrix,
                 model.observation_matrix,
                 model.dynamics_noise,
                 model.observation_noise,

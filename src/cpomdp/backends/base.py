@@ -98,7 +98,7 @@ class EfeBackend(InferenceBackend, Protocol):
         ...
 
     def block(self, node: int) -> range:
-        """The joint-state indices node ``node`` occupies (``info_target`` → block)."""
+        """The joint-state indices node ``node`` occupies (``info_node`` → block)."""
         ...
 
     def observation_noise_at(self, mean: ArrayLike) -> Float64[Array, "m m"]:
@@ -163,7 +163,7 @@ def validate_step_inputs(
             f"got a {prior.ndim}-D belief"
         )
 
-    if model.control is None:
+    if model.control_matrix is None:
         return observation, None
 
     if action is None:

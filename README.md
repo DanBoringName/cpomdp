@@ -93,8 +93,8 @@ from cpomdp import Agent, Belief, LinearGaussianModel, StateGoal
 # position along, and we only ever observe position (through a noisy sensor).
 dt = 0.1
 model = LinearGaussianModel(
-    dynamics=[[1, dt], [0, 1]],          # velocity carries position along
-    control=[[0], [dt]],                 # a push nudges velocity
+    dynamics_matrix=[[1, dt], [0, 1]],   # velocity carries position along
+    control_matrix=[[0], [dt]],          # a push nudges velocity
     observation_matrix=[[1, 0]],               # we observe position only
     dynamics_noise=jnp.eye(2) * 1e-6,
     observation_noise=[[1e-2]],
@@ -109,7 +109,7 @@ for _ in range(100):
     obs = model.observation_matrix @ true_state            # what the agent gets to see
     agent.infer_states(obs)                           # perceive
     action = agent.sample_action()                    # act
-    true_state = model.dynamics @ true_state + model.control @ action
+    true_state = model.dynamics_matrix @ true_state + model.control_matrix @ action
 
 print(jnp.round(agent.belief.mean, 3))   # ≈ [1, 0]
 ```
@@ -135,11 +135,11 @@ One honest difference in behaviour. `sample_action` here is deterministic, not a
 
 ## Just want to track, not act?
 
-A model with no `control` matrix is a pure tracker. Drop the goal and `infer_states` still folds in observations and sharpens the belief, while `sample_action` stops you — there's nothing to steer toward, and nothing to steer with.
+A model with no `control_matrix` is a pure tracker. Drop the goal and `infer_states` still folds in observations and sharpens the belief, while `sample_action` stops you — there's nothing to steer toward, and nothing to steer with.
 
 ```python
 tracker = LinearGaussianModel(        # no control matrix -> pure tracking
-    dynamics=[[1, dt], [0, 1]],
+    dynamics_matrix=[[1, dt], [0, 1]],
     observation_matrix=[[1, 0]],
     dynamics_noise=jnp.eye(2) * 1e-6,
     observation_noise=[[1e-2]],
@@ -164,7 +164,7 @@ agent.sample_action()                 # ValueError: this Agent has no objective 
 | declare a branching model | `CouplingGraph`, `Coupling`, `CouplingGraphBackend` |
 | ask whether a state-dependent sensor earns its keep | `probe_model` → `SensorReport` |
 | check a rollout stayed well conditioned | `cpomdp.diagnostics.rollout_conditioning` |
-| perceive but never act | a model with no `control`, `Agent(model)` alone |
+| perceive but never act | a model with no `control_matrix`, `Agent(model)` alone |
 | re-plan every step, closed loop | `cpomdp.enumeration.RecedingHorizonSelector` (`replan_interval = 1`) |
 | commit to one plan and execute it | `cpomdp.enumeration.OpenLoopSelector` (`replan_interval = H`) |
 | swap the inference engine | the `InferenceBackend` protocol, or `cpomdp.backends.rxinfer.RxInferBackend` |

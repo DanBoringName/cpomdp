@@ -344,7 +344,7 @@ def build_maze(
     arena_sensor = (
         CallableGaussianObservation(observed, cue_noise, params)
         if epistemic_alive
-        else GaussianObservation(observed, fixed_noise)
+        else GaussianObservation(observed, observation_noise=fixed_noise)
     )
 
     # W: the context drives the goal belief on axis 0 and nothing else. A wider context
@@ -371,19 +371,23 @@ def build_maze(
     transitions = (
         GaussianTransition(  # a near-static context
             np.eye(context_dim).tolist(),
-            (Q_CONTEXT * np.eye(context_dim)).tolist(),
+            dynamics_noise=(Q_CONTEXT * np.eye(context_dim)).tolist(),
         ),
         GaussianTransition(
             np.eye(arena_dim).tolist(),
-            np.diag([Q_POSITION] * n_dims + [Q_GOAL_BELIEF] * n_dims).tolist(),
+            dynamics_noise=np.diag(
+                [Q_POSITION] * n_dims + [Q_GOAL_BELIEF] * n_dims
+            ).tolist(),
         ),
     )
     # B: the action drives position, which is the arena node's first block, and the
     # joint state puts the context in front of it.
-    control = np.zeros((context_dim + arena_dim, n_dims))
+    control_matrix = np.zeros((context_dim + arena_dim, n_dims))
     for axis in range(n_dims):
-        control[context_dim + axis, axis] = 1.0
-    return CouplingGraphBackend(graph, transitions, control=control.tolist())
+        control_matrix[context_dim + axis, axis] = 1.0
+    return CouplingGraphBackend(
+        graph, transitions, control_matrix=control_matrix.tolist()
+    )
 
 
 def _far_away(n_dims: int) -> np.ndarray:

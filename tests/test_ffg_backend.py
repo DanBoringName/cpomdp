@@ -57,7 +57,15 @@ def _block_diag(blocks):
 
 
 def _driven_relaxation_oracle(
-    dims, edges, obs_specs, dyn, prior_mean, prior_cov, control, obs_seq, action_seq
+    dims,
+    edges,
+    obs_specs,
+    dyn,
+    prior_mean,
+    prior_cov,
+    control_matrix,
+    obs_seq,
+    action_seq,
 ):
     """Exact N-step driven-relaxation filter via the joint precision — plain NumPy.
 
@@ -102,8 +110,10 @@ def _driven_relaxation_oracle(
     states = []
     for step, y_stacked in enumerate(obs_seq):
         shift = np.zeros(dim)
-        if control is not None:
-            shift = np.asarray(control, float) @ np.asarray(action_seq[step], float)
+        if control_matrix is not None:
+            shift = np.asarray(control_matrix, float) @ np.asarray(
+                action_seq[step], float
+            )
         mu_pred = force @ mu + shift
         sig_pred = force @ sig @ force.T + proc
         pred_precision = np.linalg.inv(sig_pred)
@@ -126,7 +136,9 @@ def _driven_relaxation_oracle(
     return states, offs
 
 
-def _predicted_joint_oracle(dims, edges, dyn, prior_mean, prior_cov, control, action):
+def _predicted_joint_oracle(
+    dims, edges, dyn, prior_mean, prior_cov, control_matrix, action
+):
     """The joint after predict + structural couplings, BEFORE observing — plain NumPy.
 
     The pre-observation ``(mu+, Sig+)`` the EFE reads (issue #26): predict each node by
@@ -152,8 +164,8 @@ def _predicted_joint_oracle(dims, edges, dyn, prior_mean, prior_cov, control, ac
         lam_struct[blk(child), blk(parent)] += -qs_inv @ w
 
     shift = np.zeros(dim)
-    if control is not None:
-        shift = np.asarray(control, float) @ np.asarray(action, float)
+    if control_matrix is not None:
+        shift = np.asarray(control_matrix, float) @ np.asarray(action, float)
     mu_pred = force @ np.asarray(prior_mean, float) + shift
     sig_pred = force @ np.asarray(prior_cov, float) @ force.T + proc
     pred_precision = np.linalg.inv(sig_pred)
@@ -165,19 +177,29 @@ def _predicted_joint_oracle(dims, edges, dyn, prior_mean, prior_cov, control, ac
 
 
 def _build(
-    dims, edges, obs_specs, dyn, *, control=None, readout_node=None, partition=None
+    dims,
+    edges,
+    obs_specs,
+    dyn,
+    *,
+    control_matrix=None,
+    readout_node=None,
+    partition=None,
 ):
     """Build a ``CouplingGraphBackend`` (graph + per-node transitions) for a spec."""
     couplings = tuple(
         Coupling(parent, child, GaussianCoupling(w, q), 1.0)
         for parent, child, w, q in edges
     )
-    observations = {n: GaussianObservation(c, r) for n, (c, r) in obs_specs.items()}
+    observations = {
+        n: GaussianObservation(c, observation_noise=r)
+        for n, (c, r) in obs_specs.items()
+    }
     graph = CouplingGraph(
         root=0, dims=dims, couplings=couplings, observations=observations
     )
-    transitions = tuple(GaussianTransition(a, q) for a, q in dyn)
-    kwargs = {"control": control, "readout_node": readout_node}
+    transitions = tuple(GaussianTransition(a, dynamics_noise=q) for a, q in dyn)
+    kwargs = {"control_matrix": control_matrix, "readout_node": readout_node}
     if partition is not None:
         kwargs["partition"] = partition
     return CouplingGraphBackend(graph, transitions, **kwargs)
@@ -216,13 +238,21 @@ def _check_sequence(
     prior,
     obs_seq,
     *,
-    control=None,
+    control_matrix=None,
     action_seq=None,
     atol=1e-7,
 ):
     """Drive the backend over ``obs_seq`` and check each node's marginal vs oracle."""
     states, offs = _driven_relaxation_oracle(
-        dims, edges, obs_specs, dyn, prior.mean, prior.cov, control, obs_seq, action_seq
+        dims,
+        edges,
+        obs_specs,
+        dyn,
+        prior.mean,
+        prior.cov,
+        control_matrix,
+        obs_seq,
+        action_seq,
     )
     belief = prior
     for step, y in enumerate(obs_seq):
@@ -270,7 +300,7 @@ class TestKeystoneDrivenRelaxation:
             _CHEMOTAXIS_EDGES,
             _CHEMOTAXIS_OBS,
             _CHEMOTAXIS_DYN,
-            control=control,
+            control_matrix=control,
         )
         prior = Belief(mean=np.zeros(5), cov=np.eye(5) * 2.0)
         obs_seq = [rng.standard_normal(3) for _ in range(8)]
@@ -283,7 +313,7 @@ class TestKeystoneDrivenRelaxation:
             _CHEMOTAXIS_DYN,
             prior,
             obs_seq,
-            control=control,
+            control_matrix=control,
             action_seq=action_seq,
         )
 
@@ -497,7 +527,7 @@ class TestPredictedBelief:
             _CHEMOTAXIS_EDGES,
             _CHEMOTAXIS_OBS,
             _CHEMOTAXIS_DYN,
-            control=control,
+            control_matrix=control,
         )
         prior = Belief(mean=np.array([0.2, -0.1, 0.3, 0.0, 0.1]), cov=np.eye(5) * 1.5)
         action = np.array([0.7])
@@ -669,7 +699,7 @@ class TestFlatModelCrossCheck:
             _CHEMOTAXIS_EDGES,
             _CHEMOTAXIS_OBS,
             _CHEMOTAXIS_DYN,
-            control=control,
+            control_matrix=control,
         )
         flat = KalmanBackend(backend.to_flat_model())
         prior = Belief(mean=np.zeros(5), cov=np.eye(5) * 2.0)
@@ -702,7 +732,7 @@ def _rx_noise(x, params):
 
 
 def _rx_relaxation_oracle(
-    dims, edges, rx_obs, dyn, prior_mean, prior_cov, control, obs_seq, action_seq
+    dims, edges, rx_obs, dyn, prior_mean, prior_cov, control_matrix, obs_seq, action_seq
 ):
     """Exact N-step driven-relaxation filter with state-dependent ``R(μ⁺)`` — NumPy.
 
@@ -736,8 +766,10 @@ def _rx_relaxation_oracle(
     states = []
     for step, y_stacked in enumerate(obs_seq):
         shift = np.zeros(dim)
-        if control is not None:
-            shift = np.asarray(control, float) @ np.asarray(action_seq[step], float)
+        if control_matrix is not None:
+            shift = np.asarray(control_matrix, float) @ np.asarray(
+                action_seq[step], float
+            )
         mu_pred = force @ mu + shift
         sig_pred = force @ sig @ force.T + proc
         pred_precision = np.linalg.inv(sig_pred)
@@ -767,7 +799,7 @@ def _rx_relaxation_oracle(
     return states, offs
 
 
-def _build_rx(dims, edges, rx_obs, dyn, *, control=None, partition=None):
+def _build_rx(dims, edges, rx_obs, dyn, *, control_matrix=None, partition=None):
     """Build a ``CouplingGraphBackend`` with state-dependent (callable) observations."""
     couplings = tuple(
         Coupling(parent, child, GaussianCoupling(w, q), 1.0)
@@ -780,8 +812,8 @@ def _build_rx(dims, edges, rx_obs, dyn, *, control=None, partition=None):
     graph = CouplingGraph(
         root=0, dims=dims, couplings=couplings, observations=observations
     )
-    transitions = tuple(GaussianTransition(a, q) for a, q in dyn)
-    kwargs = {"control": control}
+    transitions = tuple(GaussianTransition(a, dynamics_noise=q) for a, q in dyn)
+    kwargs = {"control_matrix": control_matrix}
     if partition is not None:
         kwargs["partition"] = partition
     return CouplingGraphBackend(graph, transitions, **kwargs)
@@ -819,14 +851,14 @@ class TestStateDependentSensing:
             _CHEMOTAXIS_EDGES,
             const,
             _CHEMOTAXIS_DYN,
-            control=_RX_CONTROL,
+            control_matrix=_RX_CONTROL,
         )
         fixed = _build(
             _CHEMOTAXIS_DIMS,
             _CHEMOTAXIS_EDGES,
             _CHEMOTAXIS_OBS,
             _CHEMOTAXIS_DYN,
-            control=_RX_CONTROL,
+            control_matrix=_RX_CONTROL,
         )
         prior = Belief(mean=np.zeros(5), cov=np.eye(5) * 2.0)
         belief_rx = belief_fixed = prior
@@ -851,15 +883,17 @@ class TestStateDependentSensing:
         C = np.array([[1.0, 0.0]])
         B = np.array([[1.0], [0.0]])
         params = {"R0": np.array([[0.5]]), "gain": 0.3}
-        rx = _build_rx((2,), [], {0: (C, _rx_noise, params)}, [(A, Q)], control=B)
+        rx = _build_rx(
+            (2,), [], {0: (C, _rx_noise, params)}, [(A, Q)], control_matrix=B
+        )
         model = LinearGaussianModel(
-            dynamics=A,
+            dynamics_matrix=A,
             observation_matrix=C,
             dynamics_noise=Q,
             observation_noise=params["R0"],  # placeholder; overridden by observation
             prior=Belief(mean=np.zeros(2), cov=np.eye(2)),
-            control=B,
-            observation=CallableSensor(C, _rx_noise, params),
+            control_matrix=B,
+            observation_model=CallableSensor(C, _rx_noise, params),
         )
         flat = KalmanBackend(model)
         belief_rx = belief_flat = Belief(mean=np.zeros(2), cov=np.eye(2))
@@ -884,7 +918,7 @@ class TestStateDependentSensing:
             _CHEMOTAXIS_EDGES,
             _RX_OBS,
             _CHEMOTAXIS_DYN,
-            control=_RX_CONTROL,
+            control_matrix=_RX_CONTROL,
         )
         prior = Belief(mean=np.zeros(5), cov=np.eye(5) * 2.0)
         obs_seq = [rng.standard_normal(3) for _ in range(6)]
@@ -920,7 +954,7 @@ class TestStateDependentSensing:
             _CHEMOTAXIS_EDGES,
             _RX_OBS,
             _CHEMOTAXIS_DYN,
-            control=_RX_CONTROL,
+            control_matrix=_RX_CONTROL,
         )
         prior = Belief(mean=np.arange(5, dtype=float), cov=np.eye(5) * 1.5)
         action = np.array([0.7])
@@ -949,7 +983,7 @@ class TestStateDependentSensing:
                 )
             },
             [(np.array([[1.0, 0.1], [0.0, 1.0]]), np.eye(2) * 0.1)],
-            control=[[1.0], [0.0]],
+            control_matrix=[[1.0], [0.0]],
         )
         prior = Belief(mean=np.zeros(2), cov=np.eye(2))
         eager = rx.infer_states(np.array([0.3]), prior, np.array([0.5]))
@@ -966,7 +1000,7 @@ class TestStateDependentSensing:
             _CHEMOTAXIS_EDGES,
             _RX_OBS,
             _CHEMOTAXIS_DYN,
-            control=_RX_CONTROL,
+            control_matrix=_RX_CONTROL,
         )
         prior = Belief(mean=np.zeros(5), cov=np.eye(5))
         actions = jnp.linspace(-2.0, 2.0, 7)[:, None]
@@ -984,7 +1018,7 @@ class TestStateDependentSensing:
             _CHEMOTAXIS_EDGES,
             _RX_OBS,
             _CHEMOTAXIS_DYN,
-            control=_RX_CONTROL,
+            control_matrix=_RX_CONTROL,
             partition=singletons,
         )
         prior = Belief(mean=np.zeros(5), cov=np.eye(5))  # block-diagonal
@@ -1025,7 +1059,7 @@ class TestStateDependentSensing:
             _CHEMOTAXIS_EDGES,
             const,
             _CHEMOTAXIS_DYN,
-            control=_RX_CONTROL,
+            control_matrix=_RX_CONTROL,
             partition=singletons,
         )
         fixed = _build(
@@ -1033,7 +1067,7 @@ class TestStateDependentSensing:
             _CHEMOTAXIS_EDGES,
             _CHEMOTAXIS_OBS,
             _CHEMOTAXIS_DYN,
-            control=_RX_CONTROL,
+            control_matrix=_RX_CONTROL,
             partition=singletons,
         )
         belief_rx = belief_fixed = Belief(mean=np.zeros(5), cov=np.eye(5))
@@ -1058,7 +1092,7 @@ class TestStateDependentSensing:
             _CHEMOTAXIS_EDGES,
             _RX_OBS,
             _CHEMOTAXIS_DYN,
-            control=_RX_CONTROL,
+            control_matrix=_RX_CONTROL,
         )
         with pytest.raises(IncompatibleLinearizationError):
             rx.to_flat_model()
@@ -1071,7 +1105,7 @@ class TestStateDependentSensing:
             _CHEMOTAXIS_EDGES,
             _RX_OBS,
             _CHEMOTAXIS_DYN,
-            control=_RX_CONTROL,
+            control_matrix=_RX_CONTROL,
         )
         prior = Belief(mean=np.zeros(5), cov=np.eye(5))
         with pytest.raises(ValueError, match="observation"):

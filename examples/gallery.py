@@ -458,7 +458,7 @@ def precision_field(
     Returns:
         The x samples, the y samples, and the `res × res` field, indexed `[y, x]`.
     """
-    sensor = model.observation
+    sensor = model.observation_model
     if not isinstance(sensor, CallableSensor):
         raise TypeError(
             "precision_field draws a state-dependent R(x). This model's observation is "

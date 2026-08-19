@@ -49,7 +49,9 @@ def chemotaxis_ffg(dt):
     to ``CouplingGraphBackend(graph, transitions)``.
     """
     transitions = tuple(
-        GaussianTransition.from_ou(TAU[node], STATIONARY_VAR[node], dt)
+        GaussianTransition.from_ou(
+            TAU[node], stationary_var=STATIONARY_VAR[node], dt=dt
+        )
         for node in range(_NODES)
     )
 
@@ -59,7 +61,8 @@ def chemotaxis_ffg(dt):
     )
 
     observations = {
-        node: GaussianObservation([[1.0]], [[_OBS_NOISE]]) for node in _OBSERVED
+        node: GaussianObservation([[1.0]], observation_noise=[[_OBS_NOISE]])
+        for node in _OBSERVED
     }
     graph = CouplingGraph(
         root=CHEA,

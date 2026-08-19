@@ -50,13 +50,13 @@ def _model():
         },
     )
     return LinearGaussianModel(
-        dynamics=[[1.0]],
+        dynamics_matrix=[[1.0]],
         observation_matrix=[[1.0]],
         dynamics_noise=[[0.05]],
         observation_noise=[[0.3]],
         prior=Belief(mean=[0.0], cov=[[0.5]]),
-        control=[[1.0]],
-        observation=sensor,
+        control_matrix=[[1.0]],
+        observation_model=sensor,
     )
 
 
@@ -125,34 +125,40 @@ class TestHorizonSelect:
 
 class TestObservationGoalHorizon:
     def test_default_horizon_is_one(self):
-        assert ObservationGoal([0.0], (-2.0, 2.0)).horizon == 1
+        assert ObservationGoal([0.0], action_bounds=(-2.0, 2.0)).horizon == 1
 
     def test_carries_horizon(self):
-        assert ObservationGoal([0.0], (-2.0, 2.0), horizon=4).horizon == 4
+        assert ObservationGoal([0.0], action_bounds=(-2.0, 2.0), horizon=4).horizon == 4
 
     def test_horizon_below_one_raises(self):
         with np.testing.assert_raises(ValueError):
-            ObservationGoal([0.0], (-2.0, 2.0), horizon=0)
+            ObservationGoal([0.0], action_bounds=(-2.0, 2.0), horizon=0)
 
 
 class TestObservationGoalInfoTarget:
     def test_default_info_target_is_none(self):
         # None = whole-state info gain, the unchanged default (issue #26).
-        assert ObservationGoal([0.0], (-2.0, 2.0)).info_target is None
+        assert ObservationGoal([0.0], action_bounds=(-2.0, 2.0)).info_node is None
 
     def test_carries_info_target_node_index(self):
-        assert ObservationGoal([0.0], (-2.0, 2.0), info_target=2).info_target == 2
+        assert (
+            ObservationGoal([0.0], action_bounds=(-2.0, 2.0), info_node=2).info_node
+            == 2
+        )
 
     def test_negative_info_target_raises(self):
         with np.testing.assert_raises(ValueError):
-            ObservationGoal([0.0], (-2.0, 2.0), info_target=-1)
+            ObservationGoal([0.0], action_bounds=(-2.0, 2.0), info_node=-1)
 
 
 class TestAgentThreadsHorizon:
     def test_agent_builds_selector_with_goal_horizon(self):
         model = _model()
         agent = Agent(
-            model, ObservationGoal([0.0], (-3.0, 3.0), n_candidates=11, horizon=3)
+            model,
+            ObservationGoal(
+                [0.0], action_bounds=(-3.0, 3.0), n_candidates=11, horizon=3
+            ),
         )
         sel = agent._selector
         assert isinstance(sel, EFESelector)
@@ -161,7 +167,9 @@ class TestAgentThreadsHorizon:
 
     def test_default_goal_gives_horizon_one_selector(self):
         model = _model()
-        agent = Agent(model, ObservationGoal([0.0], (-3.0, 3.0), n_candidates=11))
+        agent = Agent(
+            model, ObservationGoal([0.0], action_bounds=(-3.0, 3.0), n_candidates=11)
+        )
         sel = agent._selector
         assert isinstance(sel, EFESelector)
         assert sel.horizon == 1
@@ -179,12 +187,12 @@ class TestEFESelectorValidation:
     def test_rejects_multidimensional_action(self):
         # EFESelector's grid is 1-D; p>1 must error clearly, not crash cryptically.
         m2 = LinearGaussianModel(
-            dynamics=[[1.0, 0.0], [0.0, 1.0]],
+            dynamics_matrix=[[1.0, 0.0], [0.0, 1.0]],
             observation_matrix=[[1.0, 0.0]],
             dynamics_noise=[[0.1, 0.0], [0.0, 0.1]],
             observation_noise=[[0.3]],
             prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
-            control=[[1.0, 0.0], [0.0, 1.0]],  # p = 2
+            control_matrix=[[1.0, 0.0], [0.0, 1.0]],  # p = 2
         )
         with pytest.raises(ValueError, match=r"1-D action grid|p=1|p>1"):
             EFESelector(m2, n_candidates=11, action_bounds=(-2.0, 2.0))
@@ -197,13 +205,13 @@ class TestEFESelectorValidation:
 
         belief = Belief(mean=[0.0], cov=[[0.5]])
         model = LinearGaussianModel(
-            dynamics=[[1.0]],
+            dynamics_matrix=[[1.0]],
             observation_matrix=[[1.0]],
             dynamics_noise=[[0.05]],
             observation_noise=[[0.3]],
             prior=belief,
-            control=[[1.0]],
-            observation=CallableSensor([[1.0]], half_neg, {}),
+            control_matrix=[[1.0]],
+            observation_model=CallableSensor([[1.0]], half_neg, {}),
         )
         sel = EFESelector(model, n_candidates=21, action_bounds=(-3.0, 3.0))
         chosen = sel.select(belief, _pref())

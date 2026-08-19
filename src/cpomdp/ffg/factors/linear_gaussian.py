@@ -59,7 +59,7 @@ class GaussianObservation:
     is_fixed = True  # constant (C, R) — lets the backend keep its byte-identical path
 
     def __init__(
-        self, observation_matrix: ArrayLike, observation_noise: ArrayLike
+        self, observation_matrix: ArrayLike, *, observation_noise: ArrayLike
     ) -> None:
         object.__setattr__(
             self, "observation_matrix", jnp.asarray(observation_matrix, dtype=float)
@@ -316,29 +316,40 @@ class GaussianTransition:
     Holds the fixed transition and process noise; ``predict(message, b)`` pushes a
     belief on x through the dynamics to a belief on x'.
 
-    - ``dynamics`` — A, shape ``(n, n)``.
+    - ``dynamics_matrix`` — A, shape ``(n, n)``.
     - ``dynamics_noise`` — Q, shape ``(n, n)``, positive-definite (it is inverted).
     """
 
-    dynamics: Float64[Array, "n n"]
+    dynamics_matrix: Float64[Array, "n n"]
     dynamics_noise: Float64[Array, "n n"]
 
-    def __init__(self, dynamics: ArrayLike, dynamics_noise: ArrayLike) -> None:
-        object.__setattr__(self, "dynamics", jnp.asarray(dynamics, dtype=float))
+    def __init__(
+        self, dynamics_matrix: ArrayLike, *, dynamics_noise: ArrayLike
+    ) -> None:
+        object.__setattr__(
+            self, "dynamics_matrix", jnp.asarray(dynamics_matrix, dtype=float)
+        )
         object.__setattr__(
             self, "dynamics_noise", jnp.asarray(dynamics_noise, dtype=float)
         )
         self._validate()
 
     def _validate(self) -> None:
-        dynamics, dynamics_noise = self.dynamics, self.dynamics_noise  # A, Q
-        if dynamics.ndim != 2 or dynamics.shape[0] != dynamics.shape[1]:
+        dynamics_matrix, dynamics_noise = (
+            self.dynamics_matrix,
+            self.dynamics_noise,
+        )  # A, Q
+        if (
+            dynamics_matrix.ndim != 2
+            or dynamics_matrix.shape[0] != dynamics_matrix.shape[1]
+        ):
             raise ValueError(
-                f"dynamics must be square (n, n), got shape {dynamics.shape}"
+                f"dynamics_matrix must be square (n, n), got shape "
+                f"{dynamics_matrix.shape}"
             )
         # Q is inverted in the joint, so it must be positive-definite.
         validate_covariance(dynamics_noise, "dynamics_noise", require_definite=True)
-        n = dynamics.shape[0]
+        n = dynamics_matrix.shape[0]
         if dynamics_noise.shape != (n, n):
             raise ValueError(
                 f"dynamics_noise must be {n}x{n} to match the {n}-D state, "
@@ -347,7 +358,7 @@ class GaussianTransition:
 
     @classmethod
     def from_ou(
-        cls, tau: float, stationary_var: float, dt: float
+        cls, tau: float, *, stationary_var: float, dt: float
     ) -> "GaussianTransition":
         """Build a 1-D transition from Ornstein–Uhlenbeck (OU) parameters.
 
@@ -369,11 +380,12 @@ class GaussianTransition:
             dt: the discretisation step.
 
         Returns:
-            A ``GaussianTransition`` with 1×1 ``dynamics`` (A), ``dynamics_noise`` (Q).
+            A ``GaussianTransition`` with 1×1 ``dynamics_matrix`` (A) and
+            ``dynamics_noise`` (Q).
         """
         a = jnp.exp(-dt / tau)  # A = e^(−dt/τ)
         q = stationary_var * (1.0 - a * a)  # Q = Σ_stat (1 − A²)
-        return cls(jnp.reshape(a, (1, 1)), jnp.reshape(q, (1, 1)))
+        return cls(jnp.reshape(a, (1, 1)), dynamics_noise=jnp.reshape(q, (1, 1)))
 
     def predict(
         self,
@@ -404,8 +416,11 @@ class GaussianTransition:
         Returns:
             A ``CanonicalGaussian`` over the n-D next state x'.
         """
-        dynamics, dynamics_noise = self.dynamics, self.dynamics_noise  # A, Q
-        n = dynamics.shape[0]
+        dynamics_matrix, dynamics_noise = (
+            self.dynamics_matrix,
+            self.dynamics_noise,
+        )  # A, Q
+        n = dynamics_matrix.shape[0]
         # b = Bu, the control shift; None means no shift.
         if control_term is None:
             shift = jnp.zeros(n)
@@ -413,10 +428,10 @@ class GaussianTransition:
             shift = jnp.asarray(control_term, dtype=float)
 
         noise_precision = jnp.linalg.inv(dynamics_noise)  # Q⁻¹
-        noise_weighted_dynamics = noise_precision @ dynamics  # Q⁻¹A
+        noise_weighted_dynamics = noise_precision @ dynamics_matrix  # Q⁻¹A
         # Joint precision over [x, x']: [[AᵀQ⁻¹A + Λ, −AᵀQ⁻¹], [−Q⁻¹A, Q⁻¹]], with
         # the incoming message's precision folded into the x (top-left) block.
-        state_block = dynamics.T @ noise_weighted_dynamics + message.precision
+        state_block = dynamics_matrix.T @ noise_weighted_dynamics + message.precision
         precision = jnp.block(
             [
                 [state_block, -noise_weighted_dynamics.T],
@@ -425,7 +440,7 @@ class GaussianTransition:
         )
         # Joint potential [−AᵀQ⁻¹b + h, Q⁻¹b], message's potential folded into x.
         noise_weighted_shift = noise_precision @ shift  # Q⁻¹b
-        state_potential = message.potential - dynamics.T @ noise_weighted_shift
+        state_potential = message.potential - dynamics_matrix.T @ noise_weighted_shift
         potential = jnp.concatenate([state_potential, noise_weighted_shift])
 
         joint = CanonicalGaussian._unchecked(precision, potential)
@@ -435,7 +450,7 @@ class GaussianTransition:
         self,
     ) -> tuple[tuple[Float64[Array, "n n"], Float64[Array, "n n"]], None]:
         """Leaves for JAX: ``(dynamics, dynamics_noise)``, no static aux data."""
-        return (self.dynamics, self.dynamics_noise), None
+        return (self.dynamics_matrix, self.dynamics_noise), None
 
     @classmethod
     def tree_unflatten(
@@ -444,9 +459,9 @@ class GaussianTransition:
         children: tuple[Float64[Array, "n n"], Float64[Array, "n n"]],
     ) -> "GaussianTransition":
         """Rebuild from leaves without validating — the leaves may be tracers."""
-        dynamics, dynamics_noise = children
+        dynamics_matrix, dynamics_noise = children
         obj = object.__new__(cls)
-        object.__setattr__(obj, "dynamics", dynamics)
+        object.__setattr__(obj, "dynamics_matrix", dynamics_matrix)
         object.__setattr__(obj, "dynamics_noise", dynamics_noise)
         return obj
 

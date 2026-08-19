@@ -1,6 +1,6 @@
 """Process-noise models: state-dependent dynamics noise Q(x).
 
-The internal-noise dual of ``observation``. ``DynamicsNoise`` is the seam the EFE
+The internal-noise dual of ``observation_model``. ``DynamicsNoise`` is the seam the EFE
 predict step asks for the process-noise covariance at a state; ``CallableProcessNoise``
 is the state-dependent case. Per RFC-001 chapter 8 this is where the *binding* precision
 constraint lives for the chemotaxis fidelity (internal processing, not the sensor).
@@ -77,6 +77,7 @@ class CallableProcessNoise:
 
     def _validate(self) -> None:
         # Shape/PSD of Q(x) can't be checked here — we don't know n. The MODEL probes
-        # process_noise.at(zeros(n)) at its own construction, where n is known.
+        # dynamics_noise_model.noise_at(zeros(n)) at its own construction, where n
+        # is known.
         if not callable(self.q_fn):
             raise TypeError(f"q_fn must be callable, got {type(self.q_fn).__name__}")

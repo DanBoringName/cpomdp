@@ -1,7 +1,8 @@
 """FFG-aware EFE action selector (issue #26, Phase B4).
 
 The selector vmaps the FFG EFE step over the candidate action grid and argmins. Its
-anchor: on a single-node model (no structural couplings) with the whole-state target, it
+anchor: on a single-node model (no structural couplings) with the whole-state info
+block, it
 must pick the same action as the existing ``EFESelector`` on the equivalent flat model.
 """
 
@@ -47,7 +48,8 @@ def _decoupled_noise(s, params):
 
 
 def test_ffg_selector_reduces_to_efe_selector_single_node():
-    # One node, no couplings, whole-state target: the FFG selector must pick the same
+    # One node, no couplings, whole-state info block: the FFG selector must pick the
+    # same
     # grid action as EFESelector on the equivalent flat LinearGaussianModel.
     dynamics = np.array([[1.0, 0.1], [0.0, 1.0]])  # A
     dynamics_noise = np.array([[0.1, 0.0], [0.0, 0.1]])  # Q
@@ -59,25 +61,33 @@ def test_ffg_selector_reduces_to_efe_selector_single_node():
         root=0,
         dims=(2,),
         couplings=(),
-        observations={0: GaussianObservation(observation_matrix, observation_noise)},
+        observations={
+            0: GaussianObservation(
+                observation_matrix, observation_noise=observation_noise
+            )
+        },
     )
     backend = CouplingGraphBackend(
-        graph, (GaussianTransition(dynamics, dynamics_noise),), control=control
+        graph,
+        (GaussianTransition(dynamics, dynamics_noise=dynamics_noise),),
+        control_matrix=control,
     )
     model = LinearGaussianModel(
-        dynamics=dynamics,
+        dynamics_matrix=dynamics,
         observation_matrix=observation_matrix,
         dynamics_noise=dynamics_noise,
         observation_noise=observation_noise,
         prior=Belief(mean=np.zeros(2), cov=np.eye(2)),
-        control=control,
+        control_matrix=control,
     )
 
     belief = Belief(mean=[0.3, -0.2], cov=[[0.7, 0.1], [0.1, 0.4]])
     preference = Preference(goal=[1.0], precision=[[2.0]])
     bounds, k = (-2.0, 2.0), 21
 
-    ffg = FfgEfeSelector(backend, target=range(2), n_candidates=k, action_bounds=bounds)
+    ffg = FfgEfeSelector(
+        backend, info_block=range(2), n_candidates=k, action_bounds=bounds
+    )
     efe = EFESelector(model, n_candidates=k, action_bounds=bounds)
 
     np.testing.assert_allclose(
@@ -93,22 +103,24 @@ def _two_node_backend():
         root=0,
         dims=(1, 1),
         couplings=(Coupling(0, 1, GaussianCoupling([[0.8]], [[0.05]]), 1.0),),
-        observations={1: GaussianObservation([[1.0]], [[0.1]])},
+        observations={1: GaussianObservation([[1.0]], observation_noise=[[0.1]])},
     )
     transitions = (
-        GaussianTransition([[0.7]], [[0.1]]),
-        GaussianTransition([[0.5]], [[0.08]]),
+        GaussianTransition([[0.7]], dynamics_noise=[[0.1]]),
+        GaussianTransition([[0.5]], dynamics_noise=[[0.08]]),
     )
-    return CouplingGraphBackend(graph, transitions, control=[[1.0], [0.0]])
+    return CouplingGraphBackend(graph, transitions, control_matrix=[[1.0], [0.0]])
 
 
 def test_agent_on_ffg_backend_acts_via_ffg_selector():
-    # B5 (issue #26): a user drives a branching FFG as an Agent. info_target aims the
+    # B5 (issue #26): a user drives a branching FFG as an Agent. info_node aims the
     # epistemic at a chosen node; the Agent routes to the FFG EFE selector, and the
     # perceive -> act cycle completes.
     backend = _two_node_backend()
     agent = Agent(
-        objective=ObservationGoal([0.5], (-2.0, 2.0), info_target=0),  # info about CheA
+        objective=ObservationGoal(
+            [0.5], action_bounds=(-2.0, 2.0), info_node=0
+        ),  # info about CheA
         backend=backend,
     )
     agent.infer_states([0.3])  # observe CheY
@@ -119,11 +131,11 @@ def test_agent_on_ffg_backend_acts_via_ffg_selector():
 
 
 def test_agent_ffg_whole_state_when_info_target_none():
-    # info_target=None on the FFG backend still routes to the FFG selector, aimed at the
+    # info_node=None on the FFG backend still routes to the FFG selector, aimed at the
     # whole state (the default epistemic).
     backend = _two_node_backend()
     agent = Agent(
-        objective=ObservationGoal([0.5], (-2.0, 2.0)),  # no info_target
+        objective=ObservationGoal([0.5], action_bounds=(-2.0, 2.0)),  # no info_node
         backend=backend,
     )
     assert isinstance(agent._selector, FfgEfeSelector)
@@ -131,21 +143,21 @@ def test_agent_ffg_whole_state_when_info_target_none():
 
 
 def test_info_target_on_flat_backend_raises():
-    # info_target aims at an FFG node; it is meaningless without a branching backend.
+    # info_node aims at an FFG node; it is meaningless without a branching backend.
     model = LinearGaussianModel(
-        dynamics=[[1.0]],
+        dynamics_matrix=[[1.0]],
         observation_matrix=[[1.0]],
         dynamics_noise=[[0.1]],
         observation_noise=[[0.2]],
         prior=Belief(mean=[0.0], cov=[[1.0]]),
-        control=[[1.0]],
+        control_matrix=[[1.0]],
     )
     with np.testing.assert_raises(ValueError):
-        Agent(model, ObservationGoal([0.5], (-2.0, 2.0), info_target=0))
+        Agent(model, ObservationGoal([0.5], action_bounds=(-2.0, 2.0), info_node=0))
 
 
 def test_ffg_agent_matches_kalman_efe_agent_end_to_end():
-    # B6 gate (issue #26): the whole FFG EFE Agent path — single node, info_target=None,
+    # B6 gate (issue #26): the whole FFG EFE Agent path — single node, info_node=None,
     # so the epistemic is whole-state — must reproduce a KalmanBackend + EFESelector
     # Agent step for step. The non-negotiable "v0.3 behaviour is not broken" check.
     dynamics = np.array([[1.0, 0.1], [0.0, 1.0]])  # A
@@ -155,31 +167,37 @@ def test_ffg_agent_matches_kalman_efe_agent_end_to_end():
     control = np.array([[1.0], [0.0]])  # B — drives the observed state[0]
     prior = Belief(mean=np.zeros(2), cov=np.eye(2))
     model = LinearGaussianModel(
-        dynamics=dynamics,
+        dynamics_matrix=dynamics,
         observation_matrix=observation_matrix,
         dynamics_noise=dynamics_noise,
         observation_noise=observation_noise,
         prior=prior,
-        control=control,
+        control_matrix=control,
     )
     graph = CouplingGraph(
         root=0,
         dims=(2,),
         couplings=(),
-        observations={0: GaussianObservation(observation_matrix, observation_noise)},
+        observations={
+            0: GaussianObservation(
+                observation_matrix, observation_noise=observation_noise
+            )
+        },
     )
     backend = CouplingGraphBackend(
-        graph, (GaussianTransition(dynamics, dynamics_noise),), control=control
+        graph,
+        (GaussianTransition(dynamics, dynamics_noise=dynamics_noise),),
+        control_matrix=control,
     )
     bounds, k = (-2.0, 2.0), 21
 
     ffg_agent = Agent(
-        objective=ObservationGoal([0.5], bounds, n_candidates=k),
+        objective=ObservationGoal([0.5], action_bounds=bounds, n_candidates=k),
         backend=backend,
     )
     ref_agent = Agent(
         model,
-        ObservationGoal([0.5], bounds, n_candidates=k),
+        ObservationGoal([0.5], action_bounds=bounds, n_candidates=k),
         backend=KalmanBackend(model),
         selector=EFESelector(model, n_candidates=k, action_bounds=bounds),
     )
@@ -197,7 +215,7 @@ def test_ffg_agent_matches_kalman_efe_agent_end_to_end():
 # --- Action-driven epistemic: state-dependent sensing in the selector (Phase 3) -
 
 
-def _score_components(backend, belief, preference, candidates, target):
+def _score_components(backend, belief, preference, candidates, info_block):
     """``(pragmatic, epistemic)`` per candidate — the selector's kernel, exposed.
 
     Mirrors ``FfgEfeSelector.select``'s per-candidate work (predict → ``R(μ⁺)`` →
@@ -216,7 +234,7 @@ def _score_components(backend, belief, preference, candidates, target):
             observation_noise,
             preference.goal,
             preference.precision,
-            target,
+            info_block,
         )
         return parts["pragmatic"], parts["epistemic"]
 
@@ -234,7 +252,9 @@ def _single_node_rx_backend(params):
         couplings=(),
         observations={0: CallableGaussianObservation(C, _rx_noise, params)},
     )
-    backend = CouplingGraphBackend(graph, (GaussianTransition(A, Q),), control=B)
+    backend = CouplingGraphBackend(
+        graph, (GaussianTransition(A, dynamics_noise=Q),), control_matrix=B
+    )
     return backend, A, Q, C, B
 
 
@@ -257,31 +277,35 @@ class TestStateDependentSelection:
             root=0,
             dims=(2,),
             couplings=(),
-            observations={0: GaussianObservation(C, params["R0"])},
+            observations={0: GaussianObservation(C, observation_noise=params["R0"])},
         )
-        fx = CouplingGraphBackend(graph_fx, (GaussianTransition(A, Q),), control=B)
+        fx = CouplingGraphBackend(
+            graph_fx, (GaussianTransition(A, dynamics_noise=Q),), control_matrix=B
+        )
         _, epi_fx = _score_components(fx, belief, pref, cands, range(2))
         np.testing.assert_allclose(np.asarray(epi_fx), float(epi_fx[0]), atol=1e-9)
 
     def test_single_node_rx_selector_matches_flat_efe_selector(self):
-        # Trusted oracle: single node (no couplings, so μ⁺ = μ⁻), whole-state target.
+        # Trusted oracle: single node (no couplings, μ⁺ = μ⁻), whole-state info block.
         # The FFG R(x) selector must pick the same action as EFESelector on the
         # equivalent flat CallableSensor model, atol 1e-7 (the R(x) analogue of B4).
         params = {"R0": np.array([[0.5]]), "gain": 0.4}
         rx, A, Q, C, B = _single_node_rx_backend(params)
         model = LinearGaussianModel(
-            dynamics=A,
+            dynamics_matrix=A,
             observation_matrix=C,
             dynamics_noise=Q,
             observation_noise=params["R0"],  # placeholder; overridden by observation
             prior=Belief(mean=np.zeros(2), cov=np.eye(2)),
-            control=B,
-            observation=CallableSensor(C, _rx_noise, params),
+            control_matrix=B,
+            observation_model=CallableSensor(C, _rx_noise, params),
         )
         belief = Belief(mean=[0.3, -0.2], cov=[[0.7, 0.1], [0.1, 0.4]])
         pref = Preference(goal=[1.0], precision=[[2.0]])
         bounds, k = (-2.0, 2.0), 21
-        ffg = FfgEfeSelector(rx, target=range(2), n_candidates=k, action_bounds=bounds)
+        ffg = FfgEfeSelector(
+            rx, info_block=range(2), n_candidates=k, action_bounds=bounds
+        )
         efe = EFESelector(model, n_candidates=k, action_bounds=bounds)
         np.testing.assert_allclose(
             np.asarray(ffg.select(belief, pref)),
@@ -307,7 +331,9 @@ class TestStateDependentSelection:
             },  # both channels read s
         )
         rx = CouplingGraphBackend(
-            graph, (GaussianTransition([[1.0]], [[0.1]]),), control=[[1.0]]
+            graph,
+            (GaussianTransition([[1.0]], dynamics_noise=[[0.1]]),),
+            control_matrix=[[1.0]],
         )
         belief = Belief(mean=[0.0], cov=[[1.0]])
         # goal 3.0 on the fixed channel, ~0 weight on the info channel (decoupling).
@@ -320,7 +346,9 @@ class TestStateDependentSelection:
         assert not np.isclose(
             float(full_action[0]), float(prag_action[0])
         )  # the epistemic genuinely moved the decision, away from the pragmatic goal
-        sel = FfgEfeSelector(rx, target=range(1), n_candidates=k, action_bounds=bounds)
+        sel = FfgEfeSelector(
+            rx, info_block=range(1), n_candidates=k, action_bounds=bounds
+        )
         np.testing.assert_allclose(
             np.asarray(sel.select(belief, pref)), np.asarray(full_action), atol=1e-7
         )

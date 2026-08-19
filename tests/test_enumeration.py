@@ -59,12 +59,12 @@ VARYING_WIN_MARGIN = 1.0
 def _model():
     """A plain fixed-sensor model, p = 1."""
     return LinearGaussianModel(
-        dynamics=[[1.0, 0.1], [0.0, 1.0]],
+        dynamics_matrix=[[1.0, 0.1], [0.0, 1.0]],
         observation_matrix=[[1.0, 0.0]],
         dynamics_noise=[[0.1, 0.0], [0.0, 0.1]],
         observation_noise=[[0.5]],
         prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
-        control=[[0.0], [1.0]],
+        control_matrix=[[0.0], [1.0]],
     )
 
 
@@ -89,13 +89,13 @@ def _beacon_model():
         },
     )
     return LinearGaussianModel(
-        dynamics=[[1.0]],
+        dynamics_matrix=[[1.0]],
         observation_matrix=[[1.0]],
         dynamics_noise=[[0.05]],
         observation_noise=[[0.5]],
         prior=Belief(mean=[0.0], cov=[[1.0]]),
-        control=[[1.0]],
-        observation=sensor,
+        control_matrix=[[1.0]],
+        observation_model=sensor,
     )
 
 
@@ -290,12 +290,12 @@ class TestCostAndTransforms:
     def test_handles_multi_dimensional_actions(self):
         # p = 2 — a set the grid EFESelector rejects (it is 1-D only).
         model = LinearGaussianModel(
-            dynamics=[[1.0, 0.0], [0.0, 1.0]],
+            dynamics_matrix=[[1.0, 0.0], [0.0, 1.0]],
             observation_matrix=[[1.0, 0.0]],
             dynamics_noise=[[0.1, 0.0], [0.0, 0.1]],
             observation_noise=[[0.5]],
             prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
-            control=[[1.0, 0.0], [0.0, 1.0]],  # (n=2, p=2)
+            control_matrix=[[1.0, 0.0], [0.0, 1.0]],  # (n=2, p=2)
         )
         action_set = FiniteActionSet(
             [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]], version="2d-v1"
@@ -310,12 +310,12 @@ class TestCostAndTransforms:
 class TestValidation:
     def test_rejects_control_free_model(self):
         model = LinearGaussianModel(
-            dynamics=[[1.0]],
+            dynamics_matrix=[[1.0]],
             observation_matrix=[[1.0]],
             dynamics_noise=[[0.1]],
             observation_noise=[[0.5]],
             prior=Belief(mean=[0.0], cov=[[1.0]]),
-            control=None,
+            control_matrix=None,
         )
         with pytest.raises(ValueError, match="control"):
             EnumeratedEfeSearch(

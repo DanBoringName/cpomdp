@@ -80,15 +80,15 @@ EPS_PLATEAU = 0.2  # the epistemic pull varies by less than this: flat, not grow
 
 
 def _setup():
-    """``(backend, belief, preference, target)`` for the coupled-tree cue task."""
+    """``(backend, belief, preference, info_block)`` for the coupled-tree cue task."""
     backend = demo.build_backend(epistemic_alive=True, cue_x=demo.CUE_DETOUR_X)
     belief = demo.start_belief()
     preference = Preference(
         goal=[0.0, 0.0],
         precision=[[demo.GOAL_PRECISION, 0.0], [0.0, demo.INFO_PRECISION]],
     )
-    target = tuple(backend.block(demo.CONTEXT))
-    return backend, belief, preference, target
+    info_block = tuple(backend.block(demo.CONTEXT))
+    return backend, belief, preference, info_block
 
 
 def _cue_ward(policy) -> bool:
@@ -111,9 +111,9 @@ def _reach(horizon: int):
 # --- 1. the decisive, selection-free measurement -----------------------------------
 def argmin_at(horizon: int, action_set=ACTION_SET):
     """The exhaustive argmin at a horizon: ``(n_policies, Gmin, argmin, cue_ward)``."""
-    backend, belief, preference, target = _setup()
+    backend, belief, preference, info_block = _setup()
     search = EnumeratedEfeSearch.over_backend(
-        backend, action_set, target=target, horizon=horizon
+        backend, action_set, info_block=info_block, horizon=horizon
     )
     result = search.evaluate(belief, preference)
     policy = np.asarray(result.best_policy).ravel()
@@ -156,9 +156,9 @@ class FlipMeasurement(NamedTuple):
 def measure_flip(horizon: int) -> FlipMeasurement:
     """Enumerate at ``horizon`` and read off everything the falsifiers need."""
     n_policies, _, _, cue_ward = argmin_at(horizon)
-    backend, _, _, target = _setup()
+    backend, _, _, info_block = _setup()
     certificate = EnumeratedEfeSearch.over_backend(
-        backend, ACTION_SET, target=target, horizon=horizon
+        backend, ACTION_SET, info_block=info_block, horizon=horizon
     ).certificate
     walk, reach = _numpy_score(_walk(horizon)), _numpy_score(_reach(horizon))
     assert certificate.expected == n_policies  # the two routes enumerate the same set
@@ -174,11 +174,16 @@ def measure_flip(horizon: int) -> FlipMeasurement:
 # --- 2. the mechanism split (post-selection exposition) ----------------------------
 def mechanism_curve(max_horizon=MAX_H):
     """Per-horizon ``(H, Δε, Δc, ΔG)`` for the selected walk against the coast reach."""
-    backend, belief, preference, target = _setup()
+    backend, belief, preference, info_block = _setup()
     rows = []
     for horizon in range(1, max_horizon + 1):
         stat = crossover_statistic(
-            backend, belief, _walk(horizon), _reach(horizon), preference, target=target
+            backend,
+            belief,
+            _walk(horizon),
+            _reach(horizon),
+            preference,
+            info_block=info_block,
         )
         rows.append(
             (
@@ -200,11 +205,11 @@ def _numpy_score(policy) -> float:
     -- independently of ``_ffg_efe_step``. So agreement is a cross-implementation check
     of the scoring kernel, not of shared plumbing.
     """
-    backend, belief, preference, target = _setup()
+    backend, belief, preference, info_block = _setup()
     observation_matrix = np.asarray(backend.observation_model[0])  # C
     precision = np.asarray(preference.precision)  # Lambda
     goal = np.asarray(preference.goal)
-    idx = np.array(target)
+    idx = np.array(info_block)
 
     carry = belief
     total = 0.0
@@ -283,9 +288,13 @@ def conditioning(policy):
     fires, the kernel's ``_logdet_pd`` or this module's ``logdet_pd``, and the epistemic
     never goes NaN.
     """
-    backend, belief, preference, target = _setup()
+    backend, belief, preference, info_block = _setup()
     trace = policy_efe_ffg_trace(
-        backend, belief, jnp.asarray(policy).reshape(-1, 1), preference, target=target
+        backend,
+        belief,
+        jnp.asarray(policy).reshape(-1, 1),
+        preference,
+        info_block=info_block,
     )
     return rollout_conditioning(trace)
 
@@ -301,13 +310,15 @@ def epistemic_counterfactual(horizon=FLIP_H, actions=None):
     NaN-safe argmin is never exercised here.
     """
     actions = V1 if actions is None else actions
-    backend, belief, preference, target = _setup()
+    backend, belief, preference, info_block = _setup()
     combos = np.array(list(itertools.product(actions, repeat=horizon)), dtype=float)
 
     @jax.jit
     def batch(pols):
         def one(pol):
-            g, parts = policy_efe_ffg(backend, belief, pol, preference, target=target)
+            g, parts = policy_efe_ffg(
+                backend, belief, pol, preference, info_block=info_block
+            )
             return g, parts["pragmatic"]
 
         return jax.vmap(one)(pols)
@@ -516,9 +527,11 @@ def _print_tables() -> None:
         f"   all PD = {rc.all_positive_definite}; min eig(Σ_post) = {min_eig:.3e} "
         f"({min_eig / MIN_EIG_FLOOR:.0e}x the floor); max cond = {max_cond:.0f}"
     )
-    backend, belief, preference, target = _setup()
+    backend, belief, preference, info_block = _setup()
     walk_ship = float(
-        policy_efe_ffg(backend, belief, _walk(FLIP_H), preference, target=target)[0]
+        policy_efe_ffg(
+            backend, belief, _walk(FLIP_H), preference, info_block=info_block
+        )[0]
     )
     walk_np, reach_np = _numpy_score(_walk(FLIP_H)), _numpy_score(_reach(FLIP_H))
     print(
@@ -591,10 +604,12 @@ def check() -> None:
     # 3. The headline number matches an independent NumPy kernel at H* (atol 1e-9). The
     #    oracle takes its ln det magnitude from slogdet, the shipped kernel off a
     #    Cholesky factor. Both reject a non-PD argument (see the audit tests).
-    backend, belief, preference, target = _setup()
+    backend, belief, preference, info_block = _setup()
     for policy in (_walk(FLIP_H), _reach(FLIP_H)):
         shipped = float(
-            policy_efe_ffg(backend, belief, policy, preference, target=target)[0]
+            policy_efe_ffg(backend, belief, policy, preference, info_block=info_block)[
+                0
+            ]
         )
         assert abs(shipped - _numpy_score(policy)) < 1e-9
 

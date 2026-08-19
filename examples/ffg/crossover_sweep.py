@@ -47,15 +47,15 @@ EPS_PLATEAU = 0.2
 
 
 def _crossover_setup():
-    """``(backend, belief, preference, target)`` for the coupled-tree model."""
+    """``(backend, belief, preference, info_block)`` for the coupled-tree model."""
     backend = demo.build_backend(epistemic_alive=True, cue_x=demo.CUE_DETOUR_X)
     belief = demo.start_belief()
     preference = Preference(
         goal=[0.0, 0.0],
         precision=[[demo.GOAL_PRECISION, 0.0], [0.0, demo.INFO_PRECISION]],
     )
-    target = tuple(backend.block(demo.CONTEXT))
-    return backend, belief, preference, target
+    info_block = tuple(backend.block(demo.CONTEXT))
+    return backend, belief, preference, info_block
 
 
 def _reach_walk_actions():
@@ -72,7 +72,7 @@ def _constant(action, horizon):
 
 def sweep(max_horizon: int = CROSSOVER_MAX_H):
     """Per-horizon crossover statistic ``(H, Δε, Δc, ΔG)`` for the constant pair."""
-    backend, belief, preference, target = _crossover_setup()
+    backend, belief, preference, info_block = _crossover_setup()
     reach, walk = _reach_walk_actions()
     rows = []
     for horizon in range(1, max_horizon + 1):
@@ -82,7 +82,7 @@ def sweep(max_horizon: int = CROSSOVER_MAX_H):
             _constant(walk, horizon),
             _constant(reach, horizon),
             preference,
-            target=target,
+            info_block=info_block,
         )
         rows.append(
             (
@@ -97,7 +97,7 @@ def sweep(max_horizon: int = CROSSOVER_MAX_H):
 
 def check() -> None:
     """Assert the constant-family null: no crossover, and a flat epistemic pull."""
-    backend, belief, preference, target = _crossover_setup()
+    backend, belief, preference, info_block = _crossover_setup()
     reach, walk = _reach_walk_actions()
     rows = sweep()
 
@@ -126,7 +126,7 @@ def check() -> None:
         lambda h: _constant(walk, h),
         lambda h: _constant(reach, h),
         preference,
-        target=target,
+        info_block=info_block,
         max_horizon=CROSSOVER_MAX_H,
     )
     assert h_star is None
