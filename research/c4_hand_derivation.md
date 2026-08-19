@@ -1,9 +1,12 @@
 # The inference gap under state-dependent noise: the hand derivation
 
-The analytic derivation the symbolic suites check themselves against. Every
+The analytic derivation the symbolic suites check themselves against. A
 `SymbolicReduction` emitted by `research.checks.series_kernel`,
-`research.checks.log_ratio_series` and `research.checks.gap_series` names a step of
-this document in its `correspondence` field. That field exists because a CAS establishes
+`research.checks.log_ratio_series` or `research.checks.gap_series` names a step of this
+document in its `correspondence` field when it rests on the construction or the
+σ-expansion. The rest name a standard identity they lean on instead, such as the
+Gaussian moment integral, or a dated entry in `research/gate_d4_registration.md`.
+That field exists because a CAS establishes
 that one expression equals another and has nothing to say about whether those are the
 expressions the analytic claim is about. This is where that second question is answered.
 
