@@ -175,7 +175,7 @@ class TestLinearGaussianModels:
         assert LinearGaussianModel(**_valid_kwargs()).observation_model is None
 
     def test_accepts_an_observation_model(self):
-        sensor = FixedSensor([[1.0, 0.0]], [[1.0]])
+        sensor = FixedSensor([[1.0, 0.0]], observation_noise=[[1.0]])
         m = LinearGaussianModel(**_valid_kwargs(observation_model=sensor))
         assert m.observation_model is sensor
 
@@ -235,7 +235,7 @@ class TestPytreeRegistration:
     def test_model_round_trips_with_an_observation(self):
         # observation is a nullable child like control: a FixedSensor recurses
         # into its own array leaves and is rebuilt on unflatten.
-        sensor = FixedSensor([[1.0, 0.0]], [[0.5]])
+        sensor = FixedSensor([[1.0, 0.0]], observation_noise=[[0.5]])
         m = LinearGaussianModel(**_valid_kwargs(observation_model=sensor))
         leaves, treedef = jax.tree_util.tree_flatten(m)
         restored = jax.tree_util.tree_unflatten(treedef, leaves)

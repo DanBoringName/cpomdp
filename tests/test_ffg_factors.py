@@ -62,8 +62,18 @@ def _belief_as_canonical(mean, cov):
 
 
 class TestGaussianObservation:
+    def test_observation_noise_is_keyword_only(self):
+        # Same pair as FixedSensor, same reason: (m, n) against (m, m) is only
+        # distinguishable when m != n, and the factor validates just the noise.
+        with pytest.raises(TypeError, match="positional"):
+            # Calling it wrongly is the test, so ty's arity errors are expected.
+            GaussianObservation(  # ty: ignore[missing-argument]
+                jnp.eye(2),
+                jnp.eye(2) * 0.1,  # ty: ignore[too-many-positional-arguments]
+            )
+
     def test_stores_coerced_arrays(self):
-        fac = GaussianObservation([[1.0, 0.0]], [[2.0]])
+        fac = GaussianObservation([[1.0, 0.0]], observation_noise=[[2.0]])
         assert isinstance(fac.observation_matrix, jax.Array)
         np.testing.assert_array_equal(fac.observation_matrix, [[1.0, 0.0]])
         np.testing.assert_array_equal(fac.observation_noise, [[2.0]])
@@ -71,12 +81,14 @@ class TestGaussianObservation:
     def test_rejects_singular_observation_noise(self):
         # R is inverted in the message, so a singular R is rejected at construction.
         with pytest.raises(ValueError, match="positive-definite"):
-            GaussianObservation([[1.0]], [[0.0]])
+            GaussianObservation([[1.0]], observation_noise=[[0.0]])
 
     def test_rejects_observation_noise_shape_mismatch(self):
         # C is 1xn (m=1) but R is 2x2 — R must be m x m.
         with pytest.raises(ValueError, match="match"):
-            GaussianObservation([[1.0, 0.0]], [[1.0, 0.0], [0.0, 1.0]])
+            GaussianObservation(
+                [[1.0, 0.0]], observation_noise=[[1.0, 0.0], [0.0, 1.0]]
+            )
 
     def test_message_is_information_form_of_likelihood(self):
         rng = np.random.default_rng(0)
@@ -84,7 +96,7 @@ class TestGaussianObservation:
         C = rng.standard_normal((m, n))
         R = _spd(rng, m)
         y = rng.standard_normal(m)
-        msg = GaussianObservation(C, R).message(y)
+        msg = GaussianObservation(C, observation_noise=R).message(y)
         Rinv = np.linalg.inv(R)
         np.testing.assert_allclose(msg.precision, C.T @ Rinv @ C, atol=1e-10)
         np.testing.assert_allclose(msg.potential, C.T @ Rinv @ y, atol=1e-10)
@@ -102,13 +114,17 @@ class TestGaussianObservation:
         mean_post = mean + gain @ (y - C @ mean)
         cov_post = (np.eye(n) - gain @ C) @ cov
 
-        post = _belief_as_canonical(mean, cov) + GaussianObservation(C, R).message(y)
+        post = _belief_as_canonical(mean, cov) + GaussianObservation(
+            C, observation_noise=R
+        ).message(y)
         out_mean, out_cov = post.to_moment()
         np.testing.assert_allclose(out_mean, mean_post, atol=1e-8)
         np.testing.assert_allclose(out_cov, cov_post, atol=1e-8)
 
     def test_jit_and_grad_through_message(self):
-        fac = GaussianObservation([[1.0, 0.5], [0.0, 1.0]], [[1.0, 0.0], [0.0, 1.0]])
+        fac = GaussianObservation(
+            [[1.0, 0.5], [0.0, 1.0]], observation_noise=[[1.0, 0.0], [0.0, 1.0]]
+        )
         y = jnp.array([1.0, -1.0])
         eager = fac.message(y).potential
         jitted = jax.jit(lambda yy: fac.message(yy).potential)(y)
@@ -160,7 +176,7 @@ class TestCallableGaussianObservation:
         y = rng.standard_normal(m)
         params = {"R0": jnp.asarray(R0), "gain": 0.0}
         callable_fac = CallableGaussianObservation(C, _constant_noise, params)
-        fixed = GaussianObservation(C, R0)
+        fixed = GaussianObservation(C, observation_noise=R0)
         states = (np.zeros(n), rng.standard_normal(n), 3.0 * rng.standard_normal(n))
         for state in states:
             msg = callable_fac.message(y, jnp.asarray(state))
@@ -433,7 +449,7 @@ class TestGaussianCoupling:
         cov_post = (np.eye(p + c) - gain @ H) @ cov_j
         parent_mean, parent_cov = mean_post[:p], cov_post[:p, :p]
 
-        child_msg = GaussianObservation(np.eye(c), R).message(y)
+        child_msg = GaussianObservation(np.eye(c), observation_noise=R).message(y)
         up = GaussianCoupling(W, Q).message_to_parent(child_msg)
         out_mean, out_cov = (_belief_as_canonical(m0, P0) + up).to_moment()
 

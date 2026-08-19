@@ -94,6 +94,13 @@ an exposure rather than a result.
   share a name on two classes: the field holds the declaration, the method returns the
   `(C, R)` it resolves to. The `.A`/`.B`/`.C`/`.Q`/`.R` aliases are unchanged, and no
   numerical behaviour moved.
+- **Breaking:** `FixedSensor` and `GaussianObservation` take `observation_noise` by
+  keyword. The observation pair is (m, n) against (m, m), so the two are distinguishable
+  by shape only when m != n, and a 1-D sensor is the case where they coincide. Only the
+  noise is content-checked, and a square symmetric observation matrix passes that check,
+  so a transposed pair built a sensor whose Jacobian was its noise. `CallableSensor` and
+  `CallableGaussianObservation` are left alone: their arguments are a matrix, a callable
+  and a pytree, so a swap raises rather than going quiet. 46 call sites moved to keywords.
 - **Breaking:** `GaussianTransition` takes `dynamics_noise` by keyword, and
   `GaussianTransition.from_ou` takes `stationary_var` and `dt` by keyword. Both follow
   `LinearGaussianModel` for the same reason, and the transition factor is the worse of

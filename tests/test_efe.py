@@ -285,7 +285,9 @@ class TestGaussianizeDispatch:
         action = jnp.array([0.4])
         g_none = expected_free_energy(_model(), belief, action, pref)[0]
         g_fixed = expected_free_energy(
-            _model(observation_model=FixedSensor([[1.0, 0.0]], [[0.5]])),
+            _model(
+                observation_model=FixedSensor([[1.0, 0.0]], observation_noise=[[0.5]])
+            ),
             belief,
             action,
             pref,

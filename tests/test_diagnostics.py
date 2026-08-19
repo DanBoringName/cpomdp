@@ -189,7 +189,7 @@ class TestProbeGraphBackend:
         cue = (
             CallableGaussianObservation([[-1.0, 1.0]], range_noise, None)
             if alive
-            else GaussianObservation([[-1.0, 1.0]], [[2.0]])
+            else GaussianObservation([[-1.0, 1.0]], observation_noise=[[2.0]])
         )
         graph = CouplingGraph(
             root=0,
@@ -237,7 +237,8 @@ class TestProbeGraphBackend:
             couplings=(),
             observations={
                 0: GaussianObservation(
-                    [[-1.0, 1.0], [-1.0, 1.0]], [[2.0, 0.0], [0.0, 2.0]]
+                    [[-1.0, 1.0], [-1.0, 1.0]],
+                    observation_noise=[[2.0, 0.0], [0.0, 2.0]],
                 )
             },
         )

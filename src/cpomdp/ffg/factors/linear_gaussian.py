@@ -59,7 +59,7 @@ class GaussianObservation:
     is_fixed = True  # constant (C, R) — lets the backend keep its byte-identical path
 
     def __init__(
-        self, observation_matrix: ArrayLike, observation_noise: ArrayLike
+        self, observation_matrix: ArrayLike, *, observation_noise: ArrayLike
     ) -> None:
         object.__setattr__(
             self, "observation_matrix", jnp.asarray(observation_matrix, dtype=float)

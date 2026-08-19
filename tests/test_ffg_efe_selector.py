@@ -59,7 +59,11 @@ def test_ffg_selector_reduces_to_efe_selector_single_node():
         root=0,
         dims=(2,),
         couplings=(),
-        observations={0: GaussianObservation(observation_matrix, observation_noise)},
+        observations={
+            0: GaussianObservation(
+                observation_matrix, observation_noise=observation_noise
+            )
+        },
     )
     backend = CouplingGraphBackend(
         graph,
@@ -95,7 +99,7 @@ def _two_node_backend():
         root=0,
         dims=(1, 1),
         couplings=(Coupling(0, 1, GaussianCoupling([[0.8]], [[0.05]]), 1.0),),
-        observations={1: GaussianObservation([[1.0]], [[0.1]])},
+        observations={1: GaussianObservation([[1.0]], observation_noise=[[0.1]])},
     )
     transitions = (
         GaussianTransition([[0.7]], dynamics_noise=[[0.1]]),
@@ -168,7 +172,11 @@ def test_ffg_agent_matches_kalman_efe_agent_end_to_end():
         root=0,
         dims=(2,),
         couplings=(),
-        observations={0: GaussianObservation(observation_matrix, observation_noise)},
+        observations={
+            0: GaussianObservation(
+                observation_matrix, observation_noise=observation_noise
+            )
+        },
     )
     backend = CouplingGraphBackend(
         graph,
@@ -263,7 +271,7 @@ class TestStateDependentSelection:
             root=0,
             dims=(2,),
             couplings=(),
-            observations={0: GaussianObservation(C, params["R0"])},
+            observations={0: GaussianObservation(C, observation_noise=params["R0"])},
         )
         fx = CouplingGraphBackend(
             graph_fx, (GaussianTransition(A, dynamics_noise=Q),), control_matrix=B

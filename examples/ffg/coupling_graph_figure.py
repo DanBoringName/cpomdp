@@ -76,7 +76,10 @@ def build_graph() -> tuple[CouplingGraph, Belief, dict[int, np.ndarray]]:
         Coupling(parent, child, GaussianCoupling([[w]], [[q]]), tau=0.0)
         for parent, child, w, q in EDGES
     )
-    observations = {node: GaussianObservation([[1.0]], [[OBS_R]]) for node in OBS_NODES}
+    observations = {
+        node: GaussianObservation([[1.0]], observation_noise=[[OBS_R]])
+        for node in OBS_NODES
+    }
     graph = CouplingGraph(
         root=ROOT, dims=DIMS, couplings=couplings, observations=observations
     )

@@ -191,7 +191,10 @@ def _build(
         Coupling(parent, child, GaussianCoupling(w, q), 1.0)
         for parent, child, w, q in edges
     )
-    observations = {n: GaussianObservation(c, r) for n, (c, r) in obs_specs.items()}
+    observations = {
+        n: GaussianObservation(c, observation_noise=r)
+        for n, (c, r) in obs_specs.items()
+    }
     graph = CouplingGraph(
         root=0, dims=dims, couplings=couplings, observations=observations
     )

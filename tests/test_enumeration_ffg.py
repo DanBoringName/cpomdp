@@ -48,7 +48,7 @@ def _single_node_pair(*, state_dependent):
         obs_ffg = CallableGaussianObservation(c, _rx_noise, params)
         obs_flat = CallableSensor(c, _rx_noise, params)
     else:
-        obs_ffg = GaussianObservation(c, r0)
+        obs_ffg = GaussianObservation(c, observation_noise=r0)
         obs_flat = None
     graph = CouplingGraph(root=0, dims=(2,), couplings=(), observations={0: obs_ffg})
     backend = CouplingGraphBackend(
@@ -71,7 +71,7 @@ def _coupled_backend():
         root=0,
         dims=(1, 1),
         couplings=(Coupling(0, 1, GaussianCoupling([[0.8]], [[0.05]]), 1.0),),
-        observations={1: GaussianObservation([[1.0]], [[0.1]])},
+        observations={1: GaussianObservation([[1.0]], observation_noise=[[0.1]])},
     )
     transitions = (
         GaussianTransition([[0.7]], dynamics_noise=[[0.1]]),

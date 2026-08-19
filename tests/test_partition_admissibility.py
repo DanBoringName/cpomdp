@@ -48,8 +48,8 @@ def _hub_graph(*, fast_relevant=True, slow_relevant=False):
             ),
         ),
         observations={
-            1: GaussianObservation([[1.0]], [[0.1]]),
-            2: GaussianObservation([[1.0]], [[0.1]]),
+            1: GaussianObservation([[1.0]], observation_noise=[[0.1]]),
+            2: GaussianObservation([[1.0]], observation_noise=[[0.1]]),
         },
     )
 

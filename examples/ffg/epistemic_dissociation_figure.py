@@ -142,7 +142,9 @@ def build_backend(
     cue = (
         CallableGaussianObservation(observation_matrix, cue_noise, _cue_params(cue_x))
         if epistemic_alive
-        else GaussianObservation(observation_matrix, _fixed_noise_at_prior(cue_x))
+        else GaussianObservation(
+            observation_matrix, observation_noise=_fixed_noise_at_prior(cue_x)
+        )
     )
     context_to_arm = Coupling(
         parent=CONTEXT,

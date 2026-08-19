@@ -61,7 +61,8 @@ def chemotaxis_ffg(dt):
     )
 
     observations = {
-        node: GaussianObservation([[1.0]], [[_OBS_NOISE]]) for node in _OBSERVED
+        node: GaussianObservation([[1.0]], observation_noise=[[_OBS_NOISE]])
+        for node in _OBSERVED
     }
     graph = CouplingGraph(
         root=CHEA,

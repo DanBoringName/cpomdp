@@ -138,7 +138,8 @@ def test_branching_tree_matches_coupling_graph():
             Coupling(p, c, GaussianCoupling([[w]], [[q]]), 1.0) for p, c, w, q in edges
         ),
         observations={
-            n: GaussianObservation([[1.0]], [[obs_r]]) for n in (cheb, motor_a, motor_b)
+            n: GaussianObservation([[1.0]], observation_noise=[[obs_r]])
+            for n in (cheb, motor_a, motor_b)
         },
     )
     readings: dict[int, ArrayLike] = {motor_a: [1.25], motor_b: [1.15], cheb: [0.95]}
