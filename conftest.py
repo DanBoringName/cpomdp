@@ -5,11 +5,14 @@ are built *with* cpomdp (e.g. the chemotaxis network) rather than shipped inside
 installable library. The examples stay plain, runnable scripts; this only affects how
 the test process resolves them.
 
+Turn on jax's persistent compilation cache, so repeated runs skip most XLA compiles.
+
 Also police the ``slow`` marker. The rule is a wall-clock one: past
 ``SLOW_TEST_SECONDS`` a test belongs off the pull-request path. Remembering to apply
 it is the part that rots, so the run measures itself and reports what has drifted over.
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -17,15 +20,26 @@ _examples = Path(__file__).parent / "examples"
 sys.path.insert(0, str(_examples))
 sys.path.insert(0, str(_examples / "ffg"))
 
+# Read at jax import time. The zero threshold caches sub-second compiles too.
+# The per-version subdirectory is because jax's entry format differs by python
+# version (stdlib zstd from 3.14, zlib before) while its keys do not.
+_cache_home = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
+_python = f"py{sys.version_info.major}.{sys.version_info.minor}"
+os.environ.setdefault(
+    "JAX_COMPILATION_CACHE_DIR", str(_cache_home / "cpomdp-jax" / _python)
+)
+os.environ.setdefault("JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS", "0")
+
 # The threshold the `slow` marker means, in seconds. Change it here. The marker's
 # description in pyproject.toml points at this name rather than repeating the number.
 #
 # Wall clock is machine-relative, so the rule needs a reference or it produces a
 # different verdict per reviewer. Marks are decided on the durations of an isolated
 # run on the owner's development machine. A slower box will see the reporter below
-# flag tests that are marked correctly by that rule. That is the report doing its job
-# on the wrong hardware, not a marking bug. Only reproduce it on the reference before
-# adding a marker.
+# flag tests that are marked correctly by that rule. So will a parallel run, where
+# workers contend for cores and every call time inflates. That is the report doing
+# its job on the wrong hardware, not a marking bug. Only reproduce it on the
+# reference, serially, before adding a marker.
 SLOW_TEST_SECONDS = 20.0
 
 _over_threshold: list[tuple[str, float]] = []
@@ -42,6 +56,36 @@ def pytest_runtest_logreport(report) -> None:
     if "slow" in report.keywords:
         return
     _over_threshold.append((report.nodeid, report.duration))
+
+
+def pytest_sessionfinish(session, exitstatus) -> None:
+    """Delete unreadable jax cache entries after the run.
+
+    jax writes an entry with a plain unlocked ``write_bytes``, so two xdist workers
+    compiling the same function can interleave and leave the file corrupt. jax never
+    deletes such an entry, only warns on every later read. Controller only: the
+    workers are finished by the time it runs.
+    """
+    if hasattr(session.config, "workerinput"):
+        return
+    cache_dir = os.environ.get("JAX_COMPILATION_CACHE_DIR", "")
+    if not cache_dir:
+        return
+    for entry in Path(cache_dir).glob("*-cache"):
+        if not _decompresses(entry):
+            entry.unlink(missing_ok=True)
+
+
+def _decompresses(entry: Path) -> bool:
+    try:
+        from compression.zstd import decompress  # what jax uses from python 3.14
+    except ImportError:
+        from zlib import decompress
+    try:
+        decompress(entry.read_bytes())
+    except Exception:
+        return False
+    return True
 
 
 def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:

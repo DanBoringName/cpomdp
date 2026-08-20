@@ -32,11 +32,11 @@ jobs:
       # hygiene), so CI and pre-commit can never disagree. Fails if any hook would
       # change a file. The commit-msg hook isn't run here (no commit to check).
       - name: pre-commit
-        run: uv run --extra examples pre-commit run --all-files --show-diff-on-failure
-      # `--extra examples` here too, or a bare `uv run` re-syncs the environment back
-      # to the default set and takes matplotlib out again.
+        run: uv run --no-sync pre-commit run --all-files --show-diff-on-failure
+      # `--no-sync`, or a bare `uv run` re-syncs the environment back to the
+      # default set and takes matplotlib out again.
       - name: ty (strict types)
-        run: uv run --extra examples ty check
+        run: uv run --no-sync ty check
 
   docs:
     name: docs build (strict)
@@ -53,7 +53,7 @@ jobs:
       # only on push to main, so without this job a page that moved is first checked by
       # the Pages deploy *after* the merge, with main already broken. No badge step and
       # no deploy here: this is the gate, not the publish.
-      - run: uv run mkdocs build --strict
+      - run: uv run --no-sync mkdocs build --strict
 
   test:
     name: test (py${{ matrix.python-version }})
@@ -62,6 +62,9 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+    env:
+      JAX_COMPILATION_CACHE_DIR: ${{ github.workspace }}/.jax-cache
+      JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS: "0"
     steps:
       # Full history: `tests/test_provenance_ordering.py` asks git whether each
       # registration ref is an ancestor of the ref that measured against it. A shallow
@@ -74,7 +77,19 @@ jobs:
         with:
           enable-cache: true
           python-version: ${{ matrix.python-version }}
+          # Without a per-version key the matrix shares one cache entry and only
+          # the first job to save it ever populates it.
+          cache-suffix: py${{ matrix.python-version }}
       - run: uv sync --locked
+      # The run id keeps the key unique so every run saves what it compiled;
+      # restore starts from the newest previous save. Entries are hash-validated
+      # by jax, so a stale cache is a miss, never a wrong result.
+      - name: jax compilation cache
+        uses: actions/cache@v5
+        with:
+          path: .jax-cache
+          key: jax-cache-${{ runner.os }}-py${{ matrix.python-version }}-${{ github.run_id }}
+          restore-keys: jax-cache-${{ runner.os }}-py${{ matrix.python-version }}-
       # The pure-Python suite: no Julia installed, so this also proves the
       # rxinfer-marked tests deselect cleanly when the optional extra is absent.
       # `slow` (the exhaustive crossover enumeration) is deselected here to keep PR
@@ -84,7 +99,8 @@ jobs:
       # the gate rather than reflect anything about how well it is tested.
       - name: pytest + coverage gate
         run: >-
-          uv run pytest -m "not rxinfer and not slow"
+          uv run --no-sync pytest -m "not rxinfer and not slow"
+          -n auto --dist worksteal
           --cov=cpomdp --cov=warrantlib
           --cov-report=term-missing --cov-fail-under=80
 
@@ -117,7 +133,7 @@ jobs:
             module=$1
             expected=$2
             echo "::group::$module"
-            if ! output=$(uv run python -m "research.checks.$module" --check 2>&1); then
+            if ! output=$(uv run --no-sync python -m "research.checks.$module" --check 2>&1); then
               echo "::error::$module: a check fired"
               status=1
             fi
@@ -153,4 +169,4 @@ jobs:
           key: julia-depot-${{ runner.os }}-${{ hashFiles('src/cpomdp/juliapkg.json') }}
           restore-keys: julia-depot-${{ runner.os }}-
       - name: pytest (rxinfer only)
-        run: uv run pytest -m rxinfer
+        run: uv run --no-sync pytest -m rxinfer
