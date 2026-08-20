@@ -3,12 +3,15 @@
 The analytic derivation the symbolic suites check themselves against. A
 `SymbolicReduction` emitted by `research.checks.series_kernel`,
 `research.checks.log_ratio_series` or `research.checks.gap_series` names a step of this
-document in its `correspondence` field when it rests on the construction or the
-σ-expansion. The rest name a standard identity they lean on instead, such as the
-Gaussian moment integral, or a dated entry in `research/gate_d4_registration.md`.
-That field exists because a CAS establishes
-that one expression equals another and has nothing to say about whether those are the
-expressions the analytic claim is about. This is where that second question is answered.
+document in its `correspondence` field when it rests on the construction (Steps 1-2),
+the σ-expansion (Step 3), or the cumulant statement of the gap (Step 4). The rest name
+something else. A standard identity they lean on, such as the Gaussian moment integral.
+A registered section or a dated entry in `research/gate_d4_registration.md`. Or a
+definition stated in the emitting module's own docstring, where the reduction rests on
+how that module sets a term up rather than on the analytic derivation. That field exists
+because a CAS establishes that one expression equals another and has nothing to say
+about whether those are the expressions the analytic claim is about. This is where that
+second question is answered.
 
 Steps 1 to 4 and `c₂` are here. `c₄` and the `tanh` worked example are appended by the
 quartic work and are not in this file yet. Everything in this file is the typed up version of my notes.
