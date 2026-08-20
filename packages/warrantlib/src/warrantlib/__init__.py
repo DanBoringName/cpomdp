@@ -247,7 +247,7 @@ _DOI = re.compile(r"(?:doi:)?10\.\d{4,9}/\S+", re.IGNORECASE)
 _REF_SHAPES = (_COMMIT_SHA, _URL, _DOI)
 
 
-def _reject_unreferenceable(name: str, value: str) -> None:
+def _reject_unresolvable(name: str, value: str) -> None:
     """Raise unless a provenance's ``value`` is a ref that resolves to one fixed thing.
 
     Args:
@@ -320,7 +320,7 @@ class Provenance:
                 "missing records no ordering at all. Give the ref, or report "
                 "CORROBORATED and say in the check's detail why there is none.",
             )
-            _reject_unreferenceable(name, value)
+            _reject_unresolvable(name, value)
         _reject_unreadable(
             "provenance",
             "registered",
