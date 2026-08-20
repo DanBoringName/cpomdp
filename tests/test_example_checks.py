@@ -130,6 +130,16 @@ class TestCrossoverFalsifierReporting:
         assert one.outcome is Outcome.NOT_TRIGGERED
         assert two.outcome is Outcome.NOT_TRIGGERED
 
+    def test_both_rows_name_the_action_mode(self):
+        # `RecedingHorizonSelector` and `OpenLoopSelector` genuinely differ, and the
+        # same sentence reads true under either, so a row that does not name its seam
+        # is quotable as the mode the reader had in mind. The ledger requires R10 under
+        # its seam. Without this the `{seam}` interpolation can be deleted and the whole
+        # suite stays green, which is how the qualifier would rot.
+        for report in _rows(*self._pair()):
+            assert "open-loop" in report.detail
+            assert "no re-planning" in report.detail
+
     def test_a_reversed_flip_fires_row_one(self):
         # The defect this replaces: `abs(ΔG) > bound` cleared on a reversed result too,
         # so a refutation printed as a survivor beside a hardcoded "argmin is cue-ward".

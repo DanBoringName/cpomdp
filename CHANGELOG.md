@@ -15,6 +15,12 @@ an exposure rather than a result.
 
 ### Added
 
+- The fourth D3 falsifier is pre-registered on both axes, and its extension cell measured.
+  `{−4,…,2}` gives `H* = 6` against a bar of `H* ≤ 6` registered a commit earlier, carried
+  as a `PROVED` report with a completeness certificate and a `Provenance` whose ordering
+  git can check. The refinement axis is registered as a re-measurement: `research/r10_open_loop_crossover.md`
+  already reports the step-`0.5` cell, no commit builds that action set, and the write-up
+  and the check suite disagree on whether the falsifier is discharged.
 - `Provenance` (warrantlib 0.2.0) — which ref registered a claim and which one measured
   it, plus one line saying what a reviewer will find at the first. A `PROVED` report
   requires one, on the same terms as it requires evidence, and carries them as a tuple
@@ -91,6 +97,12 @@ an exposure rather than a result.
 
 ### Changed
 
+- The crossover falsifiers name their action mode. `H* = 7` is an open-loop number: the
+  sweep scores whole length-H sequences with no re-planning, driving neither
+  `RecedingHorizonSelector` nor `OpenLoopSelector`. The same statistic under a
+  receding-horizon driver is a different quantity and is unmeasured. The declaration now
+  travels with the number in the `PROVED` details, in `warrant_numbers.md`, in the ledger
+  and in the README, and a test asserts it so the qualifier cannot be dropped silently.
 - cpomdp requires `warrantlib>=0.2`, up from `>=0.1`. `cpomdp.warrant` re-exports
   `Provenance`, so an installed 0.1 fails at `import cpomdp`. Breaking for anyone pinning
   warrantlib 0.1.

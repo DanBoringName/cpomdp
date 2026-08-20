@@ -273,13 +273,19 @@ The H=1 anchors force `H* > 1`; the exhaustive varying-sequence search finds whe
 actually flips. `examples/ffg/crossover.py` pins these; the horizon is the free variable of
 the statistic, not a tuned parameter.
 
-**Every number in this section is open-loop.** The sweep calls
-`EnumeratedEfeSearch.over_backend(...).evaluate(...)` directly, which scores whole length-H
-action sequences and never re-plans between steps. It drives neither
-`RecedingHorizonSelector` nor `OpenLoopSelector`. The same statistic measured under a
-receding-horizon driver is a different quantity, and a row reading "the exhaustive argmin
-flips at 7" is true of both, so quoting one of these without the seam states the other by
-omission. ADR-034 records the choice. `research/r10_open_loop_crossover.md` is the write-up.
+**Every number in this section is open-loop.** The `H*` rows come from
+`EnumeratedEfeSearch.over_backend(...).evaluate(...)`, which scores whole length-H action
+sequences and never re-plans between steps. `ΔG(7)` comes from `_numpy_score` and the
+pragmatic-only crossing from `epistemic_counterfactual`, neither of which goes through
+that call, and both of which are open-loop by the same construction. Nothing here drives
+`RecedingHorizonSelector` or `OpenLoopSelector`.
+
+The same statistic under a receding-horizon driver is a different quantity, and **it has
+not been measured**. The closed-loop leg is open (`research/warrant_ledger.md`), and
+ADR-034 records that M7b drives the enumeration open-loop deliberately. The reason to name
+the seam is that a sentence like "the exhaustive argmin flips at 7" reads the same under
+either mode, so a row without the seam lets a reader take it for the mode they had in
+mind. `research/r10_open_loop_crossover.md` is the write-up.
 
 | number | value | what it is |
 | --- | --- | --- |
@@ -291,15 +297,16 @@ omission. ADR-034 records the choice. `research/r10_open_loop_crossover.md` is t
 
 #### Pre-registered, not yet measured: `H*` stability under action-set change
 
-Declared 2026-08-20, before any cell was run. The full argument is the
+Declared 2026-08-20, before any cell was run in this repository. The full argument is the
 `PRE-REGISTRATION 2026-08-20` entry in `research/fep_falsification_battery.md`. The
-numbers are here because this is where they are quoted from. Nothing below is a result.
+numbers are here because this is where they are quoted from. The extension row is a
+result and says so; the refinement rows are not, with the qualification below.
 
 | axis | cell | registered prediction | outcome |
 | --- | --- | --- | --- |
 | extension | `{−4,…,2}`, 7 actions, spacing 1 | `H* ≤ 6`. `−4` shortens the cue-ward return from two steps to one and buys the prior-ward reach nothing, since `−3` already covers it in one | **PASS**, measured `H* = 6`, see below |
-| refinement | step `0.5`, 9 actions over `[−2,2]` | stability, `\|ΔH*\| ≤ 1`. No direction is arguable: the largest magnitude does not move, so neither branch's step count does | not measured |
-| refinement | step `0.25`, 17 actions over `[−2,2]` | stability, `\|ΔH*\| ≤ 1`, same argument | not measured |
+| refinement | step `0.5`, 9 actions over `[−2,2]` | stability, `\|ΔH*\| ≤ 1`. No direction is arguable: the largest magnitude does not move, so neither branch's step count does | **re-measurement**, see below |
+| refinement | step `0.25`, 17 actions over `[−2,2]` | stability, `\|ΔH*\| ≤ 1`, same argument | not measured, no prior claim |
 
 Budget, declared in both units because they disagree. Time at the measured 39.0k
 policies/s. `VOID (budget)` on overrun, which means unmeasured and never "stable".
@@ -322,6 +329,15 @@ raising `MemoryError`.
 
 `cue_maze.best_reachable_noise` returns `R_LO = 0.02` exactly on all four sets, so every
 lattice lands on the cue and no cell is void by geometry.
+
+**The step-`0.5` cell already has published numbers, and no run behind them.**
+`research/r10_open_loop_crossover.md` reports the argmin byte-identical to the coarse set
+at `H = 6` (`Gmin = 364.6430`) and `H = 7` (`Gmin = 425.1631`), and reads falsifier 4 as
+not triggered. No commit in this repository builds a nine-action step-`0.5` set, so those
+numbers have no in-repo reproduction, and `examples/ffg/crossover.py` reports the same
+falsifier `NOT_RUN_HERE` with no warrant. The two disagree. The registered work on this
+cell is therefore a re-measurement under a completeness certificate against `364.6430` and
+`425.1631`, not a first measurement.
 
 #### Measured 2026-08-20: extension `{−4,…,2}` → `H* = 6`, **PASS**
 

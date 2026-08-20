@@ -608,7 +608,10 @@ def _print_tables() -> None:
             f"{policy!s:<22} {kind}"
         )
     h_star = next((h for h, _, _, _, cue in flip if cue), None)
-    print(f"   -> the argmin flips reach -> walk at H* = {h_star}\n")
+    print(
+        f"   -> the argmin flips reach -> walk at H* = {h_star}, "
+        "scored open-loop (no re-planning)\n"
+    )
 
     print("2. Mechanism (post-selection: the walk the search picked, scored back):")
     print(f"   {'H':>2} {'Δε (pull)':>11} {'Δc (grad)':>11} {'ΔG':>10}   reading")
@@ -683,7 +686,7 @@ def _print_tables() -> None:
     print("   dropped on cost).")
     print("   analytic bound: relief <= 0.77/step vs 2.77 detour -> H* >= 6.")
     print(f"   feasibility: declared to H_MAX = {H_MAX} (cost {hmax_cost} scored")
-    print("   steps); the argmin is cue-ward at H = 7, 8, 9.")
+    print("   steps); the argmin is cue-ward at H = 7, 8, 9, open-loop throughout.")
     _print_falsifiers(falsifiers())
 
 

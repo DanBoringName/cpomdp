@@ -278,7 +278,7 @@ raising a parameter until the result fires. Require the sign flip at the registe
 
 ### PRE-REGISTRATION 2026-08-20: the fourth D3 falsifier, both axes
 
-Written before any cell below is run. The registered set is `V1 = [−2,−1,0,1,2]` at
+Written before any cell below is run in this repository. The registered set is `V1 = [−2,−1,0,1,2]` at
 `H* = 7`. `V1_EDGE = [−3,−2,−1,0,1,2]` is already measured at `H* = 6`.
 
 Geometry the arguments rest on, from `cue_maze`: the agent starts at `0`, the cue sits at
@@ -305,6 +305,25 @@ positioning only, and the cue at `+1` is already exactly reachable on `V1`, so i
 reachability either. With nothing to argue in either direction, this is registered as a
 stability test and not dressed as a prediction. `|ΔH*| ≤ 1` is `PASS`, `|ΔH*| ≥ 2` is
 `FAIL`.
+
+**Correction, before this entry landed: the step-`0.5` cell is not virgin ground.**
+`research/r10_open_loop_crossover.md` already reports it, with numbers: on a step-`0.5`
+grid the argmin is byte-identical to the coarse set at `H = 6` (`Gmin = 364.6430`,
+prior-ward) and `H = 7` (`Gmin = 425.1631`, the same walk), no intermediate action scoring
+lower `G`, concluding that `H*` is stable under refinement and reading falsifier 4 as *not
+triggered*. An earlier draft of this registration called that cell unmeasured. It is not,
+and a pre-registration that mis-states what is already known is the failure it exists to
+prevent.
+
+What remains is narrower and worth stating exactly. **No commit in this repository builds
+a nine-action step-`0.5` set**, so the published numbers have no in-repo reproduction, and
+the repository disagrees with itself about the outcome: the write-up reads falsifier 4 as
+not triggered while `examples/ffg/crossover.py` reports it `NOT_RUN_HERE` with no warrant.
+That is the same shape as the extension row this entry already retracted, still standing.
+So the step-`0.5` cell is registered as a **re-measurement under a completeness
+certificate**, against the published `364.6430` and `425.1631`, and the stability test
+above is what it reports against. The `H = 8` and step-`0.25` cells are new ground and
+carry no prior claim.
 
 **Void guard, discharged before the run.** `cue_maze.best_reachable_noise` returns exactly
 `R_LO = 0.02` on all four sets, so every lattice lands on the cue and no cell is void by
