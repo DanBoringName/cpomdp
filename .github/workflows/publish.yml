@@ -3,6 +3,19 @@ name: publish
 on:
   release:
     types: [published]
+  # Publish warrantlib on its own, with no cpomdp release attached. cpomdp's next
+  # release carries `Requires-Dist: warrantlib>=0.1`, so warrantlib has to be on PyPI
+  # before that release goes out or the install cannot resolve. The two publish jobs
+  # run in parallel with no ordering between them, which is not something to discover
+  # on the release that needs it.
+  workflow_dispatch:
+
+# Two dispatch presses race: both read PyPI before either upload lands, both build, and
+# the second upload dies on a file-already-exists 400. Queue instead of cancelling, so a
+# run that is already uploading is never killed part-way.
+concurrency:
+  group: publish-${{ github.event_name }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -17,6 +30,16 @@ jobs:
       # churn its version for nothing.
       warrantlib-is-new: ${{ steps.warrantlib.outputs.is-new }}
     steps:
+      # Fail before the build rather than after it. Without this the run
+      # builds, uploads the artifact and goes green, and the only sign that
+      # nothing published is a skipped job carrying no annotation.
+      - name: a manual publish runs from main only
+        if: >-
+          github.event_name == 'workflow_dispatch'
+          && github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::dispatched from ${{ github.ref }}. warrantlib publishes from main or a release only, because PyPI never lets a version be reclaimed."
+          exit 1
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v8.2.0
         with:
@@ -27,7 +50,8 @@ jobs:
       - run: uv run pytest -m "not rxinfer"
       # Each distribution gets its own directory. A Trusted Publisher token is scoped
       # to one project, so the two uploads are two jobs and cannot share a `dist/`.
-      - run: uv build --package cpomdp -o dist/cpomdp
+      - if: github.event_name == 'release'
+        run: uv build --package cpomdp -o dist/cpomdp
       - name: has warrantlib's version moved?
         id: warrantlib
         run: |
@@ -42,9 +66,20 @@ jobs:
           else
             echo "is-new=true" >> "$GITHUB_OUTPUT"
           fi
+      # A dispatch is someone asking for a publish. If the version has not moved there
+      # is nothing to upload, and exiting green says the publish happened.
+      - name: a manual publish with nothing to publish is an error
+        if: >-
+          github.event_name == 'workflow_dispatch'
+          && steps.warrantlib.outputs.is-new != 'true'
+        run: |
+          version=$(uv version --package warrantlib --short)
+          echo "::error::warrantlib $version is already on PyPI. Bump its version in packages/warrantlib/pyproject.toml before dispatching."
+          exit 1
       - if: steps.warrantlib.outputs.is-new == 'true'
         run: uv build --package warrantlib -o dist/warrantlib
-      - uses: actions/upload-artifact@v4
+      - if: github.event_name == 'release'
+        uses: actions/upload-artifact@v4
         with:
           name: dist-cpomdp
           path: dist/cpomdp/
@@ -56,6 +91,9 @@ jobs:
 
   publish-cpomdp:
     needs: build
+    # A manual run publishes warrantlib alone. cpomdp ships on a release, never on a
+    # dispatch, so its version always corresponds to a tag.
+    if: github.event_name == 'release'
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -71,7 +109,15 @@ jobs:
 
   publish-warrantlib:
     needs: build
-    if: needs.build.outputs.warrantlib-is-new == 'true'
+    # A Trusted Publisher is scoped to (repository, workflow file, environment) and says
+    # nothing about the ref, so a dispatch from any branch mints a valid upload token.
+    # PyPI never lets a version be reclaimed, so a branch's tree uploaded as 0.2.0 makes
+    # the real 0.2.0 unpublishable. The `pypi-warrantlib` environment carries a
+    # deployment-branch rule for the same reason; this guard is the half that lives in
+    # the repository and shows up in a diff.
+    if: >-
+      needs.build.outputs.warrantlib-is-new == 'true'
+      && (github.event_name == 'release' || github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     environment:
       name: pypi-warrantlib
