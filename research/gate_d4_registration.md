@@ -714,6 +714,34 @@ resolved, since choosing now would be choosing with the refit's outcome in view.
 `T` is still pending: the registered rule evaluates it at the `κ` minimising the window
 width, which needs `c₄` scanned along the ridge rather than at the single point above.
 
+### DISCLOSURE 2026-08-19: the subtract decision carries the declaration's date
+
+The DECISION entry above is dated three days before the measurement it rests on. It
+reports `c₄`'s relative error as 0.36% by extraction, and that jackknifed spread is
+established in `### RESULT 2026-08-10: the c₄ refit, and the rule fires for subtraction`.
+An entry recording that a rule fired cannot predate the run that fired it.
+
+The history says so directly. Commit `343f812`, dated 2026-08-10, added the RESULT entry
+and the DECISION entry in the same commit, and the DECISION was written with a 2026-08-07
+heading. Anyone can check that with `git log -S "the rule fires for **subtract**" --
+research/gate_d4_registration.md`.
+
+The 1.03% basis-fit figure the decision quotes beside it is not stated in that RESULT
+entry either, which reports the basis residual as 0.60% median and 5.59% max. In this
+document the figure appears only in the decision itself and in RESULT 2026-08-16, which
+takes it as given. Its provenance is not recorded here. The dating argument does not rest
+on it: the 0.36% extraction spread alone postdates the entry's heading.
+
+The pre-registration is not in doubt. The rule is registered in `### AMENDMENT 2026-08-07:
+dilute-versus-subtract becomes a rule`, added by commit `c35ec2c`, and its threshold
+`X = 0.1` in `### AMENDMENT 2026-08-07: the numbers, committed before the refit`, added by
+commit `fc8aac4`. Both commits are dated 2026-08-07, genuinely earlier than the 08-10
+refit, so the branch was decided against a bar set before the answer was visible. That is
+what the entry claims about itself and it holds.
+
+What is wrong is the date on the entry recording the firing, which should be the refit's
+rather than the declaration's. The heading and its text stay as written.
+
 ## 5. D1's resolution threshold (OUTSTANDING): an expression, not a value
 
 Registered as a **propagated expression**, not a constant. A formula fixed before the
@@ -1188,24 +1216,6 @@ The import path is unchanged. Every one of them still runs as
 reader should use. Nothing about a registered count, a bar, a tolerance or a measured
 number is touched by the move: `research/` became a package of its own so the modules are
 type-checked and installed rather than resolved off `sys.path` (ADR-039).
-
-### DISCLOSURE 2026-08-19: the subtract decision carries the declaration's date
-
-`### DECISION 2026-08-07: the rule fires for **subtract**` is dated three days before the
-measurement it rests on. It reports `c₄`'s relative error as 0.36% by extraction, and that
-jackknifed spread is established in the RESULT entry dated 2026-08-10, "the `c₄` refit,
-and the rule fires for subtraction", immediately above it. The basis-fit figure beside it
-comes from the same refit. An entry recording that a rule fired cannot predate the run
-that fired it.
-
-The pre-registration is not in doubt. The rule is registered in `### AMENDMENT 2026-08-07:
-dilute-versus-subtract becomes a rule`, and its threshold `X = 0.1` in `### AMENDMENT
-2026-08-07: the numbers, committed before the refit`. Both are genuinely earlier than the
-08-10 refit and the git history carries them, so the branch was decided against a bar set
-before the answer was visible. That is what the entry claims about itself and it holds.
-
-What is wrong is the date on the entry recording the firing, which should be the refit's
-rather than the declaration's. The heading and its text stay as written.
 
 ## Stop conditions (DECLARED 2026-08-07)
 
