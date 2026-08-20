@@ -290,12 +290,12 @@ mind. `research/r10_open_loop_crossover.md` is the write-up.
 | number | value | what it is |
 | --- | --- | --- |
 | `H*` (registered set) | 7 | first horizon whose exhaustive argmin over `crossover-v1^H` is cue-ward — a two-phase walk `[+1,−2,−2,0,0,0,0]`. Cue-ward at H = 7, 8, 9 |
-| `H*` (with the one-step reach) | 6 | on `{−3,…,2}`, which contains `−3`, the action reaching the goal in one step from the start. So the registered 7 is an upper bound (the grid clips the reach at `−2`). Wider sets are not measured: `−3` is not established as optimal, since the walk arrives at the cue at `x = +1`, from where the goal is a displacement of `−4` |
+| `H*` (with the one-step reach) | 6 | on `{−3,…,2}`, which contains `−3`, the action reaching the goal in one step from the start. So the registered 7 is an upper bound (the grid clips the reach at `−2`). `−3` is not established as optimal: the walk arrives at the cue at `x = +1`, from where the goal is a displacement of `−4`. The seven-action `{−4,…,2}` is measured below and also gives 6; wider sets are not measured |
 | `ΔG(7)` | −0.1520 | `G(walk) − G(reach)` at H=7; the flip margin. Relative size 3.6e−4 against `G ≈ 425`, so the margin is small and must be shown well-conditioned |
 | pragmatic-only crossing | H ≈ 10 | with the epistemic term zeroed, the argmin is prior-ward through H = 9 and crosses near 10 — so the ~1.7-nat epistemic pull is what advances the flip to 7 |
 | `H_max` | 9 | declared feasibility bound; enumeration cost `5⁹·9 = 17,578,125` scored steps, measured. Larger H_max is a declared budget increase |
 
-#### Pre-registered, not yet measured: `H*` stability under action-set change
+#### `H*` stability under action-set change: registered, extension measured
 
 Declared 2026-08-20, before any cell was run in this repository. The full argument is the
 `PRE-REGISTRATION 2026-08-20` entry in `research/fep_falsification_battery.md`. The

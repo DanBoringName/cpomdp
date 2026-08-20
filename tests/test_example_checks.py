@@ -105,9 +105,32 @@ def _measurement(horizon, *, delta_g, cue_ward, bound=1e-5):
     )
 
 
-def _rows(at_prior, at_flip):
+def _extension(h_star=6, *, sensed=True):
+    """A synthetic `ExtensionMeasurement`, for the same reason as `_measurement`.
+
+    Injecting it also keeps this class off a live enumeration. Omitting it makes
+    `falsifiers` sweep `v1-ext` for real, which is 137,256 policies on what is meant to
+    be the pull-request path.
+    """
+    horizon = h_star or 6
+    return crossover.ExtensionMeasurement(
+        h_star=h_star,
+        certificate=CompletenessCertificate(
+            expected=7**horizon,
+            visited=7**horizon,
+            warrant=Warrant.PROVED,
+            action_set_size=7,
+            horizon=horizon,
+            action_set_version="v1-ext",
+        ),
+        policy=[1.0, -4.0] + [0.0] * (horizon - 2),
+        sensed=sensed,
+    )
+
+
+def _rows(at_prior, at_flip, extension=None):
     """The two measured falsifiers, keyed by name prefix."""
-    reports = crossover.falsifiers(at_prior, at_flip)
+    reports = crossover.falsifiers(at_prior, at_flip, extension or _extension())
     return reports[0], reports[1]
 
 
@@ -129,6 +152,28 @@ class TestCrossoverFalsifierReporting:
         one, two = _rows(*self._pair())
         assert one.outcome is Outcome.NOT_TRIGGERED
         assert two.outcome is Outcome.NOT_TRIGGERED
+
+    def test_an_extension_past_the_bar_fires_row_five(self):
+        # Unreachable from a live run, which only produces H* = 6. Injecting the
+        # measurement is what turns the refutation branch into an executable one.
+        reports = crossover.falsifiers(*self._pair(), extension=_extension(7))
+        assert reports[4].outcome is Outcome.FIRED
+        assert "registered bar" in reports[4].detail
+
+    def test_no_crossover_on_the_extension_fires_row_five(self):
+        reports = crossover.falsifiers(*self._pair(), extension=_extension(None))
+        assert reports[4].outcome is Outcome.FIRED
+        assert "no cue-ward argmin" in reports[4].detail
+
+    def test_a_set_that_cannot_sense_the_cue_is_void(self):
+        # The registered void guard. A null from a set that cannot reach the cue is
+        # geometry, so it is not a survivor and carries no warrant.
+        reports = crossover.falsifiers(
+            *self._pair(), extension=_extension(sensed=False)
+        )
+        assert reports[4].outcome is Outcome.NOT_APPLICABLE
+        assert reports[4].warrant is None
+        assert reports[4].evidence == ()
 
     def test_both_rows_name_the_action_mode(self):
         # `RecedingHorizonSelector` and `OpenLoopSelector` genuinely differ, and the
@@ -180,7 +225,8 @@ class TestCrossoverFalsifierReporting:
 
     def test_a_fired_row_reaches_the_summary(self):
         reports = crossover.falsifiers(
-            *self._pair(flip={"delta_g": +0.152, "cue_ward": False})
+            *self._pair(flip={"delta_g": +0.152, "cue_ward": False}),
+            extension=_extension(),
         )
         # A reversed flip fires both: row 1 because the argmin is not cue-ward at H*,
         # row 2 because prior-ward-then-cue-ward is what "clean" means.
@@ -191,7 +237,7 @@ class TestCrossoverFalsifierReporting:
 
 @pytest.mark.slow
 def test_crossover_falsifiers_are_reports():
-    """The four registered falsifiers on a live measurement of the H* boundary.
+    """The five registered falsifiers on a live measurement of the H* boundary.
 
     The `PROVED` rows must carry the real completeness certificates. A fabricated one
     would satisfy the constructor and claim an enumeration that never ran, which is the
@@ -201,6 +247,11 @@ def test_crossover_falsifiers_are_reports():
     """
     reports = crossover.falsifiers()
     assert len(reports) == 5
+    # The number `warrant_numbers.md` records for the extension cell. A change here is a
+    # change to a published result, so it moves with the diff that justifies it.
+    extension = crossover.measure_extension()
+    assert extension.h_star == 6
+    assert extension.sensed
     proved = [r for r in reports if r.warrant is Warrant.PROVED]
     assert len(proved) == 3
     for report in proved:

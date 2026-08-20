@@ -39,6 +39,7 @@ import itertools
 import sys
 from typing import NamedTuple
 
+import cue_maze as demo_maze
 import epistemic_dissociation_figure as demo
 import jax
 import jax.numpy as jnp
@@ -174,11 +175,15 @@ class ExtensionMeasurement(NamedTuple):
         certificate: the completeness certificate at that horizon, or at the last
             swept one when no flip was found.
         policy: the argmin there, so the mechanism is readable beside the number.
+        sensed: whether the lattice can land on the cue at all. A set that cannot
+            produces a null about the geometry rather than about the objective, which
+            is what the registered void guard exists to separate.
     """
 
     h_star: int | None
     certificate: CompletenessCertificate
     policy: object
+    sensed: bool
 
 
 #: The registered bar for the extension axis, from the 2026-08-20 pre-registration.
@@ -209,11 +214,19 @@ def measure_extension(max_horizon: int = EXT_BAR) -> ExtensionMeasurement:
     it is decided rather than sampled and carries the certificate at the last one. The
     report needs evidence whichever way the falsifier goes.
     """
+    # The registered void guard, computed rather than asserted. A refined or extended
+    # set that cannot reach the cue returns "no crossover" for a reason that has nothing
+    # to do with the objective, and the outcome for that is NOT APPLICABLE.
+    sensed = demo_maze.best_reachable_noise(EXT_SET, 1, max_horizon) <= demo_maze.R_LO
     sweep = exhaustive_flip(EXT_SET, max_horizon)
     for horizon, _, _, policy, cue_ward in sweep:
         if cue_ward:
-            return ExtensionMeasurement(horizon, _ext_certificate(horizon), policy)
-    return ExtensionMeasurement(None, _ext_certificate(max_horizon), sweep[-1][3])
+            return ExtensionMeasurement(
+                horizon, _ext_certificate(horizon), policy, sensed
+            )
+    return ExtensionMeasurement(
+        None, _ext_certificate(max_horizon), sweep[-1][3], sensed
+    )
 
 
 def measure_flip(horizon: int) -> FlipMeasurement:
@@ -422,10 +435,10 @@ def falsifiers(
     A falsifier does not pass. ``NOT TRIGGERED`` is "it ran and the condition did not
     obtain", so the claim survives it. ``NOT APPLICABLE`` is void by construction, so
     it is evidence for nothing and is not a survivor. ``NOT RUN HERE`` was measured
-    elsewhere. Neither of the last two ran, so neither carries a warrant: the prover
+    elsewhere. Rows 3 and 4 did not run here, so neither carries a warrant: the prover
     cell is ``—``, because attributing one would claim evidence that was never produced.
 
-    Rows 1 and 2 read on both axes at once. On the prover axis they are ``PROVED``,
+    Rows 1, 2 and 5 read on both axes at once. On the prover axis they are ``PROVED``,
     resting on exhaustive enumeration and carrying its certificates. On the tier axis
     they are ``B``, the margin read against the error ``COND_CEILING`` allows on a
     difference of two scores.
@@ -463,17 +476,34 @@ def falsifiers(
         return Outcome.NOT_TRIGGERED if clean else Outcome.FIRED
 
     def extension_holds() -> Outcome:
-        """Fires when the extension pushes H* past its registered bar of 6."""
+        """Fires when the extension pushes H* past its registered bar of 6.
+
+        A set that cannot land on the cue is void by construction, so its null is about
+        the geometry and reports NOT APPLICABLE rather than counting as a survivor.
+        """
+        if not extension.sensed:
+            return Outcome.NOT_APPLICABLE
         if extension.h_star is None:
             return Outcome.FIRED
         return Outcome.NOT_TRIGGERED if extension.h_star <= EXT_BAR else Outcome.FIRED
 
-    def extension_warrant() -> Warrant:
-        """Exhaustive over a declared finite set, so the bar is decided, not sampled."""
-        return Warrant.PROVED
+    def extension_warrant() -> Warrant | None:
+        """The prover class the sweep earns, or None where it could not have fired.
+
+        Exhaustive over a declared finite set, so the bar is decided rather than
+        sampled. A void set produced no evidence here, so it carries no warrant at all.
+        """
+        if not extension.sensed:
+            return None
+        return extension.certificate.warrant
 
     def extension_detail() -> str:
         """The measured horizon, the argmin that produced it, and the bar it met."""
+        if not extension.sensed:
+            return (
+                "v1-ext cannot land on the cue, so any null is geometry rather than a "
+                "result (registered void guard, cue_maze.best_reachable_noise)"
+            )
         if extension.h_star is None:
             return (
                 f"no cue-ward argmin through H = {EXT_BAR} on v1-ext, so H* > "
@@ -550,8 +580,9 @@ def falsifiers(
             outcome=Outcome.NOT_RUN_HERE,
             tier=Tier.COMPUTED,
             detail=(
-                f"step-0.5 refinement costs {9**7 * 7} steps. Recorded in the "
-                "write-up, and the live exposure on this number"
+                f"step-0.5 refinement costs {9**7 * 7} scored steps. No commit builds "
+                "the nine-action set, so the write-up's reading has no in-repo run and "
+                "is withdrawn; registered as a re-measurement. The live exposure"
             ),
         ),
         CheckReport(
@@ -560,7 +591,7 @@ def falsifiers(
             outcome=extension_holds(),
             tier=Tier.BOUNDED,
             detail=extension_detail(),
-            evidence=(extension.certificate,),
+            evidence=() if not extension.sensed else (extension.certificate,),
             provenance=(EXT_PROVENANCE,),
         ),
     )
@@ -594,7 +625,7 @@ def _print_tables() -> None:
     flip = exhaustive_flip()
     mech = mechanism_curve()
     edge = exhaustive_flip(action_set=EDGE_SET, max_horizon=FLIP_H - 1)
-    ext = exhaustive_flip(action_set=EXT_SET, max_horizon=FLIP_H - 1)
+    ext = exhaustive_flip(action_set=EXT_SET, max_horizon=EXT_BAR)
 
     print("1. Exhaustive argmin per horizon (selection-free, exact enumeration):")
     print(
@@ -677,13 +708,18 @@ def _print_tables() -> None:
     print("\n5. Action-set dependence and feasibility:")
     print(f"   one-step reach -3 -> H* = {edge_star}; the registered set clips the")
     print(f"   reach to -2, so H* = {FLIP_H} is an upper bound.")
+    verdict = (
+        f"PASSES (bar H* <= {EXT_BAR})"
+        if ext_star is not None and ext_star <= EXT_BAR
+        else f"FAILS (bar H* <= {EXT_BAR})"
+    )
     print(f"   extension {{-4,...,2}} -> H* = {ext_star}, argmin {ext_policy}.")
-    print("   registered at H* <= 6 before the run, so this PASSES. The -4 return is")
-    print("   used, and the horizon does not move: extension saturates at 6.")
-    print(f"   recorded, not re-run here (cost {refine_cost} steps): a step-0.5")
-    print("   refinement of the same range left the H=6 and H=7 argmins unchanged,")
-    print("   no intermediate action scoring lower G (a subset check; step-0.25")
-    print("   dropped on cost).")
+    print(f"   registered before the run, so this {verdict}. The -4 return is used,")
+    print("   and the horizon does not move: extension saturates at 6.")
+    print(f"   refinement: not run here (cost {refine_cost} scored steps). The")
+    print("   write-up records a step-0.5 sweep leaving the H=6 and H=7 argmins")
+    print("   unchanged, but no commit builds that set, so it is registered as a")
+    print("   re-measurement rather than read as discharged.")
     print("   analytic bound: relief <= 0.77/step vs 2.77 detour -> H* >= 6.")
     print(f"   feasibility: declared to H_MAX = {H_MAX} (cost {hmax_cost} scored")
     print("   steps); the argmin is cue-ward at H = 7, 8, 9, open-loop throughout.")
@@ -715,10 +751,16 @@ def check() -> None:
     # a reversed argmin reports FIRED, both from the measurements above, so this reads
     # the outcomes rather than re-deriving them. NOT RESOLVED and NOT APPLICABLE are
     # findings to report; only FIRED is a gate failure.
-    reports = falsifiers(at_prior, at_flip)
-    fired = [r.name for r in reports if r.outcome is Outcome.FIRED]
+    # Enumerated once and passed in, so the sweep is not paid for twice, and so a
+    # refutation reaches `fired` below rather than aborting on an assert above it.
     extension = measure_extension()
-    assert extension.h_star == EXT_BAR, (
+    reports = falsifiers(at_prior, at_flip, extension)
+    fired = [r.name for r in reports if r.outcome is Outcome.FIRED]
+    # The registered bar is `H* <= 6`, and the registration calls 5 plausible. Asserting
+    # equality here would fail a measurement that passed its own registration.
+    assert extension.sensed, "v1-ext cannot reach the cue: void by geometry"
+    assert extension.h_star is not None, "no cue-ward argmin on v1-ext"
+    assert extension.h_star <= EXT_BAR, (
         f"extension H* = {extension.h_star}, registered bar was <= {EXT_BAR}"
     )
     assert extension.certificate.warrant is Warrant.PROVED

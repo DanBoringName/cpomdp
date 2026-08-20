@@ -386,7 +386,7 @@ retraction was right and the number was right. The stated reason was wrong: `−
 what the optimal policy uses at `H = 6`, `−4` is. A row can carry a correct number for a
 false reason, and only the measurement tells them apart.
 
-Refinement axis remains unmeasured. The merge gate needs both.
+The refinement axis is undischarged in this repository. The merge gate needs both.
 
 **D4 · certified discretisation bound · GATE-D4** · SEVERE · R9 · toolbox C · tier `BOUNDED` · **PR-8 · v0.4.5, hard gate**
 

@@ -5,9 +5,9 @@ a property of the commit graph and not of a string. So a registration written af
 number it claims to precede constructs, renders without a marker, and reads exactly like
 one written before. This is where that is caught.
 
-The rule: for every `Source` whose two refs differ, `registered_at` must be an ancestor
-of `measured_at`. Same-ref sources are skipped, since they already say in their own
-render that history establishes no ordering.
+The rule: for every declared provenance whose two refs differ, `registered_at` must be
+an ancestor of `measured_at`. Same-ref ones are skipped, since they already say in their
+own render that history establishes no ordering.
 
 Three sources fail it today. The xfail marks record which and why, rather than
 softening the rule until it stops reporting.
@@ -107,8 +107,7 @@ def test_the_registration_ref_exists(name, source):
     ("name", "source"), _sources(), ids=[name for name, _ in _sources()]
 )
 def test_the_registration_precedes_the_measurement(name, source, request):
-    provenance = source
-    if provenance.same_ref:
+    if source.same_ref:
         pytest.skip("one ref: the render already says history orders nothing")
     if name in _KNOWN_BACKWARDS:
         request.node.add_marker(
@@ -123,11 +122,11 @@ def test_the_registration_precedes_the_measurement(name, source, request):
     ancestor = _git(
         "merge-base",
         "--is-ancestor",
-        provenance.registered_at,
-        provenance.measured_at,
+        source.registered_at,
+        source.measured_at,
     )
     assert ancestor.returncode == 0, (
-        f"{name}: registered_at={provenance.registered_at} is not an ancestor of "
-        f"measured_at={provenance.measured_at}, so the bar was not fixed before the "
+        f"{name}: registered_at={source.registered_at} is not an ancestor of "
+        f"measured_at={source.measured_at}, so the bar was not fixed before the "
         "number it is quoted against"
     )

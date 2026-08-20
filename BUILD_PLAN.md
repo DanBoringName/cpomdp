@@ -367,7 +367,8 @@ Gate-independent. Paper 3's G9 inherits the qualifier this produces.
       Confirmed in code: `examples/ffg/crossover.py` calls
       `EnumeratedEfeSearch.over_backend(...).evaluate(...)` and instantiates neither
       selector. The declaration now travels with the number, in both `PROVED` falsifier
-      details and at the head of `warrant_numbers.md`'s crossover section, which had not
+      details (rows 1 and 2; row 5 states its own registered bar instead) and at the head
+      of `warrant_numbers.md`'s crossover section, which had not
       named the seam at all. The write-up and ADR-034 already carried it. No number moved.
 - [ ] **Run the fourth D3 falsifier: `H*` stability under action-set refinement.**
       Registered in the battery before it is run, which is what keeps it a test. It is
@@ -388,7 +389,7 @@ Gate-independent. Paper 3's G9 inherits the qualifier this produces.
         the memory wall, so they are 18 minutes and 2.9 hours at the measured 39.0k
         policies/s, not the `VOID (memory)` they were. Accept or decline each in the
         registration, before the run.
-  - [ ] The extension axis has one named unmeasured cell to answer, `{−4,…,2}`.
+  - [x] The extension axis has one named unmeasured cell to answer, `{−4,…,2}`.
         `research/r10_open_loop_crossover.md` carried a row for it reading "`H* = 6`,
         unchanged (`−3` already optimal)", deduced from `−3` reaching the goal in one step
         rather than measured. No commit in this repo builds that set, so the row is
@@ -396,6 +397,9 @@ Gate-independent. Paper 3's G9 inherits the qualifier this produces.
         walk arrives at the cue at `x = +1`, from where the goal at `x = −3` is a
         displacement of `−4`, so a set containing `−4` offers a one-step return the
         six-action set does not. Measure it under a completeness certificate.
+        Measured 2026-08-20: `H* = 6`, `PROVED (set v1-ext, 7^6 = 117649 visited)`, argmin
+        `[+1,−4,0,0,0,0]`. The deduced row's number was right and its reason was wrong, since
+        the argmin uses `−4` rather than `−3`. Extension saturates at 6.
   - [x] Size the run against `free -g` before launching it. `cue_maze.enumeration_cost`
         describes the **front-loaded** path only. On the chunked path peak is
         block-determined and flat in `|A|^H`, so re-derive any budget line taken from the
