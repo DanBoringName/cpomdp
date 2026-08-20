@@ -66,7 +66,7 @@ turn green and freeze the moment that regime first settles near the food, so the
 shows directly *when* each one gets there, not just whether.
 
 That border cue is also what makes the detour's actual cost legible: the balanced
-regime is **not** the fastest. The two beeliners — classic LQR and sharp Λ=0.1 — settle
+regime is **not** the fastest. The two beeliners — classic LQR and sharp Λ=0.05 — settle
 soonest, together at step 18 of 90 on near-identical shortest paths (9.6 and 9.9
 units travelled); balanced (Λ=0.015) is the slowest of the regimes that arrive at all (step
 41) and travels the farthest (≈13.8 units), *because* it deliberately detours. What that

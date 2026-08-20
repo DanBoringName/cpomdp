@@ -5,7 +5,8 @@ The gap expands in prior spread as::
     gap(σ) = c₂σ² + c₄σ⁴ + c₆σ⁶ + O(σ⁸)
 
 `c₂` is derived and published: `(R'(μ)/2R(μ))²`, in the registration's RESULT
-2026-08-07. `c₄` is under analytic derivation. `c₆` is unmeasured.
+2026-08-07. `c₄` has a closed form too, in RESULT 2026-08-16, which AMENDMENT
+2026-08-17 pins to the reverse KL direction. `c₆` is unmeasured.
 
 **This module does not fit `c₄` or `c₆`, and that is a constraint rather than an
 omission.** A number extracted here before the derivation lands becomes the thing the
@@ -18,12 +19,22 @@ is *structure*, which a derivation must reproduce and which cannot stand in for 
 - the residual's **exponent** after each known term comes off, never its coefficient
 - the gap vanishing identically under fixed `R`
 
-When the derivation lands, pass its value in::
+Pass a derived value in, one family at a time, and G4 tries to refute it::
 
-    uv run --no-sync python -m research.checks.gap_expansion --check --c4 <derived>
+    uv run --no-sync python -m research.checks.gap_expansion --check \
+        --families tanh --c4 0.0061107361819873193
 
-and G4 tries to refute it. Supplying a candidate is the only way a `c₄` figure enters
-this module. It never produces one.
+`--families` defaults to all five, and a single `--c4` applied to a run of several
+mis-tests all but one, so the parser refuses that combination. Supplying a candidate
+is the only way a `c₄` figure enters this module. It never produces one.
+
+**The candidate needs fifteen significant figures or more**, and the registration makes
+a cell measured with a rounded one VOID rather than passed or fired. The value above is
+the closed form evaluated for `tanh` at `μ = 1`, tabled in the registration. Rounding it
+to the five figures that document also tables reads `σ^6.302` against a `σ^6` claim and
+a ±0.25 bar, where the full-precision candidate reads `σ^6.148` and clears it. `tanh` is
+where this bites: its residual is the only one within an order of magnitude of the
+quadrature floor.
 
 Why an exponent test is a sharp falsifier. Subtract a candidate `ĉ₄` and the residual is
 `(c₄ − ĉ₄)σ⁴ + c₆σ⁶`. If the candidate is exact the quartic cancels and the residual
@@ -571,8 +582,8 @@ def _check_residual_exponent(
                 outcome=Outcome.NOT_RUN_HERE,
                 tier=Tier.BOUNDED,
                 detail=(
-                    "no candidate declared. The analytic derivation is outstanding; "
-                    "pass --c4 <derived> once it lands and this leg tries to refute it"
+                    "no candidate declared. Pass --c4 with the closed form evaluated "
+                    "for this family and this leg tries to refute it"
                 ),
             )
         )
@@ -779,9 +790,14 @@ def _control_report(reports: Sequence[CheckReport], tolerance: float) -> CheckRe
     """The registered control on G4c: whether any family's exponent was stable.
 
     The pre-registration reads a `tanh` spread below the bar as a real deviation *only*
-    if the diagnostic discriminates at all. Its "uninformative on all four" branch fires
-    when every family is unstable, and until now that branch lived in prose with nothing
-    in code to evaluate it.
+    if the diagnostic discriminates at all. Its uninformative branch fires when every
+    family that produced a spread read unstable, and until now that branch lived in
+    prose with nothing in code to evaluate it.
+
+    A candidate run is one family at a time, since the parser refuses `--c4` across
+    several, so this reports on one family per run rather than on the four the
+    registration tabulates together. The registration's four-family reading is the
+    union of four such runs, not one invocation of this function.
 
     Args:
         reports: the run's reports so far, G4c's among them.
@@ -844,8 +860,8 @@ def _print_table(measurements: Sequence[GapMeasurement]) -> None:
 def _exit_code(reports: Sequence[CheckReport]) -> int:
     """Zero when nothing fired, one on a firing, two when something went unmeasured.
 
-    ``NOT_RUN_HERE`` does not reach the exit code. G4b waiting on a derivation is the
-    expected state today, not a failure of this run.
+    ``NOT_RUN_HERE`` does not reach the exit code. A run with no ``--c4`` leaves G4b
+    unmeasured by construction, which is a run that asked less, not a run that failed.
 
     Args:
         reports: the run's check reports.
@@ -878,7 +894,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--c4",
         type=float,
         default=None,
-        help="a derived c₄ for G4b to try to refute. Omit until the derivation lands",
+        help=(
+            "a derived c₄ for G4b to try to refute, at fifteen significant figures or "
+            "more. A rounded candidate makes the cell VOID"
+        ),
     )
     parser.add_argument(
         "--c6", type=float, default=None, help="a derived c₆, used only with --c4"
@@ -942,7 +961,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(report)
     print(f"\n{check_summary(reports)}")
     if arguments.c4 is None:
-        print("\nG4b is waiting on the analytic c₄. No coefficient is fitted here.")
+        print("\nG4b ran with no candidate. No coefficient is fitted here.")
     return _exit_code(reports)
 
 

@@ -90,11 +90,17 @@ _PROVENANCE = "external-scalar-quadrature"
 _REFERENCE_SIG_FIGS = 2
 
 # Declared inputs from research/gate_d4_registration.md, RESULT 2026-08-10. They are
-# arguments to C4's materiality question, not measurements this module makes. `c₄` is
-# under analytic derivation, so this is the registered figure being used as a scale, not
-# a value this suite computes or endorses.
+# arguments to C4's materiality question, not measurements this module makes. The scale
+# is the registered extraction, not a value this suite computes or endorses. RESULT
+# 2026-08-16 supersedes it with the closed form `−3/16 = −0.1875`, which disagrees with
+# the fit by 1.2%. The figures below stay on the fit they were declared against: C4 asks
+# whether truncation error is material beside the spread of that extraction, and
+# re-scaling the question by 1.2% after the fact would answer a different one.
 _C4_MAGNITUDE = 0.18980  # |c₄| at the declared operating point κ = 1, μ* = 1
 _EXTRACTION_SPREAD = 3.6e-3  # jackknifed extraction spread on c₄, 0.36%
+# Not stated in RESULT 2026-08-10, which reports the basis residual as 0.60% median
+# and 5.59% max. The registration's DISCLOSURE 2026-08-19 records that its provenance
+# is undocumented there.
 _BASIS_FIT_ERROR = 1.03e-2  # seven-term basis fit error on c₄, 1.03%
 
 #: C4's bar: the truncation must not reach a tenth of the extraction spread already
