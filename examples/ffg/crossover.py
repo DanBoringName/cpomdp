@@ -165,6 +165,57 @@ class FlipMeasurement(NamedTuple):
         return abs(self.delta_g) > self.bound
 
 
+class ExtensionMeasurement(NamedTuple):
+    """The extension axis of the fourth D3 falsifier, as its report reads it.
+
+    Attributes:
+        h_star: the first horizon whose exhaustive argmin is cue-ward, or ``None`` if
+            none is within the swept range.
+        certificate: the completeness certificate at that horizon, or at the last
+            swept one when no flip was found.
+        policy: the argmin there, so the mechanism is readable beside the number.
+    """
+
+    h_star: int | None
+    certificate: CompletenessCertificate
+    policy: object
+
+
+#: The registered bar for the extension axis, from the 2026-08-20 pre-registration.
+EXT_BAR = 6
+
+#: Where that prediction was registered, and the ref whose tree measured against it.
+#: Registered before the run, which is what the ordering claim rests on and what
+#: `Provenance` exists to let a reviewer check.
+EXT_PROVENANCE = Provenance(
+    registered_at="86d1f22",
+    measured_at="17a1be7",
+    registered="extension axis registered at H* <= 6 (battery, 2026-08-20)",
+)
+
+
+def _ext_certificate(horizon: int) -> CompletenessCertificate:
+    """The completeness certificate for the extension set at one horizon."""
+    backend, _, _, info_block = _setup()
+    return EnumeratedEfeSearch.over_backend(
+        backend, EXT_SET, info_block=info_block, horizon=horizon
+    ).certificate
+
+
+def measure_extension(max_horizon: int = EXT_BAR) -> ExtensionMeasurement:
+    """Sweep the extension set for its crossover, with a certificate either way.
+
+    A sweep that finds no cue-ward argmin has still enumerated every horizon in full, so
+    it is decided rather than sampled and carries the certificate at the last one. The
+    report needs evidence whichever way the falsifier goes.
+    """
+    sweep = exhaustive_flip(EXT_SET, max_horizon)
+    for horizon, _, _, policy, cue_ward in sweep:
+        if cue_ward:
+            return ExtensionMeasurement(horizon, _ext_certificate(horizon), policy)
+    return ExtensionMeasurement(None, _ext_certificate(max_horizon), sweep[-1][3])
+
+
 def measure_flip(horizon: int) -> FlipMeasurement:
     """Enumerate at ``horizon`` and read off everything the falsifiers need."""
     n_policies, _, _, cue_ward = argmin_at(horizon)
@@ -364,8 +415,9 @@ def _bar(*measurements: FlipMeasurement) -> str:
 def falsifiers(
     at_prior: FlipMeasurement | None = None,
     at_flip: FlipMeasurement | None = None,
+    extension: ExtensionMeasurement | None = None,
 ) -> tuple[CheckReport, ...]:
-    """The four D3 falsifiers registered for this crossover, one report each.
+    """The five D3 falsifiers registered for this crossover, one report each.
 
     A falsifier does not pass. ``NOT TRIGGERED`` is "it ran and the condition did not
     obtain", so the claim survives it. ``NOT APPLICABLE`` is void by construction, so
@@ -391,9 +443,11 @@ def falsifiers(
     Args:
         at_prior: the measurement at ``H*-1``. Enumerated live when omitted.
         at_flip: the measurement at ``H*``. Enumerated live when omitted.
+        extension: the extension-axis sweep. Enumerated live when omitted.
     """
     at_prior = measure_flip(FLIP_H - 1) if at_prior is None else at_prior
     at_flip = measure_flip(FLIP_H) if at_flip is None else at_flip
+    extension = measure_extension() if extension is None else extension
 
     def crossover_exists() -> Outcome:
         """Fires when the exhaustive argmin is not cue-ward at H*."""
@@ -407,6 +461,31 @@ def falsifiers(
             return Outcome.NOT_RESOLVED
         clean = at_flip.cue_ward and not at_prior.cue_ward
         return Outcome.NOT_TRIGGERED if clean else Outcome.FIRED
+
+    def extension_holds() -> Outcome:
+        """Fires when the extension pushes H* past its registered bar of 6."""
+        if extension.h_star is None:
+            return Outcome.FIRED
+        return Outcome.NOT_TRIGGERED if extension.h_star <= EXT_BAR else Outcome.FIRED
+
+    def extension_warrant() -> Warrant:
+        """Exhaustive over a declared finite set, so the bar is decided, not sampled."""
+        return Warrant.PROVED
+
+    def extension_detail() -> str:
+        """The measured horizon, the argmin that produced it, and the bar it met."""
+        if extension.h_star is None:
+            return (
+                f"no cue-ward argmin through H = {EXT_BAR} on v1-ext, so H* > "
+                f"{EXT_BAR} against the registered bar"
+            )
+        policy = np.asarray(extension.policy).ravel()
+        return (
+            f"H* = {extension.h_star} on v1-ext against a registered bar of "
+            f"H* <= {EXT_BAR}. argmin {policy}: one step to the cue at +1, then a "
+            f"single -4 return. H* does not move from {{-3,...,2}}, so extension "
+            f"saturates"
+        )
 
     def where(measurement: FlipMeasurement) -> str:
         return "cue-ward" if measurement.cue_ward else "prior-ward"
@@ -474,6 +553,15 @@ def falsifiers(
                 f"step-0.5 refinement costs {9**7 * 7} steps. Recorded in the "
                 "write-up, and the live exposure on this number"
             ),
+        ),
+        CheckReport(
+            name="5. H* unstable under extension",
+            warrant=extension_warrant(),
+            outcome=extension_holds(),
+            tier=Tier.BOUNDED,
+            detail=extension_detail(),
+            evidence=(extension.certificate,),
+            provenance=(EXT_PROVENANCE,),
         ),
     )
 
@@ -626,6 +714,11 @@ def check() -> None:
     # findings to report; only FIRED is a gate failure.
     reports = falsifiers(at_prior, at_flip)
     fired = [r.name for r in reports if r.outcome is Outcome.FIRED]
+    extension = measure_extension()
+    assert extension.h_star == EXT_BAR, (
+        f"extension H* = {extension.h_star}, registered bar was <= {EXT_BAR}"
+    )
+    assert extension.certificate.warrant is Warrant.PROVED
     assert not fired, f"registered falsifiers fired: {fired}"
     for report in reports:
         if report.outcome is Outcome.NOT_RESOLVED:

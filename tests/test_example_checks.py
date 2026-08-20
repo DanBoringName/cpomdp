@@ -190,11 +190,15 @@ def test_crossover_falsifiers_are_reports():
     logic itself is covered on the pull-request path by the class above.
     """
     reports = crossover.falsifiers()
-    assert len(reports) == 4
+    assert len(reports) == 5
     proved = [r for r in reports if r.warrant is Warrant.PROVED]
-    assert len(proved) == 2
+    assert len(proved) == 3
     for report in proved:
         assert report.evidence
+        # Every PROVED row names where its bar was registered, so a reader can check
+        # the ordering rather than take it. Rows 1 and 2 registered and measured in one
+        # commit and say so; row 5 was registered a commit ahead of its measurement.
+        assert report.provenance
         # Evidence widened to two kinds when `SymbolicReduction` landed. These rows are
         # decided by enumeration, so which kind they carry is part of the assertion.
         certificates = [
@@ -206,14 +210,20 @@ def test_crossover_falsifiers_are_reports():
         assert all(certificate.complete for certificate in certificates)
         # The other axis: decided by enumeration, and measured against a stated bar.
         # A `BOUNDED` row has to name the bar, or the tier is a label with nothing under
-        # it. `bound` is what the margin was read against.
+        # it.
         assert report.tier is Tier.BOUNDED
-        assert "bound" in report.detail
         assert report.outcome is Outcome.NOT_TRIGGERED
-        # The qualifier travels with the number. H* = 7 is an upper bound because the
-        # declared set clips the reach at -2, and a `BOUNDED` row reads stronger than
-        # the claim is without it.
-        assert "upper bound" in report.detail
+
+    # The crossover rows carry a qualifier the extension row does not: H* = 7 is an
+    # upper bound because the declared set clips the reach at -2, and a `BOUNDED` row
+    # reads stronger than the claim is without it. `bound` is what the margin was read
+    # against. Row 5 is measured against a registered bar instead, so it says `bar`.
+    for report in proved:
+        if report.name.startswith(("1.", "2.")):
+            assert "bound" in report.detail
+            assert "upper bound" in report.detail
+        else:
+            assert "registered bar" in report.detail
 
     # The two that never ran stay distinct, and neither claims a prover.
     unrun = {r.outcome for r in reports if r.warrant is None}
@@ -222,7 +232,7 @@ def test_crossover_falsifiers_are_reports():
     summary = check_summary(reports)
     assert "PROVED" in summary
     assert "FIRED" not in summary
-    assert "4 registered, 2 tested here, none fired" in summary
+    assert "5 registered, 3 tested here, none fired" in summary
 
 
 @pytest.mark.slow

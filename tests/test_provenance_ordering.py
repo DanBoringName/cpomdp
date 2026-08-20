@@ -19,6 +19,7 @@ import pytest
 
 from research.checks import gap_series, series_kernel
 from research.checks.series_kernel import Source
+from warrantlib import Provenance
 
 #: Sources whose registration landed after the measurement that relies on it. The
 #: derivation in `research/c4_hand_derivation.md` was committed 2026-08-17, later than
@@ -33,13 +34,24 @@ _KNOWN_BACKWARDS = {
 
 
 def _sources():
-    """Every `Source` the check modules declare, as `(module.name, source)` pairs."""
+    """Every declared provenance, as `(name, provenance)` pairs.
+
+    Covers the `Source` records in the check suites and the bare `Provenance` constants
+    the demos declare. A registration that only the demo carries is a registration
+    nothing checks, which is the gap this module exists to close.
+    """
+    import crossover
+
     found = []
     for module in (series_kernel, gap_series):
         for name in dir(module):
             value = getattr(module, name)
             if isinstance(value, Source):
-                found.append((name, value))
+                found.append((name, value.provenance))
+    for name in dir(crossover):
+        value = getattr(crossover, name)
+        if isinstance(value, Provenance):
+            found.append((name, value))
     return sorted(set(found), key=lambda pair: pair[0])
 
 
@@ -84,9 +96,9 @@ def test_the_suites_declare_sources():
     ("name", "source"), _sources(), ids=[name for name, _ in _sources()]
 )
 def test_the_registration_ref_exists(name, source):
-    found = _git("cat-file", "-e", f"{source.provenance.registered_at}^{{commit}}")
+    found = _git("cat-file", "-e", f"{source.registered_at}^{{commit}}")
     assert found.returncode == 0, (
-        f"{name}: registered_at={source.provenance.registered_at} is not a commit in "
+        f"{name}: registered_at={source.registered_at} is not a commit in "
         "this repository"
     )
 
@@ -95,7 +107,7 @@ def test_the_registration_ref_exists(name, source):
     ("name", "source"), _sources(), ids=[name for name, _ in _sources()]
 )
 def test_the_registration_precedes_the_measurement(name, source, request):
-    provenance = source.provenance
+    provenance = source
     if provenance.same_ref:
         pytest.skip("one ref: the render already says history orders nothing")
     if name in _KNOWN_BACKWARDS:
