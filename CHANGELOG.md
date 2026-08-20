@@ -15,6 +15,18 @@ an exposure rather than a result.
 
 ### Added
 
+- `Provenance` (warrantlib 0.2.0) — which ref registered a claim and which one measured
+  it, plus one line saying what a reviewer will find at the first. A `PROVED` report
+  requires one, on the same terms as it requires evidence, and carries them as a tuple
+  for the same reason the evidence is one. A ref is a git commit SHA, an http(s) URL or a
+  DOI; a path, a branch, a tag and `HEAD` are refused, because each resolves to a
+  different tree every time it is read. Where the two refs name one commit the render
+  says the ordering is not established by history, which is the honest reading whenever a
+  check and the derivation behind it land together. The type cannot order two refs, only
+  compare them, so `tests/test_provenance_ordering.py` asks git. Three of the suite's nine
+  sources fail that check today and are marked `xfail`: the hand derivation in
+  `research/c4_hand_derivation.md` landed 2026-08-17, after the suites citing it, which
+  ADR-037 already discloses (ADR-041).
 - `warrantlib` — the vocabulary every check labels itself from, published as its own
   distribution and re-exported as `cpomdp.warrant` so existing import paths keep working.
   It depends on the standard library alone, so a suite can label its findings without a
@@ -79,6 +91,9 @@ an exposure rather than a result.
 
 ### Changed
 
+- cpomdp requires `warrantlib>=0.2`, up from `>=0.1`. `cpomdp.warrant` re-exports
+  `Provenance`, so an installed 0.1 fails at `import cpomdp`. Breaking for anyone pinning
+  warrantlib 0.1.
 - **Breaking:** the model's fields are `dynamics_matrix`, `control_matrix`,
   `observation_model` and `dynamics_noise_model` (were `dynamics`, `control`,
   `observation`, `process_noise`). One rule now covers every field: `_matrix` is a linear

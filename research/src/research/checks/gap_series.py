@@ -61,6 +61,7 @@ from research.checks.series_kernel import (
     NU,
     RBAR,
     SIGMA,
+    Source,
     cumulants,
     exact_predictive_expectation,
     exp_series,
@@ -71,7 +72,7 @@ from research.checks.series_kernel import (
     report_identity,
     truncate,
 )
-from warrantlib import CheckReport, Outcome, check_summary
+from warrantlib import CheckReport, Outcome, Provenance, check_summary
 
 __all__ = [
     "averaged_gap",
@@ -87,21 +88,64 @@ __all__ = [
 #: against a literal, so a further order is this constant plus new stages.
 ORDER = 4
 
-#: Where the closed form `c₂` was derived independently of this series.
-REGISTRATION_SOURCE = (
-    "research/gate_d4_registration.md, RESULT 2026-08-07: c2 = (R'(mu)/2R(mu))^2"
+#: The commit these checks were first measured at.
+_MEASURED_REF = "1888ad4"
+
+#: Where the closed form `c₂` was derived independently of this series. Registered
+#: 2026-08-07, nine days before this suite measured against it.
+REGISTRATION_SOURCE = Source(
+    correspondence=(
+        "research/gate_d4_registration.md, RESULT 2026-08-07: c2 = (R'(mu)/2R(mu))^2"
+    ),
+    provenance=Provenance(
+        registered_at="a76cf1b",
+        measured_at=_MEASURED_REF,
+        registered="RESULT 2026-08-07, c₂ in closed form",
+    ),
 )
 
-#: Where the seven-term dimensional basis and its parity argument are registered.
-BASIS_SOURCE = (
-    "research/gate_d4_registration.md, section 2: the seven-term dimensional basis, "
-    "with a parity argument for completeness"
+#: Where the seven-term dimensional basis and its parity argument are registered. Same
+#: registration commit as the closed form, and equally ahead of the measurement.
+BASIS_SOURCE = Source(
+    correspondence=(
+        "research/gate_d4_registration.md, section 2: the seven-term dimensional "
+        "basis, with a parity argument for completeness"
+    ),
+    provenance=Provenance(
+        registered_at="a76cf1b",
+        measured_at=_MEASURED_REF,
+        registered="section 2, the seven-term dimensional basis and its parity "
+        "argument",
+    ),
 )
 
-#: Where the cumulant statement of the gap is hand derived.
-CUMULANT_SOURCE = (
-    "research/c4_hand_derivation.md, Step 4 "
-    "(the gap as half the variance at leading order)"
+#: Where the cumulant statement of the gap is hand derived. The derivation landed
+#: 2026-08-17, a day after this suite measured against it, so the ordering runs
+#: backwards and is recorded that way rather than smoothed over.
+CUMULANT_SOURCE = Source(
+    correspondence=(
+        "research/c4_hand_derivation.md, Step 4 "
+        "(the gap as half the variance at leading order)"
+    ),
+    provenance=Provenance(
+        registered_at="99e3c34",
+        measured_at=_MEASURED_REF,
+        registered="Step 4, the gap as half the variance at leading order",
+    ),
+)
+
+#: The Gaussian fourth and second moments, checked in `series_kernel` against the
+#: Gaussian integral. Self-backing, so the two refs are one.
+INNOVATION_MOMENT_SOURCE = Source(
+    correspondence=(
+        "the fourth and second moments of a centred Gaussian, which series_kernel "
+        "checks against the Gaussian integral"
+    ),
+    provenance=Provenance(
+        registered_at=_MEASURED_REF,
+        measured_at=_MEASURED_REF,
+        registered="the innovation moments, stated and checked in one commit",
+    ),
 )
 
 #: A free positive scale, for the covariance check. `R → a·R` leaves every
@@ -303,21 +347,21 @@ def check_gap_is_half_the_variance() -> list[CheckReport]:
         report_identity(
             name="C1 gap is half the variance at σ²",
             claim="log E_q[e^W] − E_q[W] = ½·Var_q(W) at σ²",
-            correspondence=CUMULANT_SOURCE,
+            source=CUMULANT_SOURCE,
             residual=difference.coeff(SIGMA, 2),
             shown=f"[σ²] difference = {sympy.simplify(difference.coeff(SIGMA, 2))}",
         ),
         report_condition(
             name="C1 they part at σ⁴",
             claim="½·Var_q(W) is not the gap at σ⁴, because κ₃ enters",
-            correspondence=CUMULANT_SOURCE,
+            source=CUMULANT_SOURCE,
             holds=sympy.simplify(difference.coeff(SIGMA, 4)) != 0,
             shown=f"[σ⁴] difference = {sympy.factor(difference.coeff(SIGMA, 4))}",
         ),
         report_identity(
             name="C1 cumulant accounting at σ⁴",
             claim="the gap is κ₂/2 + κ₃/6 through σ⁴, with κ₄ contributing nothing",
-            correspondence=CUMULANT_SOURCE,
+            source=CUMULANT_SOURCE,
             residual=definition - truncate(terms[2] + terms[3], ORDER),
             shown=f"[σ⁴] κ₄/24 = {sympy.simplify(terms[4].coeff(SIGMA, 4))}",
         ),
@@ -342,21 +386,21 @@ def check_fixed_observation_coefficient() -> list[CheckReport]:
         report_identity(
             name="C2 fixed-y σ² coefficient",
             claim="[σ²] KL(y) = l₁²(R̄ − ν²)²/(8R̄²)",
-            correspondence=EXPANSION_SOURCE,
+            source=EXPANSION_SOURCE,
             residual=coefficient - claim,
             shown=f"{sympy.factor(coefficient)}",
         ),
         report_identity(
             name="C2 non-negative by construction",
             claim="the coefficient is a square over 8R̄², and R̄ is declared positive",
-            correspondence=EXPANSION_SOURCE,
+            source=EXPANSION_SOURCE,
             residual=coefficient - as_square,
             shown=f"(l₁(R̄ − ν²))²/(8R̄²), with R̄ positive: {RBAR.is_positive}",
         ),
         report_condition(
             name="C2 still depends on ν",
             claim="the y-average has not happened: the coefficient still varies with ν",
-            correspondence=EXPANSION_SOURCE,
+            source=EXPANSION_SOURCE,
             holds=sympy.simplify(sympy.diff(coefficient, NU)) != 0,
             shown=f"d/dν = {sympy.factor(sympy.diff(coefficient, NU))}",
         ),
@@ -378,10 +422,7 @@ def check_innovation_average() -> list[CheckReport]:
         report_identity(
             name="C3 innovation average",
             claim="E[(ν²/R̄ − 1)²] = 2 under ν ~ N(0, R̄)",
-            correspondence=(
-                "the fourth and second moments of a centred Gaussian, which "
-                "series_kernel checks against the Gaussian integral"
-            ),
+            source=INNOVATION_MOMENT_SOURCE,
             residual=averaged - 2,
             shown=f"E[(ν²/R̄ − 1)²] = {averaged}",
         )
@@ -404,14 +445,14 @@ def check_c2_against_the_registration() -> list[CheckReport]:
         report_identity(
             name="C4 c₂ closed form",
             claim="c₂ = l₁²/4, which is (R'(μ)/2R(μ))² since l₁ = R'(μ)/R(μ)",
-            correspondence=REGISTRATION_SOURCE,
+            source=REGISTRATION_SOURCE,
             residual=coefficient - L1**2 / 4,
             shown=f"c₂ = {coefficient}",
         ),
         report_condition(
             name="C4 c₂ is free of ν",
             claim="the averaged coefficient carries no innovation",
-            correspondence=REGISTRATION_SOURCE,
+            source=REGISTRATION_SOURCE,
             holds=NU not in coefficient.free_symbols,
             shown=f"free symbols: {sorted(str(s) for s in coefficient.free_symbols)}",
         ),
@@ -445,14 +486,14 @@ def check_direction_independence() -> list[CheckReport]:
         report_identity(
             name="C5 direction independence at σ²",
             claim="reverse KL = forward KL at σ², so c₂ is direction-free",
-            correspondence=CUMULANT_SOURCE,
+            source=CUMULANT_SOURCE,
             residual=difference.coeff(SIGMA, 2),
             shown=f"[σ²] reverse = {sympy.factor(reverse.coeff(SIGMA, 2))}",
         ),
         report_condition(
             name="C5 the directions part at σ⁴",
             claim="reverse and forward KL differ at σ⁴, so c₄ is direction-dependent",
-            correspondence=CUMULANT_SOURCE,
+            source=CUMULANT_SOURCE,
             holds=sympy.simplify(difference.coeff(SIGMA, 4)) != 0,
             shown=f"[σ⁴] difference = {sympy.factor(difference.coeff(SIGMA, 4))}",
         ),
@@ -478,14 +519,14 @@ def check_exact_predictive_is_required() -> list[CheckReport]:
         report_identity(
             name="C9 predictives agree at σ²",
             claim="collapsing the predictive to N(0, R̄) leaves c₂ unchanged",
-            correspondence=EXPANSION_SOURCE,
+            source=EXPANSION_SOURCE,
             residual=exact.coeff(SIGMA, 2) - collapsed.coeff(SIGMA, 2),
             shown=f"c₂ = {sympy.expand(exact.coeff(SIGMA, 2))} either way",
         ),
         report_condition(
             name="C9 predictives part at σ⁴",
             claim="the collapsed predictive gives a different c₄, so nesting sets it",
-            correspondence=EXPANSION_SOURCE,
+            source=EXPANSION_SOURCE,
             holds=parted != 0,
             shown=f"exact − collapsed = {sympy.factor(parted)}",
         ),
@@ -516,7 +557,7 @@ def check_quartic_basis() -> list[CheckReport]:
         report_identity(
             name="C8 c₄ lies in the declared basis",
             claim="c₄ is a combination of the seven registered terms, no remainder",
-            correspondence=BASIS_SOURCE,
+            source=BASIS_SOURCE,
             residual=remainder,
             shown=f"remainder after the seven terms = {remainder}",
         )
@@ -525,7 +566,7 @@ def check_quartic_basis() -> list[CheckReport]:
         report_identity(
             name=f"C8 predicted zero [{term}]",
             claim=f"the {term} coefficient is exactly zero",
-            correspondence=EXPANSION_SOURCE,
+            source=EXPANSION_SOURCE,
             residual=found[term],
             shown=f"{term}: {found[term]}",
         )
@@ -535,7 +576,7 @@ def check_quartic_basis() -> list[CheckReport]:
         report_identity(
             name=f"C8 fraction [{term}]",
             claim=f"the {term} coefficient is {value}",
-            correspondence=EXPANSION_SOURCE,
+            source=EXPANSION_SOURCE,
             residual=found[term] - value,
             shown=f"{term}: {found[term]}",
         )
@@ -602,14 +643,14 @@ def check_scale_covariance(
         report_condition(
             name=f"C6 no bare R̄ [{name}]",
             claim="every monomial pairs each ν² with at least one 1/R̄",
-            correspondence=BASIS_SOURCE,
+            source=BASIS_SOURCE,
             holds=max(deficits) <= 0,
             shown=f"deficits m − k present: {sorted(deficits)}",
         ),
         report_identity(
             name=f"C6 scale covariance [{name}]",
             claim="under R → aR with ν → √a·ν each monomial picks up a^(m−k)",
-            correspondence=EXPANSION_SOURCE,
+            source=EXPANSION_SOURCE,
             residual=sympy.simplify(scaled - grouped),
             shown=f"under R → aR: {sympy.factor(sympy.simplify(scaled))}",
         ),
@@ -636,7 +677,7 @@ def check_exponential_family() -> list[CheckReport]:
         report_identity(
             name="C7 exponential family c₂",
             claim="for R = A·e^{bx}, c₂ = b²/4",
-            correspondence=BASIS_SOURCE,
+            source=BASIS_SOURCE,
             residual=quadratic - rate**2 / 4,
             shown=f"c₂|(l₂=l₃=l₄=0) = {quadratic}",
         ),
@@ -646,7 +687,7 @@ def check_exponential_family() -> list[CheckReport]:
                 "for R = A·e^{bx}, c₄ = 7b⁴/16 − 3b²/(4R̄) under reverse KL, "
                 "exactly two terms"
             ),
-            correspondence=BASIS_SOURCE,
+            source=BASIS_SOURCE,
             residual=quartic - claimed,
             shown=f"c₄|(l₂=l₃=l₄=0) = {sympy.factor(quartic)}",
         ),

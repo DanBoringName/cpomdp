@@ -56,6 +56,7 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Sequence
+from dataclasses import dataclass
 from functools import cache
 
 import sympy
@@ -63,6 +64,7 @@ import sympy
 from warrantlib import (
     CheckReport,
     Outcome,
+    Provenance,
     SymbolicReduction,
     Tier,
     Warrant,
@@ -70,6 +72,7 @@ from warrantlib import (
 )
 
 __all__ = [
+    "Source",
     "cumulants",
     "displacement_series",
     "exact_predictive_expectation",
@@ -129,15 +132,102 @@ DERIVATIVE_ORDER = 4
 #: Prior variance.
 PRIOR_VARIANCE = SIGMA**2
 
+
+@dataclass(frozen=True)
+class Source:
+    """A correspondence and its refs, carried together.
+
+    Every reduction here names where its setup was hand derived, and separately which
+    ref registered that derivation. Held as two constants they would be edited one at a
+    time, and a stale ref beside a fresh correspondence reads as a checked ordering
+    without being one.
+
+    Attributes:
+        correspondence: where the symbolic setup was analytically checked, for
+            `SymbolicReduction.correspondence`.
+        provenance: which ref registered it, and which ref measured against it.
+    """
+
+    correspondence: str
+    provenance: Provenance
+
+
+#: The commit that first carried the hand derivation. Every source below pointing into
+#: `c4_hand_derivation.md` was registered here.
+_DERIVATION_REF = "99e3c34"
+
 #: Where the hand derivation's construction of `W` is recorded, for the correspondence
 #: field of every reduction resting on it.
-CONSTRUCTION_SOURCE = (
-    "research/c4_hand_derivation.md, Steps 1-2 "
-    "(the log-ratio and the reciprocal identity)"
+#:
+#: The derivation landed 2026-08-17, after `log_ratio_series` was measuring against it
+#: (`23f0c47`, 2026-08-15). `measured_at` names that earliest reliance rather than the
+#: latest commit to touch the file, so the ordering reads as what it was. ADR-037
+#: discloses the same thing for the result this backs.
+CONSTRUCTION_SOURCE = Source(
+    correspondence=(
+        "research/c4_hand_derivation.md, Steps 1-2 "
+        "(the log-ratio and the reciprocal identity)"
+    ),
+    provenance=Provenance(
+        registered_at=_DERIVATION_REF,
+        measured_at="23f0c47",
+        registered="Steps 1-2, the log-ratio and the reciprocal identity",
+    ),
 )
 
-#: Where the σ-expansion of `h`, `δ` and `W` is recorded.
-EXPANSION_SOURCE = "research/c4_hand_derivation.md, Step 3 (expansion in prior spread)"
+#: Where the σ-expansion of `h`, `δ` and `W` is recorded. Same ordering problem as
+#: `CONSTRUCTION_SOURCE`, and this one backs 21 of the suite's checks.
+EXPANSION_SOURCE = Source(
+    correspondence=(
+        "research/c4_hand_derivation.md, Step 3 (expansion in prior spread)"
+    ),
+    provenance=Provenance(
+        registered_at=_DERIVATION_REF,
+        measured_at="23f0c47",
+        registered="Step 3, the expansion in prior spread",
+    ),
+)
+
+#: The Gaussian moment integral, evaluated in this module. Its registration is the
+#: check itself, so the two refs are one and the render says history orders nothing.
+MOMENT_SOURCE = Source(
+    correspondence=(
+        "the Gaussian integral ∫ z^n φ(z) dz, evaluated symbolically in this check, "
+        "which is what defines the moment the operator claims"
+    ),
+    provenance=Provenance(
+        registered_at="53a668f",
+        measured_at="53a668f",
+        registered="the moment table, stated and checked in one commit",
+    ),
+)
+
+#: Truncation as a projection, defined in this module's docstring. Self-backing, so the
+#: refs are one.
+TRUNCATION_SOURCE = Source(
+    correspondence=(
+        "truncation is the projection onto span{σ^k : k ≤ order}, stated in this "
+        "module's docstring"
+    ),
+    provenance=Provenance(
+        registered_at="53a668f",
+        measured_at="53a668f",
+        registered="the truncation operator, defined in this module's docstring",
+    ),
+)
+
+#: The cumulant-moment recursion, a standard identity. Self-backing, so the refs
+#: are one.
+RECURSION_SOURCE = Source(
+    correspondence=(
+        "the cumulant-moment recursion κ_n = μ_n − Σ C(n−1, m−1)·κ_m·μ_{n−m}, standard"
+    ),
+    provenance=Provenance(
+        registered_at="53a668f",
+        measured_at="53a668f",
+        registered="the cumulant-moment recursion, a standard identity",
+    ),
+)
 
 #: The scope every reduction in this module inherits. `R` smooth and positive at `μ` is
 #: what lets `l = log R` be Taylored at all; the expansion is formal, so no convergence
@@ -537,30 +627,30 @@ def cumulants(
     return found
 
 
-def _reduction(claim: str, correspondence: str) -> SymbolicReduction:
+def _reduction(claim: str, source: Source) -> SymbolicReduction:
     """A reduction carrying this module's standing scope.
 
     Args:
         claim: the analytic statement the identity stands for.
-        correspondence: where the setup was hand derived against the problem.
+        source: where the setup was hand derived, and its refs.
 
     Returns:
         The evidence a `PROVED` report here carries.
     """
     return SymbolicReduction(
         claim=claim,
-        correspondence=correspondence,
+        correspondence=source.correspondence,
         assumptions=STANDING_ASSUMPTIONS,
     )
 
 
-def _proved(name: str, claim: str, correspondence: str, shown: str) -> CheckReport:
+def _proved(name: str, claim: str, source: Source, shown: str) -> CheckReport:
     """A holding identity, reported at the warrant symbolic computation earns.
 
     Args:
         name: the check's label.
         claim: what the identity is, in words.
-        correspondence: where it was hand derived.
+        source: where it was hand derived, and its refs.
         shown: the symbolic result, printed whether or not it held.
 
     Returns:
@@ -572,7 +662,8 @@ def _proved(name: str, claim: str, correspondence: str, shown: str) -> CheckRepo
         outcome=Outcome.NOT_TRIGGERED,
         tier=Tier.EXACT,
         detail=f"PASS — {claim}. got: {shown}",
-        evidence=(_reduction(claim, correspondence),),
+        evidence=(_reduction(claim, source),),
+        provenance=(source.provenance,),
     )
 
 
@@ -613,7 +704,7 @@ def _refuted(
 def report_identity(
     name: str,
     claim: str,
-    correspondence: str,
+    source: Source,
     residual: sympy.Expr,
     shown: sympy.Expr | str,
 ) -> CheckReport:
@@ -626,7 +717,7 @@ def report_identity(
     Args:
         name: the check's label.
         claim: what the identity is, in words.
-        correspondence: where it was hand derived against the analytic problem.
+        source: where it was hand derived, and its refs.
         residual: the difference that must be identically zero.
         shown: what to print, whether or not the residual vanished.
 
@@ -635,14 +726,14 @@ def report_identity(
     """
     reduced = sympy.simplify(residual)
     if reduced == 0:
-        return _proved(name, claim, correspondence, str(shown))
+        return _proved(name, claim, source, str(shown))
     return _refuted(name, claim, str(shown), str(reduced))
 
 
 def report_condition(
     name: str,
     claim: str,
-    correspondence: str,
+    source: Source,
     holds: bool,
     shown: sympy.Expr | str,
 ) -> CheckReport:
@@ -654,7 +745,7 @@ def report_condition(
     Args:
         name: the check's label.
         claim: what the property is, in words.
-        correspondence: where it was hand derived against the analytic problem.
+        source: where it was hand derived, and its refs.
         holds: whether the property obtained.
         shown: what to print, whether or not it held.
 
@@ -662,7 +753,7 @@ def report_condition(
         A `PROVED` report when the property holds, a refutation when it does not.
     """
     if holds:
-        return _proved(name, claim, correspondence, str(shown))
+        return _proved(name, claim, source, str(shown))
     return _refuted(name, claim, str(shown))
 
 
@@ -686,10 +777,7 @@ def check_moment_table() -> list[CheckReport]:
             report_identity(
                 name=f"K1 moment z^{order}",
                 claim=f"E[z^{order}] = {claimed}",
-                correspondence=(
-                    "the Gaussian integral ∫ z^n φ(z) dz, evaluated symbolically in "
-                    "this check, which is what defines the moment the operator claims"
-                ),
+                source=MOMENT_SOURCE,
                 residual=integrated - claimed,
                 shown=f"∫ z^{order} φ(z) dz = {integrated}",
             )
@@ -707,10 +795,7 @@ def check_truncation() -> list[CheckReport]:
     Returns:
         One report per property.
     """
-    correspondence = (
-        "truncation is the projection onto span{σ^k : k ≤ order}, stated in this "
-        "module's docstring"
-    )
+    source = TRUNCATION_SOURCE
     probe = sum(
         (SIGMA**power * L1**power for power in range(6)),
         sympy.Integer(0),
@@ -719,14 +804,14 @@ def check_truncation() -> list[CheckReport]:
         report_identity(
             name="K2 truncate is idempotent",
             claim="truncating twice at the same order changes nothing",
-            correspondence=correspondence,
+            source=source,
             residual=truncate(truncate(probe, 3), 3) - truncate(probe, 3),
             shown=f"truncate(probe, 3) = {truncate(probe, 3)}",
         ),
         report_identity(
             name="K2 truncate composes downward",
             claim="truncating at 4 then at 2 equals truncating at 2",
-            correspondence=correspondence,
+            source=source,
             residual=truncate(truncate(probe, 4), 2) - truncate(probe, 2),
             shown=f"truncate at 4 then at 2 = {truncate(truncate(probe, 4), 2)}",
         ),
@@ -736,7 +821,7 @@ def check_truncation() -> list[CheckReport]:
                 "the kept coefficients are the original ones, "
                 "and nothing above the cut stays"
             ),
-            correspondence=correspondence,
+            source=source,
             residual=(
                 sum(
                     (
@@ -767,28 +852,28 @@ def check_primitive_series() -> list[CheckReport]:
     Returns:
         One report per primitive.
     """
-    correspondence = EXPANSION_SOURCE
+    source = EXPANSION_SOURCE
     gain = sympy.expand(kalman_gain().series(SIGMA, 0, 8).removeO())
     width = sympy.expand(posterior_sd().series(SIGMA, 0, 7).removeO())
     return [
         report_identity(
             name="K3 gain expansion",
             claim="the geometric expansion of K matches series(K) to σ⁶",
-            correspondence=correspondence,
+            source=source,
             residual=gain_series(6) - truncate(gain, 6),
             shown=f"K = {gain_series(6)}",
         ),
         report_identity(
             name="K3 width expansion",
             claim="the binomial expansion of √v_q matches series(√v_q) to σ⁵",
-            correspondence=correspondence,
+            source=source,
             residual=posterior_sd_series(5) - truncate(width, 5),
             shown=f"√v_q = {posterior_sd_series(5)}",
         ),
         report_identity(
             name="K3 exponential expansion",
             claim="e^{−δ} built by the exponential series matches series(exp) to σ³",
-            correspondence=correspondence,
+            source=source,
             residual=(
                 exp_series(-L1 * SIGMA * Z, 3)
                 - truncate(
@@ -845,7 +930,7 @@ def check_assembled_against_series() -> list[CheckReport]:
                     f"the truncation path equals series(W) through σ^{inclusive}, "
                     "term for term"
                 ),
-                correspondence=EXPANSION_SOURCE,
+                source=EXPANSION_SOURCE,
                 residual=built - assembled,
                 shown=(
                     f"[σ^{inclusive}] W = {sympy.expand(built.coeff(SIGMA, inclusive))}"
@@ -865,9 +950,7 @@ def check_cumulants() -> list[CheckReport]:
     Returns:
         One report per cumulant.
     """
-    correspondence = (
-        "the cumulant-moment recursion κ_n = μ_n − Σ C(n−1, m−1)·κ_m·μ_{n−m}, standard"
-    )
+    source = RECURSION_SOURCE
     probe = L1 * SIGMA * Z + L2 * SIGMA**2 * Z**2
     found = cumulants(probe, 2, 4)
     mean = gaussian_expectation(probe)
@@ -878,14 +961,14 @@ def check_cumulants() -> list[CheckReport]:
         report_identity(
             name="K5 first cumulant is the mean",
             claim="κ₁ = E[W]",
-            correspondence=correspondence,
+            source=source,
             residual=found[1] - mean,
             shown=f"κ₁ = {found[1]}",
         ),
         report_identity(
             name="K5 second cumulant is the variance",
             claim="κ₂ = E[W²] − E[W]²",
-            correspondence=correspondence,
+            source=source,
             residual=found[2] - variance,
             shown=f"κ₂ = {found[2]}",
         ),

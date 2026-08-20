@@ -41,6 +41,10 @@ repos:
     rev: v0.22.1
     hooks:
       - id: markdownlint-cli2
+        # Pinned so pre-commit fetches its own Node rather than using whatever the
+        # machine has. Ubuntu 24.04 ships Node 18, which these hooks refuse to run on,
+        # and the failure surfaces in CI instead of at the commit that caused it.
+        language_version: "22.23.2"
         # The mkdocs single-source stubs aren't standalone documents (they're
         # `--8<--` includes of README.md / CHANGELOG.md / the example galleries),
         # so skip them.
@@ -55,11 +59,14 @@ repos:
     rev: v10.0.1
     hooks:
       - id: cspell
+        # cspell-cli v10 needs Node >= 22.18. Same reasoning as markdownlint above.
+        language_version: "22.23.2"
         name: cspell (markdown)
         types: [markdown]
         # The mkdocs single-source stubs are `--8<--` includes, not documents.
         exclude: ^docs/(index|changelog|examples|examples-ffg)\.md$
       - id: cspell
+        language_version: "22.23.2"
         name: cspell (src docstrings)
         types: [python]
         files: ^(src|packages/warrantlib/src)/

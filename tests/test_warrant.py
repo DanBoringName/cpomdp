@@ -32,6 +32,7 @@ from cpomdp.types import Belief, LinearGaussianModel
 from cpomdp.warrant import (
     CheckReport,
     Outcome,
+    Provenance,
     SymbolicReduction,
     Tier,
     Warrant,
@@ -80,6 +81,24 @@ def _reduction():
             "research/gate_d4_registration.md: RESULT 2026-08-07 (c₂ in closed form)"
         ),
         assumptions=("R smooth and positive at μ", "formal in σ, no convergence claim"),
+    )
+
+
+def _provenance():
+    """A provenance whose two refs differ, so the ordering marker does not fire."""
+    return Provenance(
+        registered_at="a76cf1b",
+        measured_at="9baaa22",
+        registered="RESULT 2026-08-07, c₂ in closed form",
+    )
+
+
+def _same_ref_provenance():
+    """A provenance registered and measured at one ref, which history cannot order."""
+    return Provenance(
+        registered_at="9baaa22",
+        measured_at="9baaa22",
+        registered="the truncation operator, defined in this module's docstring",
     )
 
 
@@ -177,8 +196,13 @@ class TestCheckReport:
         outcome=Outcome.NOT_TRIGGERED,
         tier=Tier.COMPUTED,
         evidence=(),
+        provenance=None,
     ):
         # Defaults to the report that needs no evidence: a sample, computed, green.
+        # PROVED also requires a provenance; these cases are about the other fields, so
+        # one is supplied unless the case names its own.
+        if provenance is None:
+            provenance = (_provenance(),) if warrant is Warrant.PROVED else ()
         return CheckReport(
             name="flip-decided",
             warrant=warrant,
@@ -186,6 +210,7 @@ class TestCheckReport:
             tier=tier,
             detail="exhaustive argmin over crossover-v1^7 is cue-ward",
             evidence=evidence,
+            provenance=provenance,
         )
 
     def test_carries_all_four_labels(self):
@@ -411,10 +436,135 @@ class TestSymbolicReduction:
         assert "no assumptions recorded" in line
 
 
+class TestProvenance:
+    """Which ref registered a claim, and which one measured it."""
+
+    def test_carries_both_refs_and_what_was_registered(self):
+        prov = _provenance()
+        assert prov.registered_at == "a76cf1b"
+        assert prov.measured_at == "9baaa22"
+        assert "closed form" in prov.registered
+
+    def test_is_frozen(self):
+        # Editing a provenance after the check ran is editing the ordering claim.
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            _provenance().registered_at = "deadbee"
+
+    @pytest.mark.parametrize(
+        "ref",
+        [
+            "9baaa22",
+            "9baaa22f31c7e0a5d4b8c6f2e1a09d3b5c7e8f01",
+            "https://github.com/inferogenesis/cpomdp/commit/9baaa22",
+            "10.5281/zenodo.1234567",
+            "doi:10.5281/zenodo.1234567",
+        ],
+        ids=["short sha", "full sha", "url", "doi", "prefixed doi"],
+    )
+    def test_a_ref_that_resolves_to_a_fixed_thing_constructs(self, ref):
+        assert (
+            Provenance(
+                registered_at=ref, measured_at="9baaa22", registered="the bar"
+            ).registered_at
+            == ref
+        )
+
+    @pytest.mark.parametrize(
+        "ref",
+        [
+            "research/gate_d4_registration.md",
+            "main",
+            "65-gap-series-c4",
+            "v0.4.5",
+            "HEAD",
+            "HEAD~3",
+            "9baaa2",
+            "the commit before the refit",
+        ],
+        ids=[
+            "a path",
+            "a branch",
+            "a topic branch",
+            "a tag",
+            "HEAD",
+            "a revision expression",
+            "six hex digits",
+            "prose",
+        ],
+    )
+    def test_a_ref_naming_something_that_moves_does_not_construct(self, ref):
+        # A path or a branch satisfies a presence check exactly as well as a commit
+        # does, and sends a reviewer to a different tree every time it is resolved.
+        with pytest.raises(ValueError, match="resolves to nothing fixed"):
+            Provenance(registered_at=ref, measured_at="9baaa22", registered="the bar")
+
+    def test_the_measured_ref_is_held_to_the_same_rule(self):
+        with pytest.raises(ValueError, match="resolves to nothing fixed"):
+            Provenance(registered_at="9baaa22", measured_at="main", registered="x")
+
+    @pytest.mark.parametrize("value", [None, 3, ("9baaa22",)])
+    def test_a_ref_that_is_not_text_does_not_construct(self, value):
+        with pytest.raises(ValueError, match="registered_at"):
+            Provenance(registered_at=value, measured_at="9baaa22", registered="x")
+
+    def test_a_blank_statement_does_not_construct(self):
+        # A bare ref sends a reviewer to a diff and leaves them to guess which part of
+        # it was the registration.
+        with pytest.raises(ValueError, match="blank registered"):
+            Provenance(registered_at="a76cf1b", measured_at="9baaa22", registered="  ")
+
+    def test_a_line_break_in_a_ref_does_not_construct(self):
+        with pytest.raises(ValueError, match="line break in registered_at"):
+            Provenance(registered_at="a76cf1b\n", measured_at="9baaa22", registered="x")
+
+    def test_distinct_refs_render_both_and_claim_an_ordering(self):
+        line = str(_provenance())
+        assert "registered at a76cf1b" in line
+        assert "measured at 9baaa22" in line
+        assert "not established" not in line
+
+    def test_one_ref_says_history_orders_nothing(self):
+        # Registering and measuring in one commit is allowed. What is refused is
+        # letting it read as an ordering the history establishes.
+        line = str(_same_ref_provenance())
+        assert "registered and measured at 9baaa22" in line
+        assert "not established by history" in line
+
+    def test_the_same_ref_is_visible_without_reading_the_render(self):
+        assert _same_ref_provenance().same_ref is True
+        assert _provenance().same_ref is False
+
+    def test_an_abbreviated_ref_is_the_same_ref(self):
+        # Otherwise lengthening one of the two hashes walks away from the marker while
+        # naming the same commit.
+        prov = Provenance(
+            registered_at="9baaa22",
+            measured_at="9baaa22f31c",
+            registered="the truncation operator",
+        )
+        assert prov.same_ref is True
+
+    def test_two_different_refs_of_equal_length_are_not_the_same(self):
+        prov = Provenance(
+            registered_at="a76cf1b", measured_at="9baaa22", registered="x"
+        )
+        assert prov.same_ref is False
+
+    def test_renders_one_line(self):
+        # It sits beside the check it backs, so a second line lands mid-summary.
+        assert str(_same_ref_provenance()).count("\n") == 0
+
+
 class TestProvedNeedsEvidence:
     """`PROVED` with nothing behind it does not construct."""
 
-    def _report(self, *, warrant, evidence=(), outcome=Outcome.NOT_TRIGGERED):
+    def _report(
+        self, *, warrant, evidence=(), outcome=Outcome.NOT_TRIGGERED, provenance=None
+    ):
+        # These cases are about evidence, so a valid provenance rides along unless the
+        # case is about provenance itself and passes its own.
+        if provenance is None:
+            provenance = (_provenance(),) if warrant is Warrant.PROVED else ()
         return CheckReport(
             name="flip-decided",
             warrant=warrant,
@@ -422,6 +572,7 @@ class TestProvedNeedsEvidence:
             tier=Tier.EXACT,
             detail="exhaustive argmin over crossover-v1^7 is cue-ward",
             evidence=evidence,
+            provenance=provenance,
         )
 
     def test_proved_without_evidence_does_not_construct(self):
@@ -497,6 +648,77 @@ class TestProvedNeedsEvidence:
         # decided a universal needs something enumerable behind it.
         assert self._report(warrant=warrant).evidence == ()
 
+    def test_proved_without_provenance_does_not_construct(self):
+        # A decided universal says where the bar was fixed, so a reader can check the
+        # ordering rather than take it on trust.
+        with pytest.raises(ValueError, match="no provenance"):
+            self._report(
+                warrant=Warrant.PROVED, evidence=(_certificate(),), provenance=()
+            )
+
+    def test_a_failing_proved_check_still_needs_provenance(self):
+        # A refutation carrying PROVED claims the refutation was decided, and the
+        # ordering matters there for the same reason.
+        with pytest.raises(ValueError, match="no provenance"):
+            self._report(
+                warrant=Warrant.PROVED,
+                evidence=(_certificate(),),
+                outcome=Outcome.FIRED,
+                provenance=(),
+            )
+
+    def test_provenance_must_be_a_tuple(self):
+        with pytest.raises(ValueError, match="tuple"):
+            self._report(
+                warrant=Warrant.PROVED,
+                evidence=(_certificate(),),
+                provenance=_provenance(),
+            )
+
+    @pytest.mark.parametrize(
+        "item",
+        ["9baaa22", "registered before the refit", 4, None],
+        ids=["a bare ref", "a sentence", "a count", "nothing"],
+    )
+    def test_provenance_that_is_not_a_provenance_does_not_construct(self, item):
+        # A bare ref satisfies a presence check as well as the real thing and carries
+        # neither the other end of the ordering nor what was registered.
+        with pytest.raises(ValueError, match="as provenance"):
+            self._report(
+                warrant=Warrant.PROVED,
+                evidence=(_certificate(),),
+                provenance=(item,),
+            )
+
+    def test_a_weaker_level_may_not_carry_junk_provenance_either(self):
+        with pytest.raises(ValueError, match="as provenance"):
+            self._report(warrant=Warrant.CORROBORATED, provenance=("9baaa22",))
+
+    @pytest.mark.parametrize("warrant", [Warrant.CERTIFIED, Warrant.CORROBORATED])
+    def test_the_weaker_levels_need_no_provenance(self, warrant):
+        assert self._report(warrant=warrant).provenance == ()
+
+    def test_a_weaker_level_may_record_one_anyway(self):
+        # A registered bar is worth recording at CERTIFIED. It is not required there,
+        # because a bound decides no universal either way.
+        prov = _provenance()
+        report = self._report(warrant=Warrant.CERTIFIED, provenance=(prov,))
+        assert report.provenance == (prov,)
+
+    def test_a_claim_resting_on_two_registrations_carries_both(self):
+        # The same argument the evidence tuple already makes: carrying one of two
+        # registrations understates what a reviewer has to check.
+        pair = (_provenance(), _same_ref_provenance())
+        report = self._report(
+            warrant=Warrant.PROVED, evidence=(_certificate(),), provenance=pair
+        )
+        assert report.provenance == pair
+
+    def test_the_report_renders_its_provenance_after_the_detail(self):
+        line = str(self._report(warrant=Warrant.PROVED, evidence=(_certificate(),)))
+        assert line.count("\n") == 0
+        assert line.index("cue-ward") < line.index("provenance:")
+
 
 class TestCheckSummary:
     """Counts per (warrant × outcome), so a green run says what it decided."""
@@ -509,6 +731,9 @@ class TestCheckSummary:
             tier=Tier.COMPUTED,
             detail="why",
             evidence=evidence,
+            # The counts are what these cases read; PROVED needs a provenance to
+            # construct at all.
+            provenance=(_provenance(),) if warrant is Warrant.PROVED else (),
         )
 
     def test_counts_each_pair(self):

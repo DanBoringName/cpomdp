@@ -50,6 +50,18 @@ Blank means blank to a reader rather than empty to `str.strip()`, which strips t
 
 ::: warrantlib.SymbolicReduction
 
+## Registration, and the ordering it claims
+
+Evidence says a claim was decided. It does not say when the bar was set, and a bar chosen after the number is visible decides nothing at all. `Provenance` is the pointer a reviewer follows to check: the ref where the prediction, the bar or the derivation was registered, the ref whose tree produced the number, and one line saying what they will find at the first of them.
+
+A ref is a git commit SHA, an http(s) URL or a DOI. A path, a branch, a tag and `HEAD` are refused. Each of them satisfies a presence check exactly as well as a commit does, and each resolves to a different tree every time it is read. A URL is taken to be a permalink; one that tracks a branch has the same defect and the type cannot tell the two apart.
+
+Where the two refs name one commit, the render says the ordering is not established by history. Registering and measuring together is not refused. It is what happens whenever a check and the derivation behind it land in one go, and the honest reading is that the ordering rests on the surrounding prose rather than on anything a reviewer can verify. An abbreviated ref counts as the same commit, or lengthening one of the two hashes would walk away from the marker while naming the same thing.
+
+What the type cannot do is order two refs. Equality is checkable in a string and ordering is not, so a registration written after the fact renders exactly like one written before. That is a `git merge-base --is-ancestor` away, which is a reviewer's job or a test's, and is the reason the refs are refs.
+
+::: warrantlib.Provenance
+
 ## The evidence union
 
 `Evidence` names the two kinds together. `CheckReport.evidence` is annotated as a tuple of it, so the admissible types are declared once, and a caller building reports of its own has a name to annotate against.

@@ -13,11 +13,13 @@ an alias.
 nothing, and the summary says so.
 
 ``CompletenessCertificate`` and ``SymbolicReduction`` are the two evidence kinds a
-``PROVED`` report carries, one per decisive prover.
+``PROVED`` report carries, one per decisive prover. ``Provenance`` is the other thing it
+carries: which ref registered the claim, and which one measured it.
 
 The standard library is the only dependency.
 """
 
+import re
 import unicodedata
 from collections import Counter
 from collections.abc import Sequence
@@ -29,6 +31,7 @@ __all__ = [
     "CompletenessCertificate",
     "Evidence",
     "Outcome",
+    "Provenance",
     "SymbolicReduction",
     "Tier",
     "Warrant",
@@ -120,10 +123,13 @@ class Tier(Enum):
 _UNPRINTED = frozenset({"Cc", "Cf", "Zl", "Zp", "Zs"})
 
 
-def _reject_unreadable(name: str, value: object, blank_reason: str) -> None:
-    """Raise unless a reduction's ``value`` is one-line text that puts ink on the page.
+def _reject_unreadable(
+    subject: str, name: str, value: object, blank_reason: str
+) -> None:
+    """Raise unless a record's ``value`` is one-line text that puts ink on the page.
 
     Args:
+        subject: the record kind, as the message opens.
         name: the field, as it appears in the message.
         value: what was passed for it.
         blank_reason: why this particular field may not be blank, appended to the
@@ -134,21 +140,20 @@ def _reject_unreadable(name: str, value: object, blank_reason: str) -> None:
     """
     if not isinstance(value, str):
         raise ValueError(
-            f"symbolic reduction passed {name} as {type(value).__name__}. The field is "
-            "text a reader reads back, so anything else records the obligation in a "
-            "form nothing renders."
+            f"{subject} passed {name} as {type(value).__name__}. The field is text a "
+            "reader reads back, so anything else records it in a form nothing renders."
         )
     if all(unicodedata.category(character) in _UNPRINTED for character in value):
         raise ValueError(
-            f"symbolic reduction has a blank {name}. Whitespace and the zero-width "
+            f"{subject} has a blank {name}. Whitespace and the zero-width "
             "characters count as blank here, since they satisfy a presence check and "
             f"put nothing on the page. {blank_reason}"
         )
     if value.splitlines() != [value]:
         raise ValueError(
-            f"symbolic reduction has a line break in {name}. A reduction renders as "
-            "one line beside the check it backs, so a second line arrives in the "
-            "middle of a summary row."
+            f"{subject} has a line break in {name}. A record renders as one line "
+            "beside the check it backs, so a second line arrives in the middle of a "
+            "summary row."
         )
 
 
@@ -196,6 +201,7 @@ class SymbolicReduction:
             ("correspondence", self.correspondence),
         ):
             _reject_unreadable(
+                "symbolic reduction",
                 name,
                 value,
                 "Prover 2 is theorem-grade only where the symbolic setup was hand "
@@ -205,6 +211,7 @@ class SymbolicReduction:
             )
         for position, assumption in enumerate(self.assumptions, start=1):
             _reject_unreadable(
+                "symbolic reduction",
                 f"assumption {position}",
                 assumption,
                 "An entry nobody filled in is scope a reader cannot check, and it "
@@ -220,6 +227,133 @@ class SymbolicReduction:
             else "no assumptions recorded"
         )
         return f"symbolic: {self.claim} (per {self.correspondence}, {scope})"
+
+
+#: A git commit, abbreviated or full. Seven digits is git's own floor for an unambiguous
+#: abbreviation. Case-insensitive, because a pasted hash sometimes is. Accepts a few
+#: English words as a side effect, `deadbeef` and `defaced` among them. Refusing those
+#: costs more than it buys.
+_COMMIT_SHA = re.compile(r"[0-9a-fA-F]{7,40}")
+
+#: An http(s) URL with a non-empty authority.
+_URL = re.compile(r"https?://[^\s/]+(?:/\S*)?")
+
+#: A DOI, bare or prefixed. The registrant is ``10.`` and four to nine digits.
+_DOI = re.compile(r"(?:doi:)?10\.\d{4,9}/\S+", re.IGNORECASE)
+
+#: The three ref shapes, in the order the message lists them. Matched with
+#: ``fullmatch``: under ``match`` a branch name passes as a URL's prefix, and a hash
+#: with prose after it passes as a commit.
+_REF_SHAPES = (_COMMIT_SHA, _URL, _DOI)
+
+
+def _reject_unresolvable(name: str, value: str) -> None:
+    """Raise unless a provenance's ``value`` is a ref that resolves to one fixed thing.
+
+    Args:
+        name: the field, as it appears in the message.
+        value: the ref passed for it, already known to be one-line text.
+
+    Raises:
+        ValueError: if the ref is none of the three shapes.
+    """
+    if any(shape.fullmatch(value) for shape in _REF_SHAPES):
+        return
+    raise ValueError(
+        f"provenance has {name}={value!r}, which resolves to nothing fixed. A ref is a "
+        "git commit SHA (7 to 40 hex digits), an http(s) URL, or a DOI. A path, a "
+        "branch, a tag or a phrase names something that moves, so a reviewer checking "
+        "the ordering later reaches a different tree than the one this was written "
+        "against, or none at all."
+    )
+
+
+@dataclass(frozen=True)
+class Provenance:
+    """Which ref registered a claim, and which one measured it.
+
+    A number checked against a bar is worth reading only if the bar was fixed before the
+    number existed. A report says what was decided and how well it was decided, and
+    nothing in it says when the bar was set. This is the ref a reviewer opens to find
+    out.
+
+    Where the two refs name one commit, the render says so. Registering and measuring
+    together is not refused. The ordering then rests on the account the surrounding
+    prose gives, and the marker is what stops a reader taking it for something the
+    history shows.
+
+    History orders two refs. A string cannot. Equality is checkable here and ordering is
+    not, so a ``registered_at`` that in fact came after ``measured_at`` renders exactly
+    like one that came before. Establishing the direction is a reviewer, or a test,
+    running ``git merge-base --is-ancestor``.
+
+    Args:
+        registered_at: the ref where the prediction, the bar or the derivation was
+            registered. A git commit SHA, an http(s) URL, or a DOI. A URL is taken to be
+            a permalink. One that tracks a branch moves, which is the defect that rules
+            a bare path out.
+        measured_at: the ref whose tree produced the number, in the same three shapes.
+        registered: what a reviewer will find at ``registered_at``, in one line. A ref
+            on its own sends them to a diff and leaves them to work out which part of it
+            was the registration.
+
+    Raises:
+        ValueError: if either ref is not one-line text in one of the three shapes, or if
+            ``registered`` is not one-line text with a visible character in it.
+    """
+
+    registered_at: str
+    measured_at: str
+    registered: str
+
+    def __post_init__(self) -> None:
+        """Reject a ref that resolves to nothing, and a statement nobody wrote."""
+        for name, value in (
+            ("registered_at", self.registered_at),
+            ("measured_at", self.measured_at),
+        ):
+            _reject_unreadable(
+                "provenance",
+                name,
+                value,
+                "The ordering is the whole content of a provenance, so one end of it "
+                "missing records no ordering at all. Give the ref, or report "
+                "CORROBORATED and say in the check's detail why there is none.",
+            )
+            _reject_unresolvable(name, value)
+        _reject_unreadable(
+            "provenance",
+            "registered",
+            self.registered,
+            "A bare ref sends a reviewer to a diff and leaves them to work out which "
+            "part of it was the registration. Say what they will find there.",
+        )
+
+    @property
+    def same_ref(self) -> bool:
+        """Whether the two refs name one commit, so history orders nothing.
+
+        An abbreviation counts. Without that, lengthening one of the two hashes walks
+        away from the marker while still naming the same commit.
+        """
+        first, second = self.registered_at.casefold(), self.measured_at.casefold()
+        if first == second:
+            return True
+        short, long = sorted((first, second), key=len)
+        abbreviated = all(_COMMIT_SHA.fullmatch(ref) for ref in (short, long))
+        return abbreviated and long.startswith(short)
+
+    def __str__(self) -> str:
+        """The provenance as one line: what was registered, where, against what."""
+        if self.same_ref:
+            return (
+                f"provenance: {self.registered} (registered and measured at "
+                f"{self.registered_at}, so the ordering is not established by history)"
+            )
+        return (
+            f"provenance: {self.registered} "
+            f"(registered at {self.registered_at}, measured at {self.measured_at})"
+        )
 
 
 @dataclass(frozen=True)
@@ -333,11 +467,17 @@ class CheckReport:
             and unused otherwise. A tuple rather than one item because a claim
             quantified over several enumerations rests on all their certificates, and
             carrying one of them understates what was checked.
+        provenance: which ref registered the claim and which one measured it, as a
+            tuple. Required non-empty when the warrant is ``PROVED``, unused otherwise.
+            A tuple on the same argument the evidence is one: a claim resting on two
+            registrations rests on both, and carrying one of them understates what a
+            reviewer has to check.
 
     Raises:
-        ValueError: if the warrant is ``PROVED`` and no evidence was given, if a check
-            that never ran here carries a warrant anyway, if the evidence is not a
-            tuple, or if an item in it is neither of the two evidence kinds.
+        ValueError: if the warrant is ``PROVED`` and no evidence or no provenance was
+            given, if a check that never ran here carries a warrant anyway, if the
+            evidence or the provenance is not a tuple, or if an item in either is not
+            one of the kinds it accepts.
     """
 
     name: str
@@ -346,6 +486,7 @@ class CheckReport:
     tier: Tier
     detail: str
     evidence: tuple[Evidence, ...] = ()
+    provenance: tuple[Provenance, ...] = ()
 
     def __post_init__(self) -> None:
         """Reject a claim with nothing behind it, at either of two strengths."""
@@ -369,6 +510,23 @@ class CheckReport:
                         "else satisfies the PROVED precondition by being present and "
                         "backs nothing."
                     )
+        if not isinstance(self.provenance, tuple):
+            raise ValueError(
+                f"check {self.name!r} passed provenance as "
+                f"{type(self.provenance).__name__}. Provenance is a tuple, so a claim "
+                "resting on two registrations can carry both. Wrap a single one: "
+                "(provenance,)."
+            )
+        for item in self.provenance:
+            if not isinstance(item, Provenance):
+                raise ValueError(
+                    f"check {self.name!r} carries a {type(item).__name__} as "
+                    "provenance. A bare ref, or a sentence saying the bar came first, "
+                    "satisfies the precondition by being present and leaves a reviewer "
+                    "with one end of an ordering and no way to check it. Pass a "
+                    "Provenance, which validates both refs and says what was "
+                    "registered at the first of them."
+                )
         if self.warrant is Warrant.PROVED and len(self.evidence) == 0:
             raise ValueError(
                 f"check {self.name!r} reports PROVED with no evidence. A decided "
@@ -377,6 +535,15 @@ class CheckReport:
                 "SymbolicReduction for a theorem or a symbolic identity (Provers 1 "
                 "and 2). Report CERTIFIED for a bound over a compact domain, "
                 "CORROBORATED for a sample."
+            )
+        if self.warrant is Warrant.PROVED and len(self.provenance) == 0:
+            raise ValueError(
+                f"check {self.name!r} reports PROVED with no provenance. A decided "
+                "universal says which ref registered the claim and which one measured "
+                "it, so a reader can check that the bar was fixed before the number "
+                "existed rather than take the ordering on trust. Registering and "
+                "measuring at one ref is allowed and renders as such. Report CERTIFIED "
+                "or CORROBORATED where there was no registration at all."
             )
         if self.outcome not in _TESTED_HERE and self.warrant is not None:
             raise ValueError(
@@ -388,10 +555,13 @@ class CheckReport:
     def __str__(self) -> str:
         """The report as one summary line, in the warrant's own vocabulary."""
         warrant = self.warrant.value if self.warrant else "—"
-        return (
+        line = (
             f"{self.name}: {self.outcome.value} "
             f"({warrant}, tier {self.tier.value}). {self.detail}"
         )
+        if not self.provenance:
+            return line
+        return f"{line} {' '.join(str(item) for item in self.provenance)}"
 
 
 def check_summary(reports: Sequence[CheckReport]) -> str:
