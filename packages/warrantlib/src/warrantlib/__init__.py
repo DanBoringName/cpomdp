@@ -300,11 +300,13 @@ class CompletenessCertificate:
         )
 
 
-#: What backs a ``PROVED`` claim, one member per decisive prover the suite runs. A
-#: completeness certificate decides by exhausting a finite domain. A symbolic reduction
-#: decides by identity (Provers 1 and 2) and enumerates nothing, so a certificate is the
-#: wrong evidence for it rather than a missing one.
 Evidence = CompletenessCertificate | SymbolicReduction
+"""What backs a ``PROVED`` claim, one member per decisive prover the suite runs.
+
+A completeness certificate decides by exhausting a finite domain. A symbolic reduction
+decides by identity (Provers 1 and 2) and enumerates nothing, so a certificate is the
+wrong evidence for it rather than a missing one.
+"""
 
 #: The evidence classes as a tuple ``isinstance`` accepts. Both are defined here, so the
 #: guard reads them at module scope.
