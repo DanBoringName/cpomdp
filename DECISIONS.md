@@ -2469,3 +2469,55 @@ or a contributor who needs to edit registrations without a JAX and Julia toolcha
   no `cpomdp` module. That is what stops the cycle growing back.
 
 ---
+
+## ADR-040 — warrantlib publishes on a manual trigger, and the ordering hazard that leaves
+
+**Date:** 2026-08-20
+**Status:** Accepted
+**Extends:** ADR-039 (the warrant vocabulary becomes its own distribution)
+
+### The question
+
+cpomdp 0.4.4 is on PyPI without a warrant dependency. Every cpomdp release after ADR-039
+carries `Requires-Dist: warrantlib>=0.1`, so that dependency has to exist on PyPI before
+the release that names it. `publish.yml` builds both distributions from one `release`
+event, and `publish-cpomdp` and `publish-warrantlib` each declare only `needs: build`.
+They run in parallel with nothing ordering them. A failed warrantlib upload beside a
+successful cpomdp one publishes a cpomdp that `pip` cannot resolve, and the version number
+is spent.
+
+### Decision
+
+**warrantlib 0.1.0 publishes on its own, before any cpomdp release needs it.**
+`publish.yml` gains `workflow_dispatch`. cpomdp's build, artifact and publish job are all
+gated on `github.event_name == 'release'`, so a dispatch touches warrantlib alone and
+cpomdp's version still always corresponds to a tag.
+
+Ordering the two publish jobs was the alternative. It needs an `always()` guard, because a
+plain `needs: publish-warrantlib` skips cpomdp on every release where warrantlib's version
+has not moved, which is most of them. Publishing once by hand retires the hazard for
+`>=0.1` with no conditional logic added to the release path.
+
+**A dispatch is restricted to `main` and to release events.** A Trusted Publisher is scoped
+to repository, workflow filename and environment. It does not constrain the ref, so a
+dispatch from any branch mints a valid upload token, and PyPI never lets a version be
+reclaimed. The guard lives in two places on purpose: an `if` on the job, which shows up in
+a diff, and a deployment-branch rule on the `pypi-warrantlib` environment, which survives
+the workflow file being edited on the branch being dispatched.
+
+### Consequences
+
+- The hazard is retired for `>=0.1` only. A future cpomdp release requiring `>=0.2` meets
+  the identical race, because the two publish jobs are still unordered. The options at
+  that point are unchanged: dispatch the new warrantlib first, or order the jobs with an
+  `always()` guard. This is the entry that says so, since the reasoning otherwise lived
+  only in a pull-request description.
+- A dispatch whose version already matches PyPI now fails instead of exiting green. Someone
+  pressing the button is asking for a publish, and a green run that uploaded nothing reads
+  as one that did.
+- `publish.yml` carries a `concurrency` group. The dispatch button is a double-click
+  surface that `release: published` never was, and two runs would both pass the version
+  guard before either upload landed.
+- The `pypi-warrantlib` environment needs its deployment-branch rule set when it is
+  created. A new GitHub environment allows every branch by default, which is the condition
+  the job guard above is compensating for.

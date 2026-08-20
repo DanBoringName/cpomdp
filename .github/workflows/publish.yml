@@ -10,6 +10,13 @@ on:
   # on the release that needs it.
   workflow_dispatch:
 
+# Two dispatch presses race: both read PyPI before either upload lands, both build, and
+# the second upload dies on a file-already-exists 400. Queue instead of cancelling, so a
+# run that is already uploading is never killed part-way.
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
@@ -49,6 +56,15 @@ jobs:
           else
             echo "is-new=true" >> "$GITHUB_OUTPUT"
           fi
+      # A dispatch is someone asking for a publish. If the version has not moved there
+      # is nothing to upload, and exiting green says the publish happened.
+      - name: a manual publish with nothing to publish is an error
+        if: >-
+          github.event_name == 'workflow_dispatch'
+          && steps.warrantlib.outputs.is-new != 'true'
+        run: |
+          echo "::error::warrantlib $(uv version --package warrantlib --short) is already           on PyPI. Bump packages/warrantlib/pyproject.toml before dispatching."
+          exit 1
       - if: steps.warrantlib.outputs.is-new == 'true'
         run: uv build --package warrantlib -o dist/warrantlib
       - if: github.event_name == 'release'
@@ -82,7 +98,15 @@ jobs:
 
   publish-warrantlib:
     needs: build
-    if: needs.build.outputs.warrantlib-is-new == 'true'
+    # A Trusted Publisher is scoped to (repository, workflow file, environment) and says
+    # nothing about the ref, so a dispatch from any branch mints a valid upload token.
+    # PyPI never lets a version be reclaimed, so a branch's tree uploaded as 0.2.0 makes
+    # the real 0.2.0 unpublishable. The `pypi-warrantlib` environment carries a
+    # deployment-branch rule for the same reason; this guard is the half that lives in
+    # the repository and shows up in a diff.
+    if: >-
+      needs.build.outputs.warrantlib-is-new == 'true'
+      && (github.event_name == 'release' || github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     environment:
       name: pypi-warrantlib
