@@ -52,9 +52,9 @@ Blank means blank to a reader rather than empty to `str.strip()`, which strips t
 
 ## The evidence union
 
-`Evidence` names the two kinds together. `CheckReport.evidence` is a tuple of it, so the annotation says which types are admissible instead of repeating the pair at every call site.
+`Evidence` names the two kinds together. `CheckReport.evidence` is annotated as a tuple of it, so the admissible types are declared once, and a caller building reports of its own has a name to annotate against.
 
-The union and the runtime guard are separate declarations. A third decisive prover needs a member added to both. A type added to one alone annotates as evidence and then refuses to construct, or constructs and reads as evidence of a kind nothing declared.
+The union and the runtime guard are separate declarations. A third evidence kind needs a member added to both. A type added to one alone annotates as evidence and then refuses to construct, or constructs and reads as evidence of a kind nothing declared.
 
 ::: warrantlib.Evidence
 
