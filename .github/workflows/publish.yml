@@ -3,6 +3,12 @@ name: publish
 on:
   release:
     types: [published]
+  # Publish warrantlib on its own, with no cpomdp release attached. cpomdp's next
+  # release carries `Requires-Dist: warrantlib>=0.1`, so warrantlib has to be on PyPI
+  # before that release goes out or the install cannot resolve. The two publish jobs
+  # run in parallel with no ordering between them, which is not something to discover
+  # on the release that needs it.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -27,7 +33,8 @@ jobs:
       - run: uv run pytest -m "not rxinfer"
       # Each distribution gets its own directory. A Trusted Publisher token is scoped
       # to one project, so the two uploads are two jobs and cannot share a `dist/`.
-      - run: uv build --package cpomdp -o dist/cpomdp
+      - if: github.event_name == 'release'
+        run: uv build --package cpomdp -o dist/cpomdp
       - name: has warrantlib's version moved?
         id: warrantlib
         run: |
@@ -44,7 +51,8 @@ jobs:
           fi
       - if: steps.warrantlib.outputs.is-new == 'true'
         run: uv build --package warrantlib -o dist/warrantlib
-      - uses: actions/upload-artifact@v4
+      - if: github.event_name == 'release'
+        uses: actions/upload-artifact@v4
         with:
           name: dist-cpomdp
           path: dist/cpomdp/
@@ -56,6 +64,9 @@ jobs:
 
   publish-cpomdp:
     needs: build
+    # A manual run publishes warrantlib alone. cpomdp ships on a release, never on a
+    # dispatch, so its version always corresponds to a tag.
+    if: github.event_name == 'release'
     runs-on: ubuntu-latest
     environment:
       name: pypi
