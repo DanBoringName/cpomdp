@@ -106,7 +106,7 @@ def check_reciprocal_identity() -> list[CheckReport]:
         report_identity(
             name="T1 reciprocal identity",
             claim="1/R(x) − 1/R̄ = (e^−δ − 1)/R̄, exact",
-            correspondence=CONSTRUCTION_SOURCE,
+            source=CONSTRUCTION_SOURCE,
             residual=residual,
             shown=f"difference − claim = {residual}",
         )
@@ -128,7 +128,7 @@ def check_flat_noise_vanishing() -> list[CheckReport]:
         report_identity(
             name="T2 flat noise",
             claim="W = 0 identically at δ = 0, for all ν and h",
-            correspondence=CONSTRUCTION_SOURCE,
+            source=CONSTRUCTION_SOURCE,
             residual=flat,
             shown=f"W|(δ=0) = {flat}",
         )
@@ -149,14 +149,14 @@ def check_gain_and_sd_series() -> list[CheckReport]:
         report_identity(
             name="T3 gain",
             claim="K = σ²/R̄ − σ⁴/R̄² + O(σ⁶)",
-            correspondence=EXPANSION_SOURCE,
+            source=EXPANSION_SOURCE,
             residual=gain - (SIGMA**2 / RBAR - SIGMA**4 / RBAR**2),
             shown=f"K = {gain}",
         ),
         report_identity(
             name="T3 width",
             claim="√v_q = σ − σ³/(2R̄) + O(σ⁵)",
-            correspondence=EXPANSION_SOURCE,
+            source=EXPANSION_SOURCE,
             residual=width - (SIGMA - SIGMA**3 / (2 * RBAR)),
             shown=f"√v_q = {width}",
         ),
@@ -193,7 +193,7 @@ def check_displacement_series() -> list[CheckReport]:
         report_identity(
             name=f"T4 displacement σ^{power}",
             claim=f"the coefficient of σ^{power} is {claim}",
-            correspondence=EXPANSION_SOURCE,
+            source=EXPANSION_SOURCE,
             residual=expansion.coeff(SIGMA, power) - claim,
             shown=f"{expansion.coeff(SIGMA, power)}",
         )
@@ -204,7 +204,7 @@ def check_displacement_series() -> list[CheckReport]:
         report_condition(
             name="T4 Kalman shift",
             claim="the σ² coefficient is non-zero and free of z",
-            correspondence=EXPANSION_SOURCE,
+            source=EXPANSION_SOURCE,
             holds=shift != 0 and sympy.diff(shift, Z) == 0,
             shown=f"{shift}, with d/dz = {sympy.diff(shift, Z)}",
         )
@@ -228,7 +228,7 @@ def check_increment_coefficients() -> list[CheckReport]:
         report_identity(
             name="T5 δ constant term",
             claim="δ vanishes at h = 0",
-            correspondence=CONSTRUCTION_SOURCE,
+            source=CONSTRUCTION_SOURCE,
             residual=constant,
             shown=f"δ|(h=0) = {constant}",
         )
@@ -239,7 +239,7 @@ def check_increment_coefficients() -> list[CheckReport]:
             report_identity(
                 name=f"T5 δ h^{order}",
                 claim=f"the coefficient of h^{order} is l{order}/{order}!",
-                correspondence=CONSTRUCTION_SOURCE,
+                source=CONSTRUCTION_SOURCE,
                 residual=increment.coeff(H, order) - claim,
                 shown=f"{increment.coeff(H, order)} against {claim}",
             )
@@ -262,7 +262,7 @@ def check_no_zeroth_order() -> list[CheckReport]:
         report_identity(
             name="T6 no σ⁰ term",
             claim="W carries no zeroth-order term in σ",
-            correspondence=EXPANSION_SOURCE,
+            source=EXPANSION_SOURCE,
             residual=zeroth,
             shown=f"[σ⁰] W = {zeroth}",
         )
@@ -286,21 +286,21 @@ def check_first_order_term() -> list[CheckReport]:
         report_identity(
             name="T7 first-order term",
             claim="[σ¹] W = (l₁z/2)(ν²/R̄ − 1)",
-            correspondence=EXPANSION_SOURCE,
+            source=EXPANSION_SOURCE,
             residual=first - claim,
             shown=f"{sympy.factor(first)}",
         ),
         report_condition(
             name="T7 degree in z",
             claim="[σ¹] W is degree 1 in z",
-            correspondence=EXPANSION_SOURCE,
+            source=EXPANSION_SOURCE,
             holds=degree == 1,
             shown=f"degree = {degree}",
         ),
         report_identity(
             name="T7 constant in z",
             claim="[σ¹] W has no z-free part",
-            correspondence=EXPANSION_SOURCE,
+            source=EXPANSION_SOURCE,
             residual=first.subs(Z, 0),
             shown=f"[σ¹] W|(z=0) = {sympy.simplify(first.subs(Z, 0))}",
         ),
@@ -326,7 +326,7 @@ def check_first_order_expectation() -> list[CheckReport]:
         report_identity(
             name="T8 first-order expectation",
             claim="E_q[[σ¹] W] = 0",
-            correspondence=EXPANSION_SOURCE,
+            source=EXPANSION_SOURCE,
             residual=expectation,
             shown=f"E_q[[σ¹] W] = {expectation}",
         )

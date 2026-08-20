@@ -54,7 +54,14 @@ from cpomdp.enumeration import (
 )
 from cpomdp.selection import Preference
 from cpomdp.types import Belief
-from cpomdp.warrant import CheckReport, Outcome, Tier, Warrant, check_summary
+from cpomdp.warrant import (
+    CheckReport,
+    Outcome,
+    Provenance,
+    Tier,
+    Warrant,
+    check_summary,
+)
 
 # The rollout-hygiene bars this shares with tests/test_rollout_hygiene.py: a floor under
 # min-eigenvalue(Σ_post) and a ceiling on cond(Σ⁺), cond(S), cond(Σ_post).
@@ -407,6 +414,14 @@ def falsifiers(
         f"H* = {FLIP_H} is an upper bound "
         "(set clips the reach at -2, one-step reach -3)"
     )
+    # One commit derived the separation bar from the declared conditioning ceiling and
+    # reported these falsifiers against it. Registering and measuring together is what
+    # happened, so the two refs are one and the render says the history orders nothing.
+    registration = Provenance(
+        registered_at="efc43e2",
+        measured_at="efc43e2",
+        registered="the flip separation bar, derived from the conditioning ceiling",
+    )
     return (
         CheckReport(
             name="1. no crossover at feasible H",
@@ -418,6 +433,7 @@ def falsifiers(
                 f"H_MAX = {H_MAX}. {upper}. {_bar(at_flip)}"
             ),
             evidence=(at_flip.certificate,),
+            provenance=(registration,),
         ),
         CheckReport(
             name="2. flip not clean at H*/H*-1",
@@ -430,6 +446,7 @@ def falsifiers(
                 f"{_bar(at_prior, at_flip)}"
             ),
             evidence=(at_prior.certificate, at_flip.certificate),
+            provenance=(registration,),
         ),
         CheckReport(
             name="3. not reproducible across seeds",

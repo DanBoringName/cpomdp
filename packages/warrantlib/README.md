@@ -66,11 +66,31 @@ obligation, and this is where it is discharged rather than assumed.
 
 `check_summary` prints a run as counts per `(warrant, outcome)`.
 
+## Provenance
+
+Evidence says a claim was decided. It does not say when the bar was set, and a bar chosen
+after the number is visible decides nothing. `Provenance` is the pointer a reviewer
+follows: the ref where the prediction or the derivation was registered, the ref whose
+tree produced the number, and one line saying what they will find at the first.
+
+A ref is a git commit SHA, an http(s) URL or a DOI. A path, a branch, a tag and `HEAD`
+are refused, because each resolves to a different tree every time it is read. A `PROVED`
+report requires one, on the same terms as it requires evidence.
+
+Where the two refs name one commit, the render says the ordering is not established by
+history. That is not a failure. It is what happens whenever a check and the derivation
+behind it land together, and the marker keeps it from reading as something a reviewer
+could verify.
+
+The type compares refs. It cannot order them, so a registration written after the fact
+still renders without a marker. That is a `git merge-base --is-ancestor` away, which is
+why the refs are refs.
+
 ## Use
 
 ```python
 from warrantlib import (
-    CheckReport, Outcome, SymbolicReduction, Tier, Warrant, check_summary,
+    CheckReport, Outcome, Provenance, SymbolicReduction, Tier, Warrant, check_summary,
 )
 
 report = CheckReport(
@@ -84,6 +104,13 @@ report = CheckReport(
             claim="the second gap coefficient equals the quoted constant",
             correspondence="hand derivation, section 3",
             assumptions=("the expansion is formal, not convergent",),
+        ),
+    ),
+    provenance=(
+        Provenance(
+            registered_at="a76cf1b",
+            measured_at="9baaa22",
+            registered="the coefficient's closed form, registered 2026-08-07",
         ),
     ),
 )

@@ -2525,3 +2525,73 @@ the workflow file being edited on the branch being dispatched.
 - The `pypi-warrantlib` environment needs its deployment-branch rule set when it is
   created. A new GitHub environment allows every branch by default, which is the condition
   the job guard above is compensating for.
+
+## ADR-041 — a claim says where it was registered, not only that it was decided
+
+**Date:** 2026-08-20
+**Status:** Accepted
+**Extends:** ADR-035 (the warrant vocabulary ships), ADR-037 (symbolic evidence)
+
+### The question
+
+A `PROVED` report says a claim was decided and what backs it. It says nothing about when
+the bar was set. A threshold chosen once the number is visible decides nothing, and the
+report of one is indistinguishable from the report of a genuine pre-registration.
+
+The repository already answers this in prose. `research/gate_d4_registration.md` carries a
+table of `first registered` against `measured or proved`, one row per claim, and where the
+two cells hold the same hash the surrounding text says the ordering rests on the
+document's account rather than on the history. That table is the thing a reviewer wants
+and it is reachable only by reading the registration end to end.
+
+### Decision
+
+**`Provenance` carries two refs and a statement.** `registered_at` is where the
+prediction, the bar or the derivation was registered. `measured_at` is the ref whose tree
+produced the number. `registered` says in one line what a reviewer will find at the first
+of them, because a bare ref sends them to a diff and leaves them to work out which part
+of it mattered.
+
+**A ref is a git commit SHA, an http(s) URL or a DOI.** A path, a branch, a tag and `HEAD`
+are refused. Each satisfies a presence check exactly as well as a commit does, and each
+resolves to a different tree every time it is read. A URL is taken to be a permalink. One
+tracking a branch has the defect that rules out a path, and the validator cannot tell them
+apart.
+
+**`PROVED` requires one, as a tuple.** The same rule the evidence already follows, and the
+tuple for the same reason: a claim resting on two registrations rests on both, and
+carrying one of them understates what a reviewer has to check.
+
+**Same-ref is allowed and marked.** Registering and measuring in one commit is what
+happens whenever a check and the derivation behind it land together. The render says the
+ordering is not established by history, so nobody reads it as a fact the graph supports.
+An abbreviated ref counts as the same commit, or lengthening one hash would walk away
+from the marker while naming the same thing.
+
+### Consequences
+
+- **The type cannot detect the failure it exists to expose.** Equality is checkable in a
+  string and ordering is not, so a registration written after the fact renders exactly
+  like one written before. `tests/test_provenance_ordering.py` asks git, and it lives
+  outside warrantlib because warrantlib depends on the standard library alone.
+- **Three of the nine sources fail that test, and are marked `xfail`.**
+  `research/c4_hand_derivation.md` was committed 2026-08-17, after `log_ratio_series`
+  (`23f0c47`, 2026-08-15) and `gap_series` (`1888ad4`, 2026-08-16) were already measuring
+  against it. ADR-037 discloses the same ordering for the result these back. `measured_at`
+  names the earliest reliance rather than the latest commit to touch the file, since the
+  latest would read as an ordering the history does not support. Repairing this means
+  re-measuring against the derivation, not editing the refs.
+- **`measured_at` is unknowable while it is being written.** A commit cannot contain its
+  own hash. This migration escapes it because no arithmetic changed, so every ref already
+  exists. A new check measuring a new number has two honest options: mark it same-ref and
+  let the render say so, or land it in two commits. Same-ref is the default, because it
+  states the truth without ceremony.
+- **The downgrade route is open and documented.** A real proof with no registration
+  reports `CORROBORATED` and says why in its detail, the same escape the correspondence
+  rule already has. Nobody has to invent a ref, since same-ref-and-marked is always
+  available and always honest.
+- **cpomdp requires `warrantlib>=0.2`.** `cpomdp.warrant` re-exports `Provenance`, so an
+  installed 0.1 fails at import. Per ADR-040, warrantlib 0.2.0 publishes before any cpomdp
+  release carrying the new floor.
+- The three pinned suite counts did not move. The provenance renders after `detail`, and
+  `check_summary` never reads `detail`.

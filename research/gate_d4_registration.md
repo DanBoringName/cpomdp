@@ -1273,3 +1273,29 @@ and the families it has not been tested on are pre-registered with their expecte
 before those runs. A reader who wants to know whether this file was written to fit its
 results should start there, since it is the one place where the ordering has to be argued
 rather than read off the git history.
+
+### AMENDMENT 2026-08-20: the commit record now runs in code as well as in prose
+
+The table in `### AMENDMENT 2026-08-17` maps four of section 7's claims to the commits
+that registered and measured them. That map is now also carried by the suites themselves.
+Every `PROVED` report the three symbolic suites emit carries a `Provenance`: the ref where
+its derivation was registered, the ref whose tree measured against it, and one line naming
+what is at the first. Running a suite prints them.
+
+Nothing in the table above changes, and no number moves. The suites report the same
+counts, `23`, `18` and `29`, all `NOT TRIGGERED`.
+
+Three of the nine sources record an ordering that runs backwards, and they say so.
+`research/c4_hand_derivation.md` was committed at `99e3c34` on 2026-08-17. The suites
+citing its Steps 1-2, Step 3 and Step 4 were measuring against it earlier: `23f0c47` on
+2026-08-15 and `1888ad4` on 2026-08-16. `tests/test_provenance_ordering.py` asks git
+whether each registration ref is an ancestor of the ref that measured against it, and
+those three are marked `xfail` rather than excused. This is the same ordering ADR-037
+already discloses for the result they back, now visible from a test run instead of from
+reading this file.
+
+Four further sources are self-backing: the Gaussian moment table, the truncation operator,
+the cumulant-moment recursion and the innovation moments are each stated and checked in
+one commit. Their two refs are identical and the render says the ordering is not
+established by history, which is the same reservation the 2026-08-17 table states in prose
+for its own same-hash rows.
