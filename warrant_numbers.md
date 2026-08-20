@@ -289,6 +289,40 @@ omission. ADR-034 records the choice. `research/r10_open_loop_crossover.md` is t
 | pragmatic-only crossing | H ≈ 10 | with the epistemic term zeroed, the argmin is prior-ward through H = 9 and crosses near 10 — so the ~1.7-nat epistemic pull is what advances the flip to 7 |
 | `H_max` | 9 | declared feasibility bound; enumeration cost `5⁹·9 = 17,578,125` scored steps, measured. Larger H_max is a declared budget increase |
 
+#### Pre-registered, not yet measured: `H*` stability under action-set change
+
+Declared 2026-08-20, before any cell was run. The full argument is the
+`PRE-REGISTRATION 2026-08-20` entry in `research/fep_falsification_battery.md`. The
+numbers are here because this is where they are quoted from. Nothing below is a result.
+
+| axis | cell | registered prediction |
+| --- | --- | --- |
+| extension | `{−4,…,2}`, 7 actions, spacing 1 | `H* ≤ 6`. `−4` shortens the cue-ward return from two steps to one and buys the prior-ward reach nothing, since `−3` already covers it in one |
+| refinement | step `0.5`, 9 actions over `[−2,2]` | stability, `\|ΔH*\| ≤ 1`. No direction is arguable: the largest magnitude does not move, so neither branch's step count does |
+| refinement | step `0.25`, 17 actions over `[−2,2]` | stability, `\|ΔH*\| ≤ 1`, same argument |
+
+Budget, declared in both units because they disagree. Time at the measured 39.0k
+policies/s. `VOID (budget)` on overrun, which means unmeasured and never "stable".
+
+| cell | actions | H | policies | scored steps | front-loaded peak, ×1.6 | time |
+| --- | --- | --- | --- | --- | --- | --- |
+| extension `{−4,…,2}` | 7 | 7 | 823,543 | 5,764,801 | 0.42 GiB | 21s |
+| refinement `0.5` | 9 | 7 | 4,782,969 | 33,480,783 | 2.45 GiB | 2.0m |
+| refinement `0.5` | 9 | 8 | 43,046,721 | 344,373,768 | 22.58 GiB | 18.4m |
+| refinement `0.25` | 17 | 7 | 410,338,673 | 2,872,370,711 | 210.34 GiB | 2.92h |
+
+Two lines to read carefully. The step-`0.5` cell at `H = 7` costs 33.5M scored steps
+against the `H_max = 9` budget of 17.6M, so it is inside one declared unit and double the
+other. And the last two rows exceed the 19 GiB free on the reference machine, so both run
+under `ChunkedEfeSearch`, whose peak is block-determined and flat in `|A|^H` (ADR-036). The
+memory column is `cue_maze.enumeration_cost` times its measured 1.6x correction, and it
+describes the front-loaded path only. A front-loaded attempt at either is `VOID (budget)`:
+the WSL cap is configured rather than physical, so it takes the session down instead of
+raising `MemoryError`.
+
+`cue_maze.best_reachable_noise` returns `R_LO = 0.02` exactly on all four sets, so every
+lattice lands on the cue and no cell is void by geometry.
+
 The conditioning of the H=7 walk clears the numerical-hygiene bars (recorded above): every
 `Σ⁺`, `S`, `Σ_post` positive definite; `min_eig(Σ_post) = 3.66e−3` against `MIN_EIG_FLOOR =
 1e-9` (about 6.6 orders of margin); max `cond = 1003` (`Σ⁺` at the sharp-sensing step)

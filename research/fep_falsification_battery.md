@@ -276,6 +276,67 @@ raising a parameter until the result fires. Require the sign flip at the registe
 - Does not buy: a prediction about the planning horizon, not about the R(x) mechanism. A
   null weakens the "reach becomes walk" reading without touching Thm 1.
 
+### PRE-REGISTRATION 2026-08-20: the fourth D3 falsifier, both axes
+
+Written before any cell below is run. The registered set is `V1 = [−2,−1,0,1,2]` at
+`H* = 7`. `V1_EDGE = [−3,−2,−1,0,1,2]` is already measured at `H* = 6`.
+
+Geometry the arguments rest on, from `cue_maze`: the agent starts at `0`, the cue sits at
+`+1`, the prior goal at `−3`. The cue-ward branch spends one step reaching the cue and
+then covers a displacement of `−4`. The prior-ward branch covers `−3` directly.
+
+**Extension. Directional prediction, `H* ≤ 6`.** The named cell is `{−4,…,2}`, seven
+actions, same spacing. The argument is an asymmetry. At `−3` the prior-ward branch already
+covers its `−3` in one step, so a magnitude of `4` buys it nothing. The cue-ward branch
+still needs two steps for its `−4` return, and `−4` cuts that to one. The extension
+therefore helps the cue-ward branch alone, and a branch that gets cheaper cannot win later.
+Predicted `H* ≤ 6`, and plausibly `5`.
+
+This is an argument, not a proof: the argmin over a superset may move either way, since a
+larger set changes both branches' scores and not only their step counts. A measured rise
+is a real refutation rather than a modelling surprise, and it would say the step-count
+reading of this task is wrong.
+
+**Refinement. No direction is arguable, so a stability test at `|ΔH*| ≤ 1`.** The cells
+are step `0.5` (nine actions) and step `0.25` (seventeen), both over the same `[−2, 2]`.
+Neither changes the largest magnitude, so neither branch's minimum step count moves: the
+cue-ward return still needs two steps and the prior-ward reach two. Refinement buys finer
+positioning only, and the cue at `+1` is already exactly reachable on `V1`, so it buys no
+reachability either. With nothing to argue in either direction, this is registered as a
+stability test and not dressed as a prediction. `|ΔH*| ≤ 1` is `PASS`, `|ΔH*| ≥ 2` is
+`FAIL`.
+
+**Void guard, discharged before the run.** `cue_maze.best_reachable_noise` returns exactly
+`R_LO = 0.02` on all four sets, so every lattice lands on the cue and no cell is void by
+geometry. A null from any of them is about the objective.
+
+**Budget, and the two units disagree.** Declared in both, because a cell can sit inside one
+and outside the other. Time is at the measured 39.0k policies/s.
+
+| cell | actions | H | policies | scored steps | time |
+| --- | --- | --- | --- | --- | --- |
+| `V1`, registered | 5 | 7 | 78,125 | 546,875 | 2s |
+| `V1_EDGE`, measured | 6 | 7 | 279,936 | 1,959,552 | 7s |
+| extension `{−4,…,2}` | 7 | 7 | 823,543 | 5,764,801 | 21s |
+| refinement step `0.5` | 9 | 7 | 4,782,969 | 33,480,783 | 2.0m |
+| refinement step `0.5` | 9 | 8 | 43,046,721 | 344,373,768 | 18.4m |
+| refinement step `0.25` | 17 | 7 | 410,338,673 | 2,872,370,711 | 2.92h |
+
+The ledger's `H_max = 9` budget is 17.6M *scored steps*. The step-`0.5` cell at `H = 7` is
+33.5M, double that, while its policy count sits far inside the `9^7` line. Both numbers are
+declared so neither can be quoted alone.
+
+**`9^8` and `17^7`: accepted, and only on the chunked path.** Time is not what gates them.
+`enumeration_cost` describes the front-loaded path, and on this machine, with 19 GiB free,
+it reads 14.11 GiB for `9^8` and 131.46 GiB for `17^7`. The measured correction is 1.6x,
+giving 22.6 GiB and 210.3 GiB. Both exceed the ceiling, and the WSL cap is configured
+rather than physical, so a front-loaded attempt takes the session down rather than raising
+`MemoryError`. Both cells run under `ChunkedEfeSearch`, whose peak is block-determined and
+flat in `|A|^H` (ADR-036). A front-loaded run of either is **VOID (budget)**, not a result.
+
+**Outcome vocabulary.** Each axis reports `PASS`, `FAIL` or `VOID` against the above. Budget
+overrun is `VOID`, meaning unmeasured, and never "stable".
+
 **D4 · certified discretisation bound · GATE-D4** · SEVERE · R9 · toolbox C · tier `BOUNDED` · **PR-8 · v0.4.5, hard gate**
 
 - Predict: the reference filter's error is stated as a number, small relative to R6's

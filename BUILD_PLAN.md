@@ -373,18 +373,18 @@ Gate-independent. Paper 3's G9 inherits the qualifier this produces.
       Registered in the battery before it is run, which is what keeps it a test. It is
       load-bearing rather than precautionary, because the release itself calls `H* = 7` an
       upper bound *because the grid clips the reach*.
-  - [ ] Two axes, registered separately. **Extension** is a wider magnitude range at the
+  - [x] Two axes, registered separately. **Extension** is a wider magnitude range at the
         same spacing. **Refinement** is finer spacing over the same range.
-  - [ ] Predicted direction and its argument written down **before running**, on each
+  - [x] Predicted direction and its argument written down **before running**, on each
         axis. Where no direction can be argued in advance, register a stability test at a
         stated tolerance (`|ΔH*| ≤ 1`) rather than dressing a stability check as a
         directional prediction.
-  - [ ] Pre-declare the compute budget, in **both units**, because they disagree: the
+  - [x] Pre-declare the compute budget, in **both units**, because they disagree: the
         cell counts here are policies (`5^7 = 78,125`, `7^7 = 823,543`,
         `9^7 = 4,782,969`, `9^8 ≈ 4.3 × 10^7`) while the ledger's `H_max = 9` is 17.6M
         *scored steps*. `9^7` at H = 7 is 33.5M scored steps: inside one budget, double
         the other. Budget exceeded is **VOID**, meaning unmeasured, never "stable".
-  - [ ] Decide `9^8` and `17^7` deliberately rather than by contingency. PR-1b removed
+  - [x] Decide `9^8` and `17^7` deliberately rather than by contingency. PR-1b removed
         the memory wall, so they are 18 minutes and 2.9 hours at the measured 39.0k
         policies/s, not the `VOID (memory)` they were. Accept or decline each in the
         registration, before the run.
@@ -396,12 +396,12 @@ Gate-independent. Paper 3's G9 inherits the qualifier this produces.
         walk arrives at the cue at `x = +1`, from where the goal at `x = −3` is a
         displacement of `−4`, so a set containing `−4` offers a one-step return the
         six-action set does not. Measure it under a completeness certificate.
-  - [ ] Size the run against `free -g` before launching it. `cue_maze.enumeration_cost`
+  - [x] Size the run against `free -g` before launching it. `cue_maze.enumeration_cost`
         describes the **front-loaded** path only. On the chunked path peak is
         block-determined and flat in `|A|^H`, so re-derive any budget line taken from the
         old figure. The WSL memory cap is configured rather than physical, and an
         over-sized enumeration takes the whole session down.
-  - [ ] Wire `cue_maze.best_reachable_noise` in as the void guard. A refined set that
+  - [x] Wire `cue_maze.best_reachable_noise` in as the void guard. A refined set that
         cannot land on the cue produces a null indistinguishable from "information is
         never worth the detour", which is pure geometry and not a result.
   - [ ] Carry the `slow` marker. This runs on merge-to-main, not on pull requests.
