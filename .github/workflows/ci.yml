@@ -38,6 +38,23 @@ jobs:
       - name: ty (strict types)
         run: uv run --extra examples ty check
 
+  docs:
+    name: docs build (strict)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v8.2.0
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - run: uv sync --locked --group docs
+      # `--strict` fails on a mkdocstrings reference that resolves to nothing and on a
+      # dead relative link in an `--8<--` include. `docs.yml` runs the same build, but
+      # only on push to main, so without this job a page that moved is first checked by
+      # the Pages deploy *after* the merge, with main already broken. No badge step and
+      # no deploy here: this is the gate, not the publish.
+      - run: uv run mkdocs build --strict
+
   test:
     name: test (py${{ matrix.python-version }})
     runs-on: ubuntu-latest

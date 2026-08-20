@@ -50,6 +50,14 @@ Blank means blank to a reader rather than empty to `str.strip()`, which strips t
 
 ::: warrantlib.SymbolicReduction
 
+## The evidence union
+
+`Evidence` names the two kinds together. `CheckReport.evidence` is annotated as a tuple of it, so the admissible types are declared once, and a caller building reports of its own has a name to annotate against.
+
+The union and the runtime guard are separate declarations. A third evidence kind needs a member added to both. A type added to one alone annotates as evidence and then refuses to construct, or constructs and reads as evidence of a kind nothing declared.
+
+::: warrantlib.Evidence
+
 ## Reading a run
 
 Registering four falsifiers and testing two is a different claim from testing four, and one number cannot carry both. The header separates them and names how many fired. The rows underneath say what warrant the tested ones carried, so a run that survived everything without deciding anything reads as exactly that.
