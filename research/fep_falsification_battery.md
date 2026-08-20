@@ -337,6 +337,38 @@ flat in `|A|^H` (ADR-036). A front-loaded run of either is **VOID (budget)**, no
 **Outcome vocabulary.** Each axis reports `PASS`, `FAIL` or `VOID` against the above. Budget
 overrun is `VOID`, meaning unmeasured, and never "stable".
 
+### RESULT 2026-08-20: extension axis, `{−4,…,2}`, **PASS**
+
+Registered above at `H* ≤ 6` before the run. Measured `H* = 6`. Certified `PROVED (set
+v1-ext, |A|^H = 7^6 = 117649, visited 117649)`, one certificate per horizon, front-loaded
+at 0.42 GiB against 19 GiB free.
+
+| H | policies | `Gmin` | argmin | plan |
+| --- | --- | --- | --- | --- |
+| 5 | 16,807 | 303.6592 | `[−3, 0, 0, 0, 0]` | reach |
+| 6 | 117,649 | 363.9394 | `[+1, −4, 0, 0, 0, 0]` | walk |
+
+**The registered mechanism is the one that fires.** The argument for `H* ≤ 6` was that `−4`
+cuts the cue-ward return from two steps to one while buying the prior-ward reach nothing.
+The winning policy at `H = 6` is exactly that: one step to the cue at `+1`, then a single
+`−4` to the goal at `−3`. The prediction did not merely pass, its mechanism is visible in
+the argmin.
+
+**Two things the prediction got wrong, recorded as such.** The parenthetical "plausibly 5"
+did not hold: `H = 5` is still prior-ward even though the walk `[+1, −4, 0, 0, 0]` is
+feasible there. Feasibility of the shorter return is not what sets the crossover. The
+epistemic and pragmatic balance does, and the step-count argument says nothing about it. And
+extension **saturates**: `H* = 6` on both `{−3,…,2}` and `{−4,…,2}`, so the one-step return
+is used without advancing the horizon.
+
+**What this settles in the write-up.** `research/r10_open_loop_crossover.md` retracted a row
+reading "`H* = 6`, unchanged (`−3` already optimal)" as deduced rather than measured. The
+retraction was right and the number was right. The stated reason was wrong: `−3` is *not*
+what the optimal policy uses at `H = 6`, `−4` is. A row can carry a correct number for a
+false reason, and only the measurement tells them apart.
+
+Refinement axis remains unmeasured. The merge gate needs both.
+
 **D4 · certified discretisation bound · GATE-D4** · SEVERE · R9 · toolbox C · tier `BOUNDED` · **PR-8 · v0.4.5, hard gate**
 
 - Predict: the reference filter's error is stated as a number, small relative to R6's

@@ -295,11 +295,11 @@ Declared 2026-08-20, before any cell was run. The full argument is the
 `PRE-REGISTRATION 2026-08-20` entry in `research/fep_falsification_battery.md`. The
 numbers are here because this is where they are quoted from. Nothing below is a result.
 
-| axis | cell | registered prediction |
-| --- | --- | --- |
-| extension | `{−4,…,2}`, 7 actions, spacing 1 | `H* ≤ 6`. `−4` shortens the cue-ward return from two steps to one and buys the prior-ward reach nothing, since `−3` already covers it in one |
-| refinement | step `0.5`, 9 actions over `[−2,2]` | stability, `\|ΔH*\| ≤ 1`. No direction is arguable: the largest magnitude does not move, so neither branch's step count does |
-| refinement | step `0.25`, 17 actions over `[−2,2]` | stability, `\|ΔH*\| ≤ 1`, same argument |
+| axis | cell | registered prediction | outcome |
+| --- | --- | --- | --- |
+| extension | `{−4,…,2}`, 7 actions, spacing 1 | `H* ≤ 6`. `−4` shortens the cue-ward return from two steps to one and buys the prior-ward reach nothing, since `−3` already covers it in one | **PASS**, measured `H* = 6`, see below |
+| refinement | step `0.5`, 9 actions over `[−2,2]` | stability, `\|ΔH*\| ≤ 1`. No direction is arguable: the largest magnitude does not move, so neither branch's step count does | not measured |
+| refinement | step `0.25`, 17 actions over `[−2,2]` | stability, `\|ΔH*\| ≤ 1`, same argument | not measured |
 
 Budget, declared in both units because they disagree. Time at the measured 39.0k
 policies/s. `VOID (budget)` on overrun, which means unmeasured and never "stable".
@@ -322,6 +322,24 @@ raising `MemoryError`.
 
 `cue_maze.best_reachable_noise` returns `R_LO = 0.02` exactly on all four sets, so every
 lattice lands on the cue and no cell is void by geometry.
+
+#### Measured 2026-08-20: extension `{−4,…,2}` → `H* = 6`, **PASS**
+
+| number | value | what it is |
+| --- | --- | --- |
+| `H*` on `{−4,…,2}` | 6 | first cue-ward exhaustive argmin on the seven-action set, `[+1,−4,0,0,0,0]`. Certified `PROVED (set v1-ext, \|A\|^H = 7^6 = 117649, visited 117649)` |
+| `Gmin` at H=6 | 363.9394 | on `{−4,…,2}`. At H=5 it is 303.6592 and still prior-ward, `[−3,0,0,0,0]` |
+
+Registered at `H* ≤ 6` before the run, so this passes. The mechanism the argument rested on
+is the one that fires: the winning policy steps to the cue at `+1` and then takes a single
+`−4` to the goal at `−3`, which is the one-step return `−4` was predicted to buy.
+
+Two qualifications belong beside the number. The parenthetical "plausibly 5" did not hold.
+`H = 5` stays prior-ward even though the walk `[+1,−4,0,0,0]` is feasible there, so
+feasibility of the shorter return is not what sets the crossover. And extension
+**saturates**: `H* = 6` on `{−3,…,2}` and on `{−4,…,2}` alike, so `−4` is used without
+moving the horizon. Both facts are compatible with the registered prediction and neither was
+predicted by it.
 
 The conditioning of the H=7 walk clears the numerical-hygiene bars (recorded above): every
 `Σ⁺`, `S`, `Σ_post` positive definite; `min_eig(Σ_post) = 3.66e−3` against `MIN_EIG_FLOOR =

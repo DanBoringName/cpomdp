@@ -76,8 +76,13 @@ COND_CEILING = 1e8
 # not an established optimum, since the walk arrives at the cue at +1.
 V1 = [-2.0, -1.0, 0.0, 1.0, 2.0]  # the registered action set (clips the reach at -2)
 V1_EDGE = [-3.0, *V1]  # + the one-step reach -3; flips one horizon sooner
+# + the one-step *return*: the walk reaches the cue at +1, and the goal at -3 is then a
+# displacement of -4. The extension axis of the fourth D3 falsifier, registered at
+# `H* <= 6` before it ran (see fep_falsification_battery.md, 2026-08-20).
+V1_EXT = [-4.0, *V1_EDGE]
 ACTION_SET = FiniteActionSet([[a] for a in V1], version="v1")
 EDGE_SET = FiniteActionSet([[a] for a in V1_EDGE], version="v1-edge")
+EXT_SET = FiniteActionSet([[a] for a in V1_EXT], version="v1-ext")
 FLIP_H = 7  # the crossover horizon on ACTION_SET
 MAX_H = 7  # the exhaustive sweep budget (feasibility is |A|^H * H, printed below)
 # Declared feasibility bound: enumeration is feasible to H_MAX (5^9 * 9 = 17.6M scored
@@ -501,6 +506,7 @@ def _print_tables() -> None:
     flip = exhaustive_flip()
     mech = mechanism_curve()
     edge = exhaustive_flip(action_set=EDGE_SET, max_horizon=FLIP_H - 1)
+    ext = exhaustive_flip(action_set=EXT_SET, max_horizon=FLIP_H - 1)
 
     print("1. Exhaustive argmin per horizon (selection-free, exact enumeration):")
     print(
@@ -573,11 +579,16 @@ def _print_tables() -> None:
     print("      epistemic term and the reach still wins, crossing only at H~10.")
 
     edge_star = next((h for h, _, _, _, cue in edge if cue), None)
+    ext_star = next((h for h, _, _, _, cue in ext if cue), None)
+    ext_policy = next((p for _, _, _, p, cue in ext if cue), None)
     refine_cost = 9**7 * 7
     hmax_cost = 5**H_MAX * H_MAX
     print("\n5. Action-set dependence and feasibility:")
     print(f"   one-step reach -3 -> H* = {edge_star}; the registered set clips the")
     print(f"   reach to -2, so H* = {FLIP_H} is an upper bound.")
+    print(f"   extension {{-4,...,2}} -> H* = {ext_star}, argmin {ext_policy}.")
+    print("   registered at H* <= 6 before the run, so this PASSES. The -4 return is")
+    print("   used, and the horizon does not move: extension saturates at 6.")
     print(f"   recorded, not re-run here (cost {refine_cost} steps): a step-0.5")
     print("   refinement of the same range left the H=6 and H=7 argmins unchanged,")
     print("   no intermediate action scoring lower G (a subset check; step-0.25")
