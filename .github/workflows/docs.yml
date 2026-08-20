@@ -20,6 +20,9 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      JAX_COMPILATION_CACHE_DIR: ${{ github.workspace }}/.jax-cache
+      JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS: "0"
     steps:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v8.2.0
@@ -27,15 +30,24 @@ jobs:
           enable-cache: true
           python-version: "3.12"
       - run: uv sync --locked --group docs
+      # Same key family as ci.yml's py3.12 test job, so this run starts from the
+      # PR runs' compilations and its slow-test compiles feed back into them.
+      - name: jax compilation cache
+        uses: actions/cache@v5
+        with:
+          path: .jax-cache
+          key: jax-cache-${{ runner.os }}-py3.12-${{ github.run_id }}
+          restore-keys: jax-cache-${{ runner.os }}-py3.12-
       # Regenerate the coverage badge into the docs tree so it ships in the Pages
       # site at /assets/coverage.svg (the URL the README badge points at). No
       # commit-back, no third-party service — the SVG is rebuilt on every deploy.
       - name: coverage badge
         run: |
-          uv run pytest -m "not rxinfer" --cov=cpomdp --cov-report=xml -q
+          uv run --no-sync pytest -m "not rxinfer" -n auto --dist worksteal \
+            --cov=cpomdp --cov-report=xml -q
           uvx --from "genbadge[coverage]" genbadge coverage \
             -i coverage.xml -o docs/assets/coverage.svg
-      - run: uv run mkdocs build --strict
+      - run: uv run --no-sync mkdocs build --strict
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
