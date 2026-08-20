@@ -14,7 +14,7 @@ on:
 # the second upload dies on a file-already-exists 400. Queue instead of cancelling, so a
 # run that is already uploading is never killed part-way.
 concurrency:
-  group: publish
+  group: publish-${{ github.event_name }}
   cancel-in-progress: false
 
 permissions:
@@ -30,6 +30,16 @@ jobs:
       # churn its version for nothing.
       warrantlib-is-new: ${{ steps.warrantlib.outputs.is-new }}
     steps:
+      # Fail before the build rather than after it. Without this the run
+      # builds, uploads the artifact and goes green, and the only sign that
+      # nothing published is a skipped job carrying no annotation.
+      - name: a manual publish runs from main only
+        if: >-
+          github.event_name == 'workflow_dispatch'
+          && github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::dispatched from ${{ github.ref }}. warrantlib publishes from main or a release only, because PyPI never lets a version be reclaimed."
+          exit 1
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v8.2.0
         with:
@@ -63,7 +73,8 @@ jobs:
           github.event_name == 'workflow_dispatch'
           && steps.warrantlib.outputs.is-new != 'true'
         run: |
-          echo "::error::warrantlib $(uv version --package warrantlib --short) is already           on PyPI. Bump packages/warrantlib/pyproject.toml before dispatching."
+          version=$(uv version --package warrantlib --short)
+          echo "::error::warrantlib $version is already on PyPI. Bump its version in packages/warrantlib/pyproject.toml before dispatching."
           exit 1
       - if: steps.warrantlib.outputs.is-new == 'true'
         run: uv build --package warrantlib -o dist/warrantlib

@@ -2515,9 +2515,13 @@ the workflow file being edited on the branch being dispatched.
 - A dispatch whose version already matches PyPI now fails instead of exiting green. Someone
   pressing the button is asking for a publish, and a green run that uploaded nothing reads
   as one that did.
-- `publish.yml` carries a `concurrency` group. The dispatch button is a double-click
-  surface that `release: published` never was, and two runs would both pass the version
-  guard before either upload landed.
+- `publish.yml` carries a `concurrency` group, keyed on the event. The dispatch button is
+  a double-click surface that `release: published` never was, and two presses would both
+  pass the version guard before either upload landed. Keying on the event is what stops a
+  release queueing behind a dispatch that is sitting at an environment gate.
+- A dispatch from any other ref fails before the build runs. Left to the publish job's
+  own condition it would build, upload an artifact and finish green, with a skipped job
+  carrying no annotation as the only sign that nothing shipped.
 - The `pypi-warrantlib` environment needs its deployment-branch rule set when it is
   created. A new GitHub environment allows every branch by default, which is the condition
   the job guard above is compensating for.
