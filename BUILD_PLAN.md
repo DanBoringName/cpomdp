@@ -359,11 +359,16 @@ tracks the block rather than the enumeration. **ADR-036.** — met.
 
 Gate-independent. Paper 3's G9 inherits the qualifier this produces.
 
-- [ ] **Declare the action mode on the registered result.** `RecedingHorizonSelector` and
+- [x] **Declare the action mode on the registered result.** `RecedingHorizonSelector` and
       `OpenLoopSelector` genuinely differ, and v0.4.4 requires a measurement to say which
       it used. The M7b sweep drove `EnumeratedEfeSearch` directly, which is open-loop.
       Confirm that in code, then carry the declaration into the paper. The ledger requires
       R10 reported under its seam, never silently read as closed-loop.
+      Confirmed in code: `examples/ffg/crossover.py` calls
+      `EnumeratedEfeSearch.over_backend(...).evaluate(...)` and instantiates neither
+      selector. The declaration now travels with the number, in both `PROVED` falsifier
+      details and at the head of `warrant_numbers.md`'s crossover section, which had not
+      named the seam at all. The write-up and ADR-034 already carried it. No number moved.
 - [ ] **Run the fourth D3 falsifier: `H*` stability under action-set refinement.**
       Registered in the battery before it is run, which is what keeps it a test. It is
       load-bearing rather than precautionary, because the release itself calls `H* = 7` an

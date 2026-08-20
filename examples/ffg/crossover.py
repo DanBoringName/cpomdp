@@ -414,6 +414,11 @@ def falsifiers(
         f"H* = {FLIP_H} is an upper bound "
         "(set clips the reach at -2, one-step reach -3)"
     )
+    # Travels with the number for the same reason `upper` does. `evaluate` scores whole
+    # length-H sequences and never re-plans, so this argmin is an open-loop one. The
+    # same statistic under `RecedingHorizonSelector` is a different measurement, and a
+    # row that does not name the seam reads as either (ADR-034).
+    seam = "scored open-loop (EnumeratedEfeSearch.evaluate, no re-planning)"
     # One commit derived the separation bar from the declared conditioning ceiling and
     # reported these falsifiers against it. Registering and measuring together is what
     # happened, so the two refs are one and the render says the history orders nothing.
@@ -430,7 +435,7 @@ def falsifiers(
             tier=Tier.BOUNDED,
             detail=(
                 f"argmin is {where(at_flip)} at H = {at_flip.horizon}, inside "
-                f"H_MAX = {H_MAX}. {upper}. {_bar(at_flip)}"
+                f"H_MAX = {H_MAX}, {seam}. {upper}. {_bar(at_flip)}"
             ),
             evidence=(at_flip.certificate,),
             provenance=(registration,),
@@ -442,7 +447,7 @@ def falsifiers(
             tier=Tier.BOUNDED,
             detail=(
                 f"argmin is {where(at_prior)} at H = {at_prior.horizon} and "
-                f"{where(at_flip)} at H = {at_flip.horizon}. {upper}. "
+                f"{where(at_flip)} at H = {at_flip.horizon}, {seam}. {upper}. "
                 f"{_bar(at_prior, at_flip)}"
             ),
             evidence=(at_prior.certificate, at_flip.certificate),

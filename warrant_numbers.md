@@ -273,6 +273,14 @@ The H=1 anchors force `H* > 1`; the exhaustive varying-sequence search finds whe
 actually flips. `examples/ffg/crossover.py` pins these; the horizon is the free variable of
 the statistic, not a tuned parameter.
 
+**Every number in this section is open-loop.** The sweep calls
+`EnumeratedEfeSearch.over_backend(...).evaluate(...)` directly, which scores whole length-H
+action sequences and never re-plans between steps. It drives neither
+`RecedingHorizonSelector` nor `OpenLoopSelector`. The same statistic measured under a
+receding-horizon driver is a different quantity, and a row reading "the exhaustive argmin
+flips at 7" is true of both, so quoting one of these without the seam states the other by
+omission. ADR-034 records the choice. `research/r10_open_loop_crossover.md` is the write-up.
+
 | number | value | what it is |
 | --- | --- | --- |
 | `H*` (registered set) | 7 | first horizon whose exhaustive argmin over `crossover-v1^H` is cue-ward — a two-phase walk `[+1,−2,−2,0,0,0,0]`. Cue-ward at H = 7, 8, 9 |
