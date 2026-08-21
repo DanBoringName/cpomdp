@@ -305,7 +305,7 @@ result and says so; the refinement rows are not, with the qualification below.
 | axis | cell | registered prediction | outcome |
 | --- | --- | --- | --- |
 | extension | `{−4,…,2}`, 7 actions, spacing 1 | `H* ≤ 6`. `−4` shortens the cue-ward return from two steps to one and buys the prior-ward reach nothing, since `−3` already covers it in one | **PASS**, measured `H* = 6`, see below |
-| refinement | step `0.5`, 9 actions over `[−2,2]` | stability, `\|ΔH*\| ≤ 1`. No direction is arguable: the largest magnitude does not move, so neither branch's step count does | **re-measurement**, see below |
+| refinement | step `0.5`, 9 actions over `[−2,2]` | stability, `\|ΔH*\| ≤ 1`. No direction is arguable: the largest magnitude does not move, so neither branch's step count does | **PASS**, `H* = 7`, `\|ΔH*\| = 0`, see below |
 | refinement | step `0.25`, 17 actions over `[−2,2]` | stability, `\|ΔH*\| ≤ 1`, same argument | not measured, no prior claim |
 
 Budget, declared in both units because they disagree. Time at the measured 39.0k
@@ -329,6 +329,20 @@ raising `MemoryError`.
 
 `cue_maze.best_reachable_noise` returns `R_LO = 0.02` exactly on all four sets, so every
 lattice lands on the cue and no cell is void by geometry.
+
+#### Measured 2026-08-21: refinement step-`0.5` → `H* = 7`, **PASS**
+
+| number | value | what it is |
+| --- | --- | --- |
+| `Gmin` at H=6 | 364.642964185792 | step-`0.5` over `[−2,2]`, argmin `[−2,−1,0,0,0,0]`, prior-ward. Certified `PROVED (set v1-refine-0.5, 9^6 = 531441 visited)` |
+| `Gmin` at H=7 | 425.163110098734 | argmin `[+1,−2,−2,0,0,0,0]`, cue-ward. Certified at `9^7 = 4782969` |
+| `H*` on step-`0.5` | 7 | unchanged from the coarse set, so `\|ΔH*\| = 0` against a registered bar of 1 |
+| chunked rate | 41,982 policies/s | measured, and the basis for the step-`0.25` projection |
+| chunked peak | 0.46 GiB | flat in `\|A\|^H` (ADR-036), against 22.6 GiB front-loaded at `9^8` |
+
+Both scores agree with the published `364.6430` and `425.1631` inside the `5e-5` tolerance
+registered on 2026-08-21, so nothing is retracted. No half-step action appears in either
+argmin. The `9^8` cell was contingent on `H*` rising and is therefore not required.
 
 **The step-`0.5` cell already has published numbers, and no run behind them.**
 `research/r10_open_loop_crossover.md` reports the argmin byte-identical to the coarse set

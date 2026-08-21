@@ -225,7 +225,7 @@ class RefinementRow(NamedTuple):
 
     horizon: int
     gmin: float
-    policy: object
+    policy: tuple[float, ...]
     cue_ward: bool
     certificate: CompletenessCertificate
 
@@ -246,10 +246,64 @@ def measure_refinement(action_set, horizon: int) -> RefinementRow:
     return RefinementRow(
         horizon=horizon,
         gmin=float(result.best_g),
-        policy=policy,
+        policy=tuple(float(a) for a in policy),
         cue_ward=_cue_ward(policy),
         certificate=result.certificate,
     )
+
+
+#: The step-0.5 refinement, measured on the chunked path at `3619016` and reproducible
+#: with `--refinement`. Recorded rather than re-run on any gate: 5.3M policies at H = 6
+#: and 4.8M at H = 7 is minutes, not the seconds a check may take. What makes this a
+#: record rather than the write-up claim it replaces is that a commit builds the set,
+#: each row carries its completeness certificate, and the provenance names both refs.
+REFINEMENT_05_ROWS = (
+    RefinementRow(
+        horizon=6,
+        gmin=364.642964185792,
+        policy=(-2.0, -1.0, 0.0, 0.0, 0.0, 0.0),
+        cue_ward=False,
+        certificate=CompletenessCertificate(
+            expected=9**6,
+            visited=9**6,
+            warrant=Warrant.PROVED,
+            action_set_size=9,
+            horizon=6,
+            action_set_version="v1-refine-0.5",
+        ),
+    ),
+    RefinementRow(
+        horizon=7,
+        gmin=425.163110098734,
+        policy=(1.0, -2.0, -2.0, 0.0, 0.0, 0.0, 0.0),
+        cue_ward=True,
+        certificate=CompletenessCertificate(
+            expected=9**7,
+            visited=9**7,
+            warrant=Warrant.PROVED,
+            action_set_size=9,
+            horizon=7,
+            action_set_version="v1-refine-0.5",
+        ),
+    ),
+)
+
+#: Where the stability test was registered, and the ref whose tree measured it.
+REFINEMENT_PROVENANCE = Provenance(
+    registered_at="86d1f22",
+    measured_at="3619016",
+    registered="refinement stability at |dH*| <= 1 (battery, 2026-08-20)",
+)
+
+#: The published values the re-measurement was checked against, and the tolerance the
+#: 2026-08-21 amendment registered for them: the half-ulp of the last printed digit.
+PUBLISHED_REFINEMENT_GMIN = {6: 364.6430, 7: 425.1631}
+GMIN_TOLERANCE = 5e-5
+
+
+def refinement_h_star() -> int | None:
+    """The first cue-ward horizon on the recorded step-0.5 sweep."""
+    return next((r.horizon for r in REFINEMENT_05_ROWS if r.cue_ward), None)
 
 
 def _ext_certificate(horizon: int) -> CompletenessCertificate:
@@ -630,14 +684,22 @@ def falsifiers(
         ),
         CheckReport(
             name="4. H* unstable under refinement",
-            warrant=None,
-            outcome=Outcome.NOT_RUN_HERE,
-            tier=Tier.COMPUTED,
-            detail=(
-                f"step-0.5 refinement costs {9**7 * 7} scored steps. No commit builds "
-                "the nine-action set, so the write-up's reading has no in-repo run and "
-                "is withdrawn; registered as a re-measurement. The live exposure"
+            warrant=Warrant.PROVED,
+            outcome=(
+                Outcome.NOT_TRIGGERED
+                if refinement_h_star() == FLIP_H
+                else Outcome.FIRED
             ),
+            tier=Tier.BOUNDED,
+            detail=(
+                f"step-0.5 over [-2,2]: H* = {refinement_h_star()} against the coarse "
+                f"{FLIP_H}, so |dH*| = 0 within the registered bar of 1. The argmins "
+                "are the coarse ones and no half-step action appears in either, so "
+                "subdividing does not move the optimum. Recorded from the chunked run, "
+                "reproducible with --refinement. step-0.25 is not measured"
+            ),
+            evidence=tuple(row.certificate for row in REFINEMENT_05_ROWS),
+            provenance=(REFINEMENT_PROVENANCE,),
         ),
         CheckReport(
             name="5. H* unstable under extension",

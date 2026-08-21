@@ -165,6 +165,26 @@ class TestCrossoverFalsifierReporting:
         assert reports[4].outcome is Outcome.FIRED
         assert "no cue-ward argmin" in reports[4].detail
 
+    def test_the_recorded_refinement_matches_the_published_numbers(self):
+        # The re-measurement's whole point. `research/r10_open_loop_crossover.md`
+        # published these before any commit built the set; the amendment of 2026-08-21
+        # registered agreement as equality within the half-ulp of the last printed
+        # digit. Cheap because the rows are recorded, not re-enumerated.
+        for row in crossover.REFINEMENT_05_ROWS:
+            published = crossover.PUBLISHED_REFINEMENT_GMIN[row.horizon]
+            assert abs(row.gmin - published) <= crossover.GMIN_TOLERANCE, (
+                f"H={row.horizon}: measured {row.gmin} against published {published}"
+            )
+            assert row.certificate.complete
+        assert crossover.refinement_h_star() == crossover.FLIP_H
+
+    def test_no_half_step_action_reaches_the_recorded_argmins(self):
+        # The evidential half: byte-identity to the coarse set is expected because it
+        # is a subset. What refinement could have shown is an intermediate action
+        # scoring lower, and none does.
+        for row in crossover.REFINEMENT_05_ROWS:
+            assert all(float(a) == int(a) for a in row.policy), row.policy
+
     def test_a_set_that_cannot_sense_the_cue_is_void(self):
         # The registered void guard. A null from a set that cannot reach the cue is
         # geometry, so it is not a survivor and carries no warrant.
@@ -253,7 +273,7 @@ def test_crossover_falsifiers_are_reports():
     assert extension.h_star == 6
     assert extension.sensed
     proved = [r for r in reports if r.warrant is Warrant.PROVED]
-    assert len(proved) == 3
+    assert len(proved) == 4
     for report in proved:
         assert report.evidence
         # Every PROVED row names where its bar was registered, so a reader can check
@@ -283,6 +303,8 @@ def test_crossover_falsifiers_are_reports():
         if report.name.startswith(("1.", "2.")):
             assert "bound" in report.detail
             assert "upper bound" in report.detail
+        elif report.name.startswith("4."):
+            assert "registered bar" in report.detail
         else:
             assert "registered bar" in report.detail
 
@@ -293,7 +315,7 @@ def test_crossover_falsifiers_are_reports():
     summary = check_summary(reports)
     assert "PROVED" in summary
     assert "FIRED" not in summary
-    assert "5 registered, 3 tested here, none fired" in summary
+    assert "5 registered, 4 tested here, none fired" in summary
 
 
 @pytest.mark.slow

@@ -412,7 +412,39 @@ retraction was right and the number was right. The stated reason was wrong: `−
 what the optimal policy uses at `H = 6`, `−4` is. A row can carry a correct number for a
 false reason, and only the measurement tells them apart.
 
-The refinement axis is undischarged in this repository. The merge gate needs both.
+### RESULT 2026-08-21: refinement axis, step-`0.5` — **PASS**, and the published numbers hold
+
+Measured on the chunked path at `3619016`, reproducible with
+`python examples/ffg/crossover.py --refinement`.
+
+| H | measured `Gmin` | published | argmin | plan |
+| --- | --- | --- | --- | --- |
+| 6 | 364.642964185792 | 364.6430 | `[−2,−1,0,0,0,0]` | prior-ward |
+| 7 | 425.163110098734 | 425.1631 | `[+1,−2,−2,0,0,0,0]` | cue-ward |
+
+`H* = 7` on the refined set against 7 on the coarse one, so `|ΔH*| = 0`, inside the
+registered bar of 1. Falsifier 4 reports `NOT_TRIGGERED` with both certificates as
+evidence, `PROVED (set v1-refine-0.5, 9^6 = 531441)` and `9^7 = 4782969`, each visited in
+full.
+
+**The published numbers are confirmed to the digit.** Both agree within the `5e-5`
+tolerance the 2026-08-21 amendment registered, so the disagreement branch does not fire
+and nothing is retracted. What the write-up lacked was a run in this repository, not
+accuracy. The retraction was about provenance and it is now discharged.
+
+**No half-step action appears in either argmin.** Byte-identity to the coarse set is
+expected, since the coarse set is a subset. The evidential half is that subdividing
+offered the optimum nothing it took.
+
+**`9^8` is not required.** The registration made the H = 8 cell contingent on `H*` rising
+under refinement. It did not rise, so the cell answers a question that did not arise. It
+was started and stopped rather than run to completion, and it is not outstanding work.
+
+**Still outstanding: step-`0.25`.** 410,338,673 policies, projected 2.7 hours at the
+measured 41,982 policies/s, peak flat at 0.46 GiB. Deferred on time, not on budget or
+memory. The registered stability test stands for it.
+
+The refinement axis is discharged at step-`0.5` and outstanding at step-`0.25`.
 
 **D4 · certified discretisation bound · GATE-D4** · SEVERE · R9 · toolbox C · tier `BOUNDED` · **PR-8 · v0.4.5, hard gate**
 
