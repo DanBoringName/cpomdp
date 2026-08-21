@@ -73,8 +73,9 @@ COND_CEILING = 1e8
 # grid edge -2, so it needs two steps to reach the goal at -3. A set containing -3,
 # which reaches the goal in one step from the start, flips one horizon sooner (see the
 # +edge measurement below). H* on this set is therefore an upper bound, and the honest
-# headline number. Wider sets are unmeasured: -3 is the one-step reach from the start,
-# not an established optimum, since the walk arrives at the cue at +1.
+# headline number. -3 is the one-step reach from the start, not an established optimum,
+# since the walk arrives at the cue at +1. The seven-action set below supplies that
+# one-step return and also gives 6, so extension saturates; wider sets are unmeasured.
 V1 = [-2.0, -1.0, 0.0, 1.0, 2.0]  # the registered action set (clips the reach at -2)
 V1_EDGE = [-3.0, *V1]  # + the one-step reach -3; flips one horizon sooner
 # + the one-step *return*: the walk reaches the cue at +1, and the goal at -3 is then a
@@ -435,8 +436,9 @@ def falsifiers(
     A falsifier does not pass. ``NOT TRIGGERED`` is "it ran and the condition did not
     obtain", so the claim survives it. ``NOT APPLICABLE`` is void by construction, so
     it is evidence for nothing and is not a survivor. ``NOT RUN HERE`` was measured
-    elsewhere. Rows 3 and 4 did not run here, so neither carries a warrant: the prover
-    cell is ``—``, because attributing one would claim evidence that was never produced.
+    elsewhere. Row 3 is void by construction and row 4 was measured elsewhere, so
+    neither produced evidence here and neither carries a warrant: the prover cell is
+    ``—``, because attributing one would claim evidence that was never produced.
 
     Rows 1, 2 and 5 read on both axes at once. On the prover axis they are ``PROVED``,
     resting on exhaustive enumeration and carrying its certificates. On the tier axis

@@ -213,9 +213,15 @@ to the coarse set at both H = 6 (`Gmin = 364.6430`, prior-ward) and H = 7 (`Gmin
 the same walk). The byte-identity is *expected* — the coarse set is a subset, so if the
 argmin lies in it the scores must match; that half is a code-correctness check riding along.
 The evidential content is the other half: **no intermediate action yields a lower `G`**, so
-subdividing does not move the optimum toward the cue. So H\* is stable under refinement
-(registered falsifier 4, not triggered). A step-0.25 grid was dropped on cost (`17⁷·7 ≈
-1.6B`). The 7 → 6 shift is a range *extension* supplying the omitted one-step reach, a
+subdividing does not move the optimum toward the cue.
+
+**That reading is withdrawn, and chapter 7 records why.** No commit in this repository
+builds a nine-action step-0.5 set, so the numbers above have no in-repo reproduction and
+the check suite reports falsifier 4 `NOT_RUN_HERE` with no warrant.
+`research/fep_falsification_battery.md` registers the cell as a re-measurement against
+`Gmin = 364.6430` and `425.1631`. Until that runs, "stable under refinement" is a claim
+this document makes and nothing here checks. A step-0.25 grid was dropped on cost
+(`17⁷·7 ≈ 1.6B`). The 7 → 6 shift is a range *extension* supplying the omitted one-step reach, a
 different operation from refinement.
 
 ## 4. Why — the mechanism (a decaying gradient, from accumulating ambiguity relief)
