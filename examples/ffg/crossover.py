@@ -49,6 +49,7 @@ from cpomdp.crossover import crossover_statistic
 from cpomdp.diagnostics import logdet_pd, rollout_conditioning
 from cpomdp.efe import policy_efe_ffg, policy_efe_ffg_trace
 from cpomdp.enumeration import (
+    ChunkedEfeSearch,
     CompletenessCertificate,
     EnumeratedEfeSearch,
     FiniteActionSet,
@@ -85,6 +86,14 @@ V1_EXT = [-4.0, *V1_EDGE]
 ACTION_SET = FiniteActionSet([[a] for a in V1], version="v1")
 EDGE_SET = FiniteActionSet([[a] for a in V1_EDGE], version="v1-edge")
 EXT_SET = FiniteActionSet([[a] for a in V1_EXT], version="v1-ext")
+# The refinement axis: the same [-2, 2] range at finer spacing, so the largest magnitude
+# does not move and neither branch's step count can. Registered as a stability test at
+# |dH*| <= 1 (fep_falsification_battery.md, 2026-08-20). Both run chunked: front-loaded
+# peak is 22.6 GiB at 9^8 and 210 GiB at 17^7, against a chunked 0.46 GiB (ADR-036).
+REFINE_05 = [round(-2.0 + 0.5 * i, 2) for i in range(9)]
+REFINE_025 = [round(-2.0 + 0.25 * i, 2) for i in range(17)]
+REFINE_05_SET = FiniteActionSet([[a] for a in REFINE_05], version="v1-refine-0.5")
+REFINE_025_SET = FiniteActionSet([[a] for a in REFINE_025], version="v1-refine-0.25")
 FLIP_H = 7  # the crossover horizon on ACTION_SET
 MAX_H = 7  # the exhaustive sweep budget (feasibility is |A|^H * H, printed below)
 # Declared feasibility bound: enumeration is feasible to H_MAX (5^9 * 9 = 17.6M scored
@@ -198,6 +207,46 @@ EXT_PROVENANCE = Provenance(
     measured_at="17a1be7",
     registered="extension axis registered at H* <= 6 (battery, 2026-08-20)",
 )
+
+
+class RefinementRow(NamedTuple):
+    """One refined-set horizon, measured on the chunked path.
+
+    Attributes:
+        horizon: the horizon enumerated.
+        gmin: the exhaustive minimum EFE there.
+        policy: the argmin, so a half-step action would be visible in it.
+        cue_ward: whether that argmin visits the cue.
+        certificate: the completeness certificate the loop's own count produced.
+    """
+
+    horizon: int
+    gmin: float
+    policy: object
+    cue_ward: bool
+    certificate: CompletenessCertificate
+
+
+def measure_refinement(action_set, horizon: int) -> RefinementRow:
+    """Enumerate a refined set at one horizon, in blocks.
+
+    Chunked rather than front-loaded, because these sets are why the chunked path
+    exists: the score vector alone is 3.28 GB at ``17^7``. Peak here is
+    block-determined and flat in ``|A|^H``, measured at 0.46 GiB on the step-0.5 set.
+    """
+    backend, belief, preference, info_block = _setup()
+    search = ChunkedEfeSearch.over_backend(
+        backend, action_set, info_block=info_block, horizon=horizon
+    )
+    result = search.reduce(belief, preference)
+    policy = np.asarray(result.best_policy).ravel()
+    return RefinementRow(
+        horizon=horizon,
+        gmin=float(result.best_g),
+        policy=policy,
+        cue_ward=_cue_ward(policy),
+        certificate=result.certificate,
+    )
 
 
 def _ext_certificate(horizon: int) -> CompletenessCertificate:
