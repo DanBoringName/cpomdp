@@ -84,3 +84,41 @@ Registering four falsifiers and testing two is a different claim from testing fo
 ```
 
 ::: warrantlib.check_summary
+
+## Writing a run down
+
+A run that prints and exits leaves nothing to compare against. Two questions need the
+record on disk: whether a registered check quietly stopped reporting, and whether one
+changed status between two versions of the work. Both are joins on `check_id`, and
+both fail if the form the record takes moves underneath them.
+
+`report_to_dict` writes one report as a JSON-ready mapping. Every value is a string, an
+integer, a list, a mapping or `None`, and the key order is fixed rather than taken from
+the input, so two runs of one suite produce the same bytes and a diff shows what
+changed rather than what moved. Enums travel as their values, which is why those values
+are words.
+
+`report_from_dict` reads one back through the constructor rather than around it. Every
+precondition still applies: a record naming `PROVED` with its evidence stripped does not
+construct. A wire form that could bypass the guard would make the guard optional.
+
+Reading refuses what it cannot read. A record from a schema version this one does not
+know, an evidence kind with no class behind it, an enum value that has since been
+renamed: each raises rather than resolving to the nearest thing that fits. `Tier.A`
+became `Tier.EXACT` once already, and a reader that had guessed its way through that
+rename would have reported a status change nobody made.
+
+Nothing here touches a filesystem. The caller decides where the bytes go.
+
+::: warrantlib.SCHEMA_VERSION
+
+::: warrantlib.report_to_dict
+
+::: warrantlib.report_from_dict
+
+A JSON Schema for the record ships beside the code, at `warrantlib/report.schema.json`.
+It is there for a consumer reading a ledger without Python, so it states what it can of
+the preconditions the constructor enforces: the key's shape, that a `PROVED` record
+carries evidence and a registration, and that a check which never ran carries no
+warrant. The test suite validates the writer's own output against it, since a schema
+nothing checks drifts from the writer without saying so.

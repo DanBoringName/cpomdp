@@ -15,6 +15,18 @@ an exposure rather than a result.
 
 ### Added
 
+- `report_to_dict` / `report_from_dict` / `SCHEMA_VERSION` (warrantlib 0.3.0) — a
+  report as a machine record and back. Every value is JSON-ready and the key order is
+  fixed, so two runs of one suite produce the same bytes and a diff shows what changed
+  rather than what moved. Enums travel as their values. Reading goes through the
+  constructor, so a record naming `PROVED` with its evidence stripped still does not
+  construct. A record from an unknown schema version, an evidence kind with no class
+  behind it, or an enum value that has since been renamed is refused rather than mapped
+  to whatever fits: `Tier.A` became `Tier.EXACT` once already, and a reader guessing its
+  way through that rename would have reported a status change nobody made. Nothing here
+  touches a filesystem. A JSON Schema for the record ships beside the code at
+  `warrantlib/report.schema.json`, for a consumer reading a ledger without Python, and
+  the suite validates the writer's own output against it.
 - `CheckReport.check_id` (warrantlib 0.3.0) — the check as a key, beside the prose name
   it already carried. Dot-separated segments of letters, digits and underscores, refused
   at construction if anything else appears. The name is what a summary line reads and is

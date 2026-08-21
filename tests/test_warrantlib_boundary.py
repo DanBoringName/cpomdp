@@ -12,10 +12,17 @@ are defined in `warrantlib`, and a copy rather than a re-export would break ever
 `isinstance` check that crosses the two.
 
 One more pins the façade. The definitions live in `warrantlib._vocabulary` and
-`warrantlib/__init__.py` re-exports them by hand, so a new public name added to the one
-and forgotten in the other is invisible: it imports fine from its own module and is
-absent from the published surface. The source is read rather than the imported module,
-because the imported module cannot tell a definition from an import.
+`warrantlib._serialise`, and `warrantlib/__init__.py` re-exports them by hand, so a new
+public name added to one and forgotten in the other is invisible: it imports fine from
+its own module and is absent from the published surface. The source is read rather than
+the imported module, because the imported module cannot tell a definition from an
+import.
+
+`cpomdp.warrant` is held to a weaker rule, and deliberately. It exists so import paths
+that predate the split keep working, so it mirrors the names cpomdp itself once
+exported and does not grow as warrantlib does. A name that was never in cpomdp has no
+old path to preserve, and adding one here would build a second public surface to
+maintain past 1.0 (ADR-039).
 """
 
 import ast
@@ -27,7 +34,7 @@ import cpomdp
 import cpomdp.warrant
 import warrantlib
 from cpomdp.enumeration import CompletenessCertificate, SearchWarrant
-from warrantlib import _vocabulary
+from warrantlib import _serialise, _vocabulary
 
 _NO_CPOMDP = """
 import sys
@@ -46,10 +53,26 @@ def test_warrantlib_imports_nothing_from_cpomdp():
     assert completed.returncode == 0, completed.stdout + completed.stderr
 
 
-def test_cpomdp_warrant_re_exports_every_name():
-    for name in warrantlib.__all__:
+def test_cpomdp_warrant_re_exports_every_name_it_carries():
+    for name in cpomdp.warrant.__all__:
         assert getattr(cpomdp.warrant, name) is getattr(warrantlib, name), name
-    assert set(cpomdp.warrant.__all__) == set(warrantlib.__all__)
+    assert set(cpomdp.warrant.__all__) <= set(warrantlib.__all__)
+
+
+def test_the_shim_carries_the_vocabulary_cpomdp_once_exported():
+    # The subset rule above is satisfied by a shim that has lost a name, which is the
+    # breakage it exists to prevent. This is the floor it may not fall below.
+    assert set(cpomdp.warrant.__all__) == {
+        "CheckReport",
+        "CompletenessCertificate",
+        "Evidence",
+        "Outcome",
+        "Provenance",
+        "SymbolicReduction",
+        "Tier",
+        "Warrant",
+        "check_summary",
+    }
 
 
 def test_top_level_names_are_the_warrantlib_objects():
@@ -64,10 +87,10 @@ def test_enumeration_re_exports_the_certificate_and_the_alias():
 
 
 def _defined_public_names() -> set[str]:
-    """Top-level public names `_vocabulary.py` defines, read from its source."""
-    source = Path(_vocabulary.__file__).read_text()
+    """Top-level public names the private modules define, read from their source."""
     names = set()
-    for node in ast.parse(source).body:
+    sources = (Path(_vocabulary.__file__), Path(_serialise.__file__))
+    for node in [n for path in sources for n in ast.parse(path.read_text()).body]:
         if isinstance(node, ast.ClassDef | ast.FunctionDef):
             names.add(node.name)
         elif isinstance(node, ast.Assign):

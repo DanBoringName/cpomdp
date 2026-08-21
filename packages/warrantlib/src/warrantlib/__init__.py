@@ -19,6 +19,11 @@ carries: which ref registered the claim, and which one measured it.
 The standard library is the only dependency.
 """
 
+from warrantlib._serialise import (
+    SCHEMA_VERSION,
+    report_from_dict,
+    report_to_dict,
+)
 from warrantlib._vocabulary import (
     CheckReport,
     CompletenessCertificate,
@@ -32,6 +37,7 @@ from warrantlib._vocabulary import (
 )
 
 __all__ = [
+    "SCHEMA_VERSION",
     "CheckReport",
     "CompletenessCertificate",
     "Evidence",
@@ -41,4 +47,6 @@ __all__ = [
     "Tier",
     "Warrant",
     "check_summary",
+    "report_from_dict",
+    "report_to_dict",
 ]

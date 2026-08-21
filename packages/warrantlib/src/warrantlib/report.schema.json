@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/inferogenesis/cpomdp/warrantlib/report.schema.json",
+  "title": "warrantlib check report",
+  "description": "One check's result as `report_to_dict` writes it. Shipped so a consumer outside Python can read a ledger without reimplementing the vocabulary's preconditions. The preconditions themselves are not all expressible here: that a PROVED report carries evidence and a provenance is enforced by the constructor, and this schema states it where a JSON Schema can.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "check_id",
+    "name",
+    "warrant",
+    "outcome",
+    "tier",
+    "detail",
+    "evidence",
+    "provenance"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "description": "The version of this form. A reader that does not know it refuses the record.",
+      "const": "1.0"
+    },
+    "check_id": {
+      "description": "The check as a key: dot-separated segments of letters, digits and underscores. What a manifest declares and what joins one run to the next.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)*$"
+    },
+    "name": {
+      "description": "The check as prose, one line, as a summary reads it.",
+      "type": "string",
+      "minLength": 1
+    },
+    "warrant": {
+      "description": "The prover class behind the claim, or null where the check produced no evidence to classify.",
+      "type": ["string", "null"],
+      "enum": ["PROVED", "CERTIFIED", "CORROBORATED", null]
+    },
+    "outcome": {
+      "description": "What the falsifier did. The last two never ran here and carry no warrant.",
+      "type": "string",
+      "enum": [
+        "NOT TRIGGERED",
+        "FIRED",
+        "NOT RESOLVED",
+        "NOT APPLICABLE",
+        "NOT RUN HERE"
+      ]
+    },
+    "tier": {
+      "description": "What the check was measured against.",
+      "type": "string",
+      "enum": ["exact", "bounded", "computed"]
+    },
+    "detail": {
+      "description": "Why the check reports what it reports, in one line.",
+      "type": "string",
+      "minLength": 1
+    },
+    "evidence": {
+      "description": "What backs the claim, one entry per decisive prover. Non-empty when the warrant is PROVED.",
+      "type": "array",
+      "items": {
+        "oneOf": [
+          { "$ref": "#/$defs/completenessCertificate" },
+          { "$ref": "#/$defs/symbolicReduction" }
+        ]
+      }
+    },
+    "provenance": {
+      "description": "Which ref registered the claim and which one measured it. Non-empty when the warrant is PROVED.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/provenance" }
+    }
+  },
+  "allOf": [
+    {
+      "description": "A decided universal names its evidence and its registration.",
+      "if": { "properties": { "warrant": { "const": "PROVED" } } },
+      "then": {
+        "properties": {
+          "evidence": { "minItems": 1 },
+          "provenance": { "minItems": 1 }
+        }
+      }
+    },
+    {
+      "description": "A check that never ran here produced no evidence, so there is no prover class to report.",
+      "if": {
+        "properties": {
+          "outcome": { "enum": ["NOT APPLICABLE", "NOT RUN HERE"] }
+        },
+        "required": ["outcome"]
+      },
+      "then": { "properties": { "warrant": { "const": null } } }
+    }
+  ],
+  "$defs": {
+    "completenessCertificate": {
+      "title": "completeness certificate",
+      "description": "Evidence a finite domain was enumerated in full: expected == |A|^H, and visited == expected.",
+      "type": "object",
+      "required": [
+        "kind",
+        "expected",
+        "visited",
+        "warrant",
+        "action_set_size",
+        "horizon",
+        "action_set_version"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "completeness_certificate" },
+        "expected": { "type": "integer" },
+        "visited": { "type": "integer" },
+        "warrant": { "type": "string", "enum": ["PROVED", "CERTIFIED", "CORROBORATED"] },
+        "action_set_size": { "type": "integer" },
+        "horizon": { "type": "integer" },
+        "action_set_version": { "type": "string", "minLength": 1 }
+      }
+    },
+    "symbolicReduction": {
+      "title": "symbolic reduction",
+      "description": "Evidence for a claim decided by argument rather than by enumeration. `correspondence` names where the symbolic setup was checked against the analytic problem, which a CAS does not do.",
+      "type": "object",
+      "required": ["kind", "claim", "correspondence", "assumptions"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "symbolic_reduction" },
+        "claim": { "type": "string", "minLength": 1 },
+        "correspondence": { "type": "string", "minLength": 1 },
+        "assumptions": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "provenance": {
+      "title": "provenance",
+      "description": "A ref is a git commit SHA, an http(s) URL or a DOI. A path, a branch and a tag are refused, because each resolves to a different tree every time it is read.",
+      "type": "object",
+      "required": ["registered_at", "measured_at", "registered"],
+      "additionalProperties": false,
+      "properties": {
+        "registered_at": { "type": "string", "minLength": 1 },
+        "measured_at": { "type": "string", "minLength": 1 },
+        "registered": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}
