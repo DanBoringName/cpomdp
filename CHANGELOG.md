@@ -15,6 +15,16 @@ an exposure rather than a result.
 
 ### Added
 
+- `CheckReport.check_id` (warrantlib 0.3.0) — the check as a key, beside the prose name
+  it already carried. Dot-separated segments of letters, digits and underscores, refused
+  at construction if anything else appears. The name is what a summary line reads and is
+  reworded whenever the wording improves; the key is what a manifest declares before a
+  run and what joins one run's report to the next. Deriving the key from the name would
+  tie the two together, so the first rewording would read as one check dropped and one
+  added. Required rather than defaulted: a report with no key is reconcilable with
+  nothing, which is every job the field exists for. Every check in `research.checks` and
+  in `examples/ffg/crossover.py` now declares one, and `NoiseFamily` carries the `key`
+  those ids are built from.
 - `Provenance` (warrantlib 0.2.0) — which ref registered a claim and which one measured
   it, plus one line saying what a reviewer will find at the first. A `PROVED` report
   requires one, on the same terms as it requires evidence, and carries them as a tuple

@@ -207,6 +207,12 @@ class SymbolicReduction:
         return f"symbolic: {self.claim} (per {self.correspondence}, {scope})"
 
 
+#: A check's id: dot-separated segments of ASCII letters, digits and underscores.
+#: Spelled out rather than `\w`, which matches unicode by default and would admit the
+#: maths glyphs the prose names use (`c₂`), so two ids could differ by a character a
+#: reader cannot tell apart.
+_CHECK_ID = re.compile(r"[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*")
+
 #: A git commit, abbreviated or full. Seven digits is git's own floor for an unambiguous
 #: abbreviation. Case-insensitive, because a pasted hash sometimes is. Accepts a few
 #: English words as a side effect, `deadbeef` and `defaced` among them. Refusing those
@@ -434,6 +440,9 @@ class CheckReport:
 
     Args:
         name: which check this is, as it appears in the summary.
+        check_id: the same check as a key, in dot-separated segments of letters,
+            digits and underscores. The name is prose and is reworded; this is what a
+            manifest declares and what two runs are joined on, so it is not.
         warrant: the prover class behind the claim, or ``None`` where the check
             produced no evidence to classify.
         outcome: what the falsifier did.
@@ -459,6 +468,7 @@ class CheckReport:
     """
 
     name: str
+    check_id: str
     warrant: Warrant | None
     outcome: Outcome
     tier: Tier
@@ -468,6 +478,23 @@ class CheckReport:
 
     def __post_init__(self) -> None:
         """Reject a claim with nothing behind it, at either of two strengths."""
+        subject = f"check {self.name!r}"
+        _reject_unreadable(
+            subject,
+            "check_id",
+            self.check_id,
+            "The id is what a manifest declares and what joins one run's report to "
+            "the next. A report without one is reconcilable with nothing.",
+        )
+        if not _CHECK_ID.fullmatch(self.check_id):
+            raise ValueError(
+                f"{subject} has check_id={self.check_id!r}, which is not a key. An id "
+                "is dot-separated segments of letters, digits and underscores, as in "
+                "gap_series.c2_closed_form or R10.crossover_flip. The prose name is "
+                "the other field. A key carrying prose moves whenever the prose is "
+                "reworded, and a ledger comparing two runs then reads one check as "
+                "one dropped and one added."
+            )
         if not isinstance(self.evidence, tuple):
             raise ValueError(
                 f"check {self.name!r} passed evidence as "

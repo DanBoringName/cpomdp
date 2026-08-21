@@ -114,6 +114,8 @@ class NoiseFamily:
 
     Args:
         name: how the family prints, in the notation the registration uses.
+        key: the same family as a key, matching its entry in `FAMILIES`. A check's id
+            is built from it, and the printed name carries maths glyphs an id may not.
         noise: `R` — state-dependent sensor noise, evaluated elementwise on arrays.
         prior_mean: μ — the prior mean the gap is expanded about.
         unbounded: whether `R` grows without bound in `x`. A declared property of a
@@ -129,12 +131,29 @@ class NoiseFamily:
     """
 
     name: str
+    key: str
     noise: Callable[[np.ndarray], np.ndarray]
     prior_mean: float
     unbounded: bool
     crossover: Callable[[float], float] | None = None
     reference: dict[float, float] | None = None
     log_noise_derivative: float | None = None
+
+
+def sigma_slug(sigma: float) -> str:
+    """`σ` as a key fragment, for a check id that names the cell it measured.
+
+    A check id admits letters, digits and underscores, so the decimal point cannot
+    travel into one. Rendering it as ``p`` keeps the number readable in the id rather
+    than replacing it with a cell index nothing else uses.
+
+    Args:
+        sigma: σ — the prior standard deviation.
+
+    Returns:
+        The value to three decimals, with the point as ``p``: ``0.15`` gives ``0p150``.
+    """
+    return f"{sigma:.3f}".replace(".", "p")
 
 
 def _d4_crossover(prior_variance: float) -> float:
@@ -161,6 +180,7 @@ def _d4_crossover(prior_variance: float) -> float:
 FAMILIES: dict[str, NoiseFamily] = {
     "quadratic": NoiseFamily(
         name="1 + x²",
+        key="quadratic",
         noise=lambda x: 1.0 + x**2,
         prior_mean=1.0,
         unbounded=True,
@@ -177,6 +197,7 @@ FAMILIES: dict[str, NoiseFamily] = {
     ),
     "exponential": NoiseFamily(
         name="exp(x)",
+        key="exponential",
         noise=np.exp,
         prior_mean=1.0,
         unbounded=True,
@@ -185,6 +206,7 @@ FAMILIES: dict[str, NoiseFamily] = {
     ),
     "tanh": NoiseFamily(
         name="1.5 + 0.5 tanh(x)",
+        key="tanh",
         noise=lambda x: 1.5 + 0.5 * np.tanh(x),
         prior_mean=1.0,
         unbounded=False,
@@ -194,6 +216,7 @@ FAMILIES: dict[str, NoiseFamily] = {
     ),
     "sin": NoiseFamily(
         name="1.5 + 0.5 sin(x)",
+        key="sin",
         noise=lambda x: 1.5 + 0.5 * np.sin(x),
         prior_mean=1.0,
         unbounded=False,
@@ -204,6 +227,7 @@ FAMILIES: dict[str, NoiseFamily] = {
     #: and was therefore measuring nothing. Kept as a falsifier of the implementation.
     "constant": NoiseFamily(
         name="2 (fixed)",
+        key="constant",
         noise=lambda x: np.full_like(np.asarray(x, dtype=float), 2.0),
         prior_mean=1.0,
         unbounded=False,

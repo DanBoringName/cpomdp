@@ -95,6 +95,7 @@ from warrantlib import (
 
 report = CheckReport(
     name="second gap coefficient",
+    check_id="gap_series.c2_closed_form",
     warrant=Warrant.PROVED,
     outcome=Outcome.NOT_TRIGGERED,
     tier=Tier.EXACT,

@@ -205,6 +205,7 @@ class TestCheckReport:
             provenance = (_provenance(),) if warrant is Warrant.PROVED else ()
         return CheckReport(
             name="flip-decided",
+            check_id="tests.flip_decided",
             warrant=warrant,
             outcome=outcome,
             tier=tier,
@@ -267,12 +268,92 @@ class TestCheckReport:
         assert "—" in line
 
 
+class TestCheckId:
+    """The key a ledger and a manifest join on, kept apart from the prose name."""
+
+    def _report(self, check_id):
+        return CheckReport(
+            name="flip-decided",
+            check_id=check_id,
+            warrant=Warrant.CORROBORATED,
+            outcome=Outcome.NOT_TRIGGERED,
+            tier=Tier.COMPUTED,
+            detail="exhaustive argmin over crossover-v1^7 is cue-ward",
+        )
+
+    def test_the_id_is_required(self):
+        # A report with no id cannot be reconciled against a manifest or matched to
+        # itself in a later run, which is every job the id exists for.
+        with pytest.raises(TypeError):
+            CheckReport(  # ty: ignore[missing-argument]
+                name="flip-decided",
+                warrant=Warrant.CORROBORATED,
+                outcome=Outcome.NOT_TRIGGERED,
+                tier=Tier.COMPUTED,
+                detail="exhaustive argmin over crossover-v1^7 is cue-ward",
+            )
+
+    def test_it_is_carried_beside_the_name(self):
+        report = self._report("gap_series.c2_closed_form")
+        assert report.check_id == "gap_series.c2_closed_form"
+        assert report.name == "flip-decided"
+
+    @pytest.mark.parametrize(
+        "check_id",
+        [
+            "gap_series.c2_closed_form",
+            "series_kernel.k5_first_cumulant",
+            "R10.crossover_flip",
+            "c2",
+            "A1",
+            "a.b.c.d",
+        ],
+    )
+    def test_a_key_shaped_id_constructs(self, check_id):
+        assert self._report(check_id).check_id == check_id
+
+    @pytest.mark.parametrize(
+        "check_id",
+        [
+            "K5 first cumulant is the mean",  # the prose name, which is not a key
+            "gap-series.c2",  # hyphen
+            "gap_series..c2",  # empty segment
+            ".gap_series",  # leading dot
+            "gap_series.",  # trailing dot
+            "",  # nothing at all
+            "gap_series.c₂",  # the maths glyph the prose uses
+            "gap_series/c2",  # a path
+            "gap series",  # a space
+        ],
+    )
+    def test_an_id_that_is_not_a_key_does_not_construct(self, check_id):
+        with pytest.raises(ValueError, match="check_id"):
+            self._report(check_id)
+
+    def test_a_line_break_does_not_construct(self):
+        with pytest.raises(ValueError, match="check_id"):
+            self._report("gap_series.c2\nc4")
+
+    @pytest.mark.parametrize("value", [None, 3, b"gap_series.c2", ["gap_series.c2"]])
+    def test_an_id_that_is_not_text_does_not_construct(self, value):
+        with pytest.raises(ValueError, match="check_id"):
+            self._report(value)
+
+    def test_the_message_says_why_a_key_is_not_the_prose_name(self):
+        with pytest.raises(ValueError, match="not a key") as raised:
+            self._report("K5 first cumulant is the mean")
+        message = str(raised.value)
+        assert "check_id" in message
+        assert "flip-decided" in message  # which check, so a run names the offender
+
+
 class TestChecksThatNeverRanCarryNoWarrant:
     """A check that produced no evidence has no prover verdict to report."""
 
     def _report(self, *, warrant, outcome):
         return CheckReport(
             name="void-check",
+            check_id="tests.flip_decided",
             warrant=warrant,
             outcome=outcome,
             tier=Tier.COMPUTED,
@@ -567,6 +648,7 @@ class TestProvedNeedsEvidence:
             provenance = (_provenance(),) if warrant is Warrant.PROVED else ()
         return CheckReport(
             name="flip-decided",
+            check_id="tests.flip_decided",
             warrant=warrant,
             outcome=outcome,
             tier=Tier.EXACT,
@@ -724,8 +806,12 @@ class TestCheckSummary:
     """Counts per (warrant × outcome), so a green run says what it decided."""
 
     def _report(self, name, warrant, outcome, evidence=()):
+        # These cases pass short prose names and read counts back, so the id is derived
+        # here rather than declared. A suite may not do this: a derived key moves when
+        # the prose does, which is what `check_id` exists to stop.
         return CheckReport(
             name=name,
+            check_id="tests." + name.lower().replace(" ", "_"),
             warrant=warrant,
             outcome=outcome,
             tier=Tier.COMPUTED,

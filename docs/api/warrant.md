@@ -24,6 +24,8 @@ A registered falsifier does not pass. It fires or it does not, and `PASS` is abs
 
 `Tier` says what the check was measured against, and cuts across the other two rather than ranking them. An `EXACT` closed-form reference can be sampled, and an exhaustive enumeration can produce a `COMPUTED` number.
 
+A report carries two names. `name` is prose and reads in a summary line, so it is reworded whenever the wording improves. `check_id` is the key: dot-separated segments of letters, digits and underscores, refused at construction if anything else appears in it. The separation is what lets a manifest declare a check before the run and a later run be joined to an earlier one. Deriving the key from the prose would tie the two together, and the first reworded name would read as one check dropped and one added.
+
 A check that never ran carries no warrant. `CORROBORATED` means sampling-grade evidence was obtained, so attributing it to a falsifier that sampled nothing claims evidence that does not exist. The warrant is `None` there and prints as `—`, enforced at construction.
 
 A `PROVED` report needs evidence, enforced at construction. There are two kinds, one per decisive prover. `CompletenessCertificate` backs an exhaustive enumeration over a finite domain. `SymbolicReduction` backs a theorem or a symbolic identity (Provers 1 and 2), which decide by argument and enumerate nothing, so a certificate is the wrong evidence for them rather than a missing one. The weaker levels need none, because a bound and a sample carry their story in `detail`. Report `PROVED` with nothing behind it and the constructor raises.
