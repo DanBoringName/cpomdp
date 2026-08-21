@@ -356,6 +356,32 @@ flat in `|A|^H` (ADR-036). A front-loaded run of either is **VOID (budget)**, no
 **Outcome vocabulary.** Each axis reports `PASS`, `FAIL` or `VOID` against the above. Budget
 overrun is `VOID`, meaning unmeasured, and never "stable".
 
+### AMENDMENT 2026-08-21: what a `Gmin` disagreement means, registered before the run
+
+The step-`0.5` re-measurement compares against two published numbers, `Gmin = 364.6430` at
+`H = 6` and `425.1631` at `H = 7`. The registered falsifier is `|ΔH*| ≤ 1`, which is a
+statement about the horizon and says nothing about those scores. Without a rule written
+first, a disagreement would be adjudicated after the fact by whoever preferred which
+answer.
+
+**The two are reported separately, and neither is collapsed into the other.**
+
+- **`H*` is the falsifier.** `|ΔH*| ≤ 1` reports `NOT_TRIGGERED`; `|ΔH*| ≥ 2` reports
+  `FIRED`. That verdict does not depend on the scores agreeing.
+- **A `Gmin` disagreement is a separate result.** It says the published numbers are wrong,
+  not that refinement moved the optimum. It lands as its own dated `RESULT`, retracts the
+  published values and records the measured ones. It does **not** fire falsifier 4 on its
+  own.
+- **Tolerance.** The published values carry four decimal places, so agreement means equal
+  to within `5e-5`, the half-ulp of the last printed digit. A disagreement larger than that
+  is a real difference rather than a rounding artefact of the transcription.
+
+Both outcomes get stated. A run where `H*` is stable and the scores disagree is a passing
+falsifier beside a retracted number, and reporting only the first would bury the second.
+
+The two new-ground cells, `H = 8` and step-`0.25`, have no published values to compare
+against, so this amendment does not apply to them.
+
 ### RESULT 2026-08-20: extension axis, `{−4,…,2}`, **PASS**
 
 Registered above at `H* ≤ 6` before the run. Measured `H* = 6`. Certified `PROVED (set
