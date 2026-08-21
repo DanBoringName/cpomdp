@@ -303,14 +303,16 @@ def test_crossover_falsifiers_are_reports():
         if report.name.startswith(("1.", "2.")):
             assert "bound" in report.detail
             assert "upper bound" in report.detail
-        elif report.name.startswith("4."):
-            assert "registered bar" in report.detail
         else:
+            # Rows 4 and 5 are measured against a registered bar instead of carrying
+            # the upper-bound qualifier, so they say `bar`.
             assert "registered bar" in report.detail
 
-    # The two that never ran stay distinct, and neither claims a prover.
+    # Only row 3 produces no evidence now: it is void by construction, with no
+    # observation draw to vary. Row 4 was NOT_RUN_HERE until the step-0.5 refinement was
+    # measured, and a row that has been run carries its warrant.
     unrun = {r.outcome for r in reports if r.warrant is None}
-    assert unrun == {Outcome.NOT_APPLICABLE, Outcome.NOT_RUN_HERE}
+    assert unrun == {Outcome.NOT_APPLICABLE}
 
     summary = check_summary(reports)
     assert "PROVED" in summary
