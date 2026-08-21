@@ -177,12 +177,27 @@ class TestCrossoverFalsifierReporting:
             )
             assert row.certificate.complete
         assert crossover.refinement_h_star() == crossover.FLIP_H
+        assert (
+            crossover.refinement_h_star(crossover.REFINEMENT_025_ROWS)
+            == crossover.FLIP_H
+        )
+
+    def test_the_two_refinement_cells_agree_exactly(self):
+        # 86x the policies and twice the actions, and the scores do not move a digit.
+        # Byte-identity is expected where the argmin lies in the coarser set, which is
+        # the code-correctness half. The evidential half is that it does lie there.
+        by_horizon = {r.horizon: r for r in crossover.REFINEMENT_025_ROWS}
+        for coarse in crossover.REFINEMENT_05_ROWS:
+            fine = by_horizon[coarse.horizon]
+            assert fine.gmin == coarse.gmin, coarse.horizon
+            assert fine.policy == coarse.policy, coarse.horizon
+            assert fine.certificate.complete
 
     def test_no_half_step_action_reaches_the_recorded_argmins(self):
         # The evidential half: byte-identity to the coarse set is expected because it
         # is a subset. What refinement could have shown is an intermediate action
         # scoring lower, and none does.
-        for row in crossover.REFINEMENT_05_ROWS:
+        for row in (*crossover.REFINEMENT_05_ROWS, *crossover.REFINEMENT_025_ROWS):
             assert all(float(a) == int(a) for a in row.policy), row.policy
 
     def test_a_set_that_cannot_sense_the_cue_is_void(self):

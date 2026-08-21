@@ -320,7 +320,7 @@ result and says so; the refinement rows are not, with the qualification below.
 | --- | --- | --- | --- |
 | extension | `{−4,…,2}`, 7 actions, spacing 1 | `H* ≤ 6`. `−4` shortens the cue-ward return from two steps to one and buys the prior-ward reach nothing, since `−3` already covers it in one | **PASS**, measured `H* = 6`, see below |
 | refinement | step `0.5`, 9 actions over `[−2,2]` | stability, `\|ΔH*\| ≤ 1`. No direction is arguable: the largest magnitude does not move, so neither branch's step count does | **PASS**, `H* = 7`, `\|ΔH*\| = 0`, see below |
-| refinement | step `0.25`, 17 actions over `[−2,2]` | stability, `\|ΔH*\| ≤ 1`, same argument | not measured, no prior claim |
+| refinement | step `0.25`, 17 actions over `[−2,2]` | stability, `\|ΔH*\| ≤ 1`, same argument | **PASS**, `H* = 7`, `\|ΔH*\| = 0`, byte-identical to step `0.5` |
 
 Budget, declared in both units because they disagree. Time at the measured 39.0k
 policies/s. `VOID (budget)` on overrun, which means unmeasured and never "stable".
@@ -357,6 +357,13 @@ lattice lands on the cue and no cell is void by geometry.
 Both scores agree with the published `364.6430` and `425.1631` inside the `5e-5` tolerance
 registered on 2026-08-21, so nothing is retracted. No half-step action appears in either
 argmin. The `9^8` cell was contingent on `H*` rising and is therefore not required.
+
+**step-`0.25` gives the identical numbers.** Measured at `c37fac3`: `364.642964185792` at
+`H = 6` over 24,137,569 policies and `425.163110098734` at `H = 7` over 410,338,673, both
+certified `PROVED`, 2.5 hours at 46,124 policies/s, peak 0.47 GiB. Not a digit moves
+against step-`0.5`, across twice the actions and 86 times the policies, and no
+quarter-step action reaches either argmin. `H* = 7` on both cells, so the refinement axis
+passes at both spacings.
 
 **The step-`0.5` cell already has published numbers, and no run behind them.**
 `research/r10_open_loop_crossover.md` reports the argmin byte-identical to the coarse set

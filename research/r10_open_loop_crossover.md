@@ -215,13 +215,14 @@ argmin lies in it the scores must match; that half is a code-correctness check r
 The evidential content is the other half: **no intermediate action yields a lower `G`**, so
 subdividing does not move the optimum toward the cue.
 
-**That reading is withdrawn, and chapter 7 records why.** No commit in this repository
-builds a nine-action step-0.5 set, so the numbers above have no in-repo reproduction and
-the check suite reports falsifier 4 `NOT_RUN_HERE` with no warrant.
-`research/fep_falsification_battery.md` registers the cell as a re-measurement against
-`Gmin = 364.6430` and `425.1631`. Until that runs, "stable under refinement" is a claim
-this document makes and nothing here checks. A step-0.25 grid was dropped on cost
-(`17⁷·7 ≈ 1.6B`). The 7 → 6 shift is a range *extension* supplying the omitted one-step reach, a
+**Re-measured 2026-08-21, and the numbers hold.** These values had no in-repo
+reproduction when they were first written, so the reading was withdrawn and the cell
+registered as a re-measurement. It has now run under a completeness certificate:
+`364.642964185792` at H = 6 and `425.163110098734` at H = 7, agreeing with the published
+figures to every printed digit. The step-0.25 grid, dropped on cost at the time
+(`17⁷·7 ≈ 1.6B` scored steps), has also run and returns the identical two numbers across
+86 times the policies. `H* = 7` on both, so falsifier 4 is discharged and carries its
+warrant. The 7 → 6 shift is a range *extension* supplying the omitted one-step reach, a
 different operation from refinement.
 
 ## 4. Why — the mechanism (a decaying gradient, from accumulating ambiguity relief)
@@ -386,13 +387,12 @@ vocabulary: *not triggered* for the ones this run tested, *not applicable* for t
 - **Falsifier 3** (not reproducible across seeds): *not applicable* — void by construction,
   since the open-loop object carries no observation draw; the enumeration is deterministic
   and recomputes identically.
-- **Falsifier 4** (H\* unstable under a declared refinement): *not run here*. Chapter 4.3
-  records a step-0.5 refinement leaving the H = 6 and H = 7 argmins byte-identical, but no
-  commit in this repository builds a nine-action step-0.5 set, so that reading has no
-  in-repo reproduction and the check suite reports the falsifier `NOT_RUN_HERE` with no
-  warrant. `research/fep_falsification_battery.md` registers the cell as a re-measurement
-  against `Gmin = 364.6430` and `425.1631`, which is what will settle it. Until then this
-  falsifier is undischarged, and the earlier "not triggered" reading is withdrawn.
+- **Falsifier 4** (H\* unstable under a declared refinement): *not triggered* — measured
+  at two spacings under completeness certificates. `H* = 7` on step-0.5 (`9⁷` policies)
+  and on step-0.25 (`17⁷ = 410,338,673`), against 7 on the coarse set, so `|ΔH*| = 0`
+  inside the registered bar of 1. Both cells return `Gmin = 364.642964185792` and
+  `425.163110098734`, identical to each other and to the figures chapter 4.3 published
+  before any commit built the sets. No sub-step action reaches any argmin.
 - **Falsifier 5** (H\* unstable under a declared extension): *not triggered* — `H* = 6` on
   `{−4,…,2}`, against a bar of `H* ≤ 6` registered a commit before the run, decided by
   exhaustive enumeration under a completeness certificate. The 7 → 6 shift is a range

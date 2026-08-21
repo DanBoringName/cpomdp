@@ -2679,3 +2679,46 @@ not accuracy, so the retraction was about provenance and it is now discharged.
 - **step-`0.25` is outstanding**, at 410,338,673 policies and a projected 2.7 hours at the
   measured 41,982 policies/s. Deferred on time, not on budget or memory. The registered
   stability test stands for it, so PR-2's merge gate is not yet met.
+
+## ADR-043 — the refinement axis answered at both spacings
+
+**Date:** 2026-08-21
+**Status:** Accepted
+**Extends:** ADR-042 (the fourth D3 falsifier, registered on two axes)
+
+### What changed
+
+ADR-042 left step-`0.25` outstanding, deferred on wall-clock. It has now run:
+410,338,673 policies at `H = 7` in 2.5 hours at 46,124 policies/s, peak 0.47 GiB,
+certified `PROVED` with every policy visited.
+
+`H* = 7`, so `|ΔH*| = 0` against the registered bar of 1. Both refinement cells pass, both
+axes of the fourth D3 falsifier report an outcome, and PR-2's merge gate is met.
+
+### The finding worth keeping
+
+**The two spacings agree to the digit.** `364.642964185792` at `H = 6` and
+`425.163110098734` at `H = 7`, byte-identical between step-`0.5` and step-`0.25`, across a
+set with twice the actions and 86 times the policies. No quarter-step action reaches
+either argmin, just as no half-step did.
+
+Half of that is expected and worth naming as such: the coarser set is a subset, so where
+the argmin lies in it the scores must match. That half is a code-correctness check riding
+along. The evidential half is that the argmin does lie in it, at both spacings. Refinement
+had two chances to move the optimum toward the cue and took neither.
+
+### Consequences
+
+- **`H* = 7` is robust to how finely the range is sampled, and moves only when the range
+  itself widens.** Extension shifted it to 6 and then saturated. Refinement does not shift
+  it at all. The release's qualifier, that 7 is an upper bound *because the set clips the
+  reach*, is now measured rather than asserted: it is the clipping that matters, not the
+  grid.
+- **The chunked path is what made this answerable.** `enumeration_cost` read 210 GiB for
+  this cell on the front-loaded path against 19 GiB of machine. Measured peak was 0.47
+  GiB, so the cell was never budget-bound, only slow. A registration that had treated the
+  front-loaded figure as the budget would have declared it `VOID` and recorded a
+  non-result.
+- **Nothing re-enumerates on a gate.** Both cells are recorded constants carrying their
+  certificates and a provenance, reproducible with `--refinement`. Cheap tests assert the
+  recorded values, including that the two cells agree exactly.

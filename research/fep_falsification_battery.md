@@ -444,7 +444,30 @@ was started and stopped rather than run to completion, and it is not outstanding
 measured 41,982 policies/s, peak flat at 0.46 GiB. Deferred on time, not on budget or
 memory. The registered stability test stands for it.
 
-The refinement axis is discharged at step-`0.5` and outstanding at step-`0.25`.
+### RESULT 2026-08-21: refinement axis, step-`0.25` — **PASS**, and both cells agree exactly
+
+Measured at `c37fac3` on the chunked path, 410,338,673 policies at `H = 7` in 2.5 hours at
+46,124 policies/s, peak 0.47 GiB.
+
+| H | policies | `Gmin` | argmin | plan |
+| --- | --- | --- | --- | --- |
+| 6 | 24,137,569 | 364.642964185792 | `[−2,−1,0,0,0,0]` | prior-ward |
+| 7 | 410,338,673 | 425.163110098734 | `[+1,−2,−2,0,0,0,0]` | cue-ward |
+
+`H* = 7`, so `|ΔH*| = 0` against the registered bar of 1. Both horizons certified
+`PROVED`, every policy visited.
+
+**The two refinement cells agree to the digit.** `364.642964185792` and
+`425.163110098734` are byte-identical to the step-`0.5` values, across a set with twice
+the actions and 86 times the policies. No quarter-step action reaches either argmin, just
+as no half-step did.
+
+Byte-identity is the expected half: the coarser set is a subset, so if the argmin lies in
+it the scores must match. The evidential half is that the argmin does lie in it. Twice
+now, at two spacings, subdividing offered the optimum nothing it took.
+
+**Both axes now report.** Extension `PASS` at `H* = 6`, refinement `PASS` at `H* = 7` on
+both cells. The fourth D3 falsifier is discharged and PR-2's merge gate is met.
 
 **D4 · certified discretisation bound · GATE-D4** · SEVERE · R9 · toolbox C · tier `BOUNDED` · **PR-8 · v0.4.5, hard gate**
 

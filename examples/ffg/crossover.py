@@ -288,6 +288,41 @@ REFINEMENT_05_ROWS = (
     ),
 )
 
+#: The step-0.25 refinement, measured at `c37fac3` and reproducible with `--refinement`.
+#: 410,338,673 policies at H = 7, 2.5 hours at 46k policies/s, peak 0.47 GiB. Both
+#: scores are byte-identical to the step-0.5 cell across 86x the policies, and no
+#: quarter-step action reaches either argmin.
+REFINEMENT_025_ROWS = (
+    RefinementRow(
+        horizon=6,
+        gmin=364.642964185792,
+        policy=(-2.0, -1.0, 0.0, 0.0, 0.0, 0.0),
+        cue_ward=False,
+        certificate=CompletenessCertificate(
+            expected=17**6,
+            visited=17**6,
+            warrant=Warrant.PROVED,
+            action_set_size=17,
+            horizon=6,
+            action_set_version="v1-refine-0.25",
+        ),
+    ),
+    RefinementRow(
+        horizon=7,
+        gmin=425.163110098734,
+        policy=(1.0, -2.0, -2.0, 0.0, 0.0, 0.0, 0.0),
+        cue_ward=True,
+        certificate=CompletenessCertificate(
+            expected=17**7,
+            visited=17**7,
+            warrant=Warrant.PROVED,
+            action_set_size=17,
+            horizon=7,
+            action_set_version="v1-refine-0.25",
+        ),
+    ),
+)
+
 #: Where the stability test was registered, and the ref whose tree measured it.
 REFINEMENT_PROVENANCE = Provenance(
     registered_at="86d1f22",
@@ -301,9 +336,9 @@ PUBLISHED_REFINEMENT_GMIN = {6: 364.6430, 7: 425.1631}
 GMIN_TOLERANCE = 5e-5
 
 
-def refinement_h_star() -> int | None:
-    """The first cue-ward horizon on the recorded step-0.5 sweep."""
-    return next((r.horizon for r in REFINEMENT_05_ROWS if r.cue_ward), None)
+def refinement_h_star(rows=REFINEMENT_05_ROWS) -> int | None:
+    """The first cue-ward horizon on a recorded refinement sweep."""
+    return next((r.horizon for r in rows if r.cue_ward), None)
 
 
 def _ext_certificate(horizon: int) -> CompletenessCertificate:
@@ -688,17 +723,21 @@ def falsifiers(
             outcome=(
                 Outcome.NOT_TRIGGERED
                 if refinement_h_star() == FLIP_H
+                and refinement_h_star(REFINEMENT_025_ROWS) == FLIP_H
                 else Outcome.FIRED
             ),
             tier=Tier.BOUNDED,
             detail=(
-                f"step-0.5 over [-2,2]: H* = {refinement_h_star()} against the coarse "
-                f"{FLIP_H}, so |dH*| = 0 within the registered bar of 1. The argmins "
-                "are the coarse ones and no half-step action appears in either, so "
-                "subdividing does not move the optimum. Recorded from the chunked run, "
-                "reproducible with --refinement. step-0.25 is not measured"
+                f"step-0.5 and step-0.25 over [-2,2]: H* = {refinement_h_star()} on "
+                f"both against the coarse {FLIP_H}, so |dH*| = 0 within the registered "
+                "bar of 1. Every argmin is the coarse one and no sub-step action "
+                "reaches any of them, so subdividing does not move the optimum. The "
+                "two cells agree to the digit across 86x the policies. Recorded from "
+                "the chunked runs, reproducible with --refinement"
             ),
-            evidence=tuple(row.certificate for row in REFINEMENT_05_ROWS),
+            evidence=tuple(
+                row.certificate for row in (*REFINEMENT_05_ROWS, *REFINEMENT_025_ROWS)
+            ),
             provenance=(REFINEMENT_PROVENANCE,),
         ),
         CheckReport(

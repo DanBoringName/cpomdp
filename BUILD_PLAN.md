@@ -370,7 +370,7 @@ Gate-independent. Paper 3's G9 inherits the qualifier this produces.
       details (rows 1 and 2; row 5 states its own registered bar instead) and at the head
       of `warrant_numbers.md`'s crossover section, which had not
       named the seam at all. The write-up and ADR-034 already carried it. No number moved.
-- [ ] **Run the fourth D3 falsifier: `H*` stability under action-set refinement.**
+- [x] **Run the fourth D3 falsifier: `H*` stability under action-set refinement.**
       Registered in the battery before it is run, which is what keeps it a test. It is
       load-bearing rather than precautionary, because the release itself calls `H* = 7` an
       upper bound *because the grid clips the reach*.
@@ -428,6 +428,10 @@ Gate-independent. Paper 3's G9 inherits the qualifier this produces.
 
 **Merge gate:** both axes report an outcome, `PASS`, `FAIL` or `VOID`, against their
 registered prediction. **ADR on landing.**
+
+**Met 2026-08-21.** Extension `PASS` at `H* = 6` on `{−4,…,2}`; refinement `PASS` at
+`H* = 7` on step-`0.5` and step-`0.25` alike, `|ΔH*| = 0` against a bar of 1. ADR-042
+records both, and the `9^8` cell turned out moot rather than deferred.
 
 ## PR-3 — World/Agent seam, exogenous action, constructors
 
