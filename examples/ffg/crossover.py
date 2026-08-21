@@ -27,9 +27,12 @@ one-time detour cost. So the reach's advantage decays with the horizon and the w
 at H = 7 -- the gradient decays below the constant pull, not the pull past the gradient.
 
 ``--check`` asserts the flip, the mechanism split, an independent NumPy oracle on the
-headline number, and the kernel's numerical inertness, with no plotting deps::
+headline number, and the kernel's numerical inertness, with no plotting deps.
+``--refinement`` re-runs the registered refinement cells on the chunked path, which is
+minutes to hours and so sits off every gate::
 
     uv run --no-sync python examples/ffg/crossover.py --check
+    uv run --no-sync python examples/ffg/crossover.py --refinement
     uv run --no-sync python examples/ffg/crossover.py
 """
 
@@ -863,10 +866,38 @@ def check() -> None:
     _print_falsifiers(reports)
 
 
+def print_refinement() -> None:
+    """Re-run every registered refinement cell and print it, certificates included.
+
+    Off both the test and the `--check` paths on purpose: the cheapest cell is 4.8M
+    policies and the dearest is 410M, which is minutes to hours rather than the seconds
+    a gate may take. This is the reproduction route for the recorded constants, run by
+    hand when the numbers are challenged.
+    """
+    cells = (
+        (REFINE_05_SET, 6),
+        (REFINE_05_SET, 7),
+        (REFINE_05_SET, 8),
+        (REFINE_025_SET, 7),
+    )
+    print("Refinement axis, chunked (peak is flat in |A|^H, ADR-036):")
+    print(f"   {'set':<18} {'H':>2} {'policies':>12} {'Gmin':>12}  argmin")
+    for action_set, horizon in cells:
+        row = measure_refinement(action_set, horizon)
+        print(
+            f"   {action_set.version:<18} {row.horizon:>2} "
+            f"{row.certificate.visited:>12,} {row.gmin:>12.4f}  {row.policy}"
+        )
+        print(f"      {row.certificate}")
+
+
 def main():
     """``--check`` asserts; the bare command prints the four measurement tables."""
     if "--check" in sys.argv:
         check()
+        return
+    if "--refinement" in sys.argv:
+        print_refinement()
         return
     _print_tables()
 
