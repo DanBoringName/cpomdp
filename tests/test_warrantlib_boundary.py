@@ -10,15 +10,24 @@ module is reachable afterwards.
 The rest pin the re-exports. `cpomdp.warrant` and `cpomdp.enumeration` name objects that
 are defined in `warrantlib`, and a copy rather than a re-export would break every
 `isinstance` check that crosses the two.
+
+One more pins the façade. The definitions live in `warrantlib._vocabulary` and
+`warrantlib/__init__.py` re-exports them by hand, so a new public name added to the one
+and forgotten in the other is invisible: it imports fine from its own module and is
+absent from the published surface. The source is read rather than the imported module,
+because the imported module cannot tell a definition from an import.
 """
 
+import ast
 import subprocess
 import sys
+from pathlib import Path
 
 import cpomdp
 import cpomdp.warrant
 import warrantlib
 from cpomdp.enumeration import CompletenessCertificate, SearchWarrant
+from warrantlib import _vocabulary
 
 _NO_CPOMDP = """
 import sys
@@ -52,3 +61,25 @@ def test_top_level_names_are_the_warrantlib_objects():
 def test_enumeration_re_exports_the_certificate_and_the_alias():
     assert CompletenessCertificate is warrantlib.CompletenessCertificate
     assert SearchWarrant is warrantlib.Warrant
+
+
+def _defined_public_names() -> set[str]:
+    """Top-level public names `_vocabulary.py` defines, read from its source."""
+    source = Path(_vocabulary.__file__).read_text()
+    names = set()
+    for node in ast.parse(source).body:
+        if isinstance(node, ast.ClassDef | ast.FunctionDef):
+            names.add(node.name)
+        elif isinstance(node, ast.Assign):
+            names.update(
+                target.id for target in node.targets if isinstance(target, ast.Name)
+            )
+    return {name for name in names if not name.startswith("_")}
+
+
+def test_the_facade_exports_every_public_vocabulary_name():
+    defined = _defined_public_names()
+    # A guard on the guard: an empty set would pass the comparison below by asking
+    # nothing, exactly as a renamed module would.
+    assert len(defined) >= 9
+    assert defined == set(warrantlib.__all__)
