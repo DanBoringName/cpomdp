@@ -237,6 +237,14 @@ identical either way, since it does not depend on the epistemic target.
 
 ### The statistic and its sign
 
+**These are post-selection, and the qualifier travels with them.** The walk and reach the
+`Δ` numbers contrast at `H > 1` are the pair the exhaustive search *found*, so scoring
+them back across the horizon exhibits the mechanism and cannot establish the flip. The
+flip is established by the enumeration, which is selection-free. A reader quoting `Δε(H)`
+or `Δc(H)` as evidence *for* the crossover has the direction backwards. At `H = 1` the
+pair collapses to the registered constant anchors below, which were declared before the
+search and are not post-selection.
+
 `Δε(H) = Σ_k [ε_k(walk) − ε_k(reach)]`, `Δc(H) = Σ_k [c_k(walk) − c_k(reach)]`, and
 `ΔG(H) = Δc − Δε`. The pragmatic term is a cost (lower better) and the epistemic a value
 (higher better), so `ΔG < 0` is the crossover. `ΔG` is defined as `Δc − Δε`, asserted at
@@ -294,6 +302,12 @@ mind. `research/r10_open_loop_crossover.md` is the write-up.
 | `ΔG(7)` | −0.1520 | `G(walk) − G(reach)` at H=7; the flip margin. Relative size 3.6e−4 against `G ≈ 425`, so the margin is small and must be shown well-conditioned |
 | pragmatic-only crossing | H ≈ 10 | with the epistemic term zeroed, the argmin is prior-ward through H = 9 and crosses near 10 — so the ~1.7-nat epistemic pull is what advances the flip to 7 |
 | `H_max` | 9 | declared feasibility bound; enumeration cost `5⁹·9 = 17,578,125` scored steps, measured. Larger H_max is a declared budget increase |
+
+**The `H = 7` in `examples/crossover_horizon_figure.py` is a different number.** That plane
+contrasts two named plans on a different model with a different backend, whole-state
+epistemic, and no search at all. Its crossing is an exact statement about those two plans;
+this `H*` is an argmin over every policy in a declared set. The integers coincide and mean
+nothing by it. Disclaimed once here, beside the number, and once in the README.
 
 #### `H*` stability under action-set change: registered, extension measured
 

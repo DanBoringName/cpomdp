@@ -408,13 +408,23 @@ Gate-independent. Paper 3's G9 inherits the qualifier this produces.
   - [x] Wire `cue_maze.best_reachable_noise` in as the void guard. A refined set that
         cannot land on the cue produces a null indistinguishable from "information is
         never worth the detour", which is pure geometry and not a result.
-  - [ ] Carry the `slow` marker. This runs on merge-to-main, not on pull requests.
-- [ ] Carry the post-selection disclosure into the paper. The mechanism split in
+  - [x] Carry the `slow` marker. This runs on merge-to-main, not on pull requests.
+        **Discharged differently, and the difference is the point.** Nothing carries the
+        marker, because nothing re-enumerates on any gate. The measured rows are recorded
+        constants with their certificates and a provenance, and `--refinement` is the
+        reproduction route, off both the test path and `--check`. Cheap tests assert the
+        recorded values against the published ones. Slow-marking a 4.8M-policy sweep
+        would have put two minutes on every merge to re-derive a number that cannot
+        drift, since a recorded constant changes only when someone edits it.
+- [x] Carry the post-selection disclosure into the paper. The mechanism split in
       `crossover.py` is disclosed as post-selection, because the scored pair was found by
-      the search.
-- [ ] Keep the `H = 7` coincidence disclaimed once, near the number.
+      the search. Now stated in `warrant_numbers.md` beside the `Δ` numbers themselves,
+      which is where a paper author quotes them from, alongside the existing disclosures
+      in the write-up, the ledger and the demo.
+- [x] Keep the `H = 7` coincidence disclaimed once, near the number.
       `examples/crossover_horizon_figure.py` crosses at the same integer on a different
-      model, a different backend, whole-state epistemic, no search.
+      model, a different backend, whole-state epistemic, no search. Disclaimed beside the
+      `H*` table in `warrant_numbers.md`, which had it nowhere, and once in the README.
 
 **Merge gate:** both axes report an outcome, `PASS`, `FAIL` or `VOID`, against their
 registered prediction. **ADR on landing.**
