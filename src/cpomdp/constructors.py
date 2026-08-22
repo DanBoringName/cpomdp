@@ -1,27 +1,48 @@
-"""Declared model parameters, and the named changes made to them.
+"""Two declared axes: what a model gets wrong, and what its filter gets wrong.
 
-``ModelSpec`` is the parameters themselves, held as inert arrays. ``build`` turns them
-into a ``LinearGaussianModel``, a fresh one on every call, sharing no array with the
-last. Two things built from one spec are equal in value and separate in memory.
+``ModelSpec`` is a model's parameters, held as inert arrays. ``build`` turns them into a
+``LinearGaussianModel``, a fresh one on every call, sharing no array with the last. Two
+things built from one spec are equal in value and separate in memory.
 
 ``Perturbation`` is a named change to one parameter, carried as data rather than as a
 function: the parameter it touches and how far, relative to what the spec declares.
-``CORRECT`` touches nothing. ``ConstructorSet`` collects them under a version, so a
-change to the set is a change to a line of source.
+``CORRECT`` touches nothing.
+
+``InferenceRule`` is the same idea for the filter. It names one of four kinds, from
+exact through to a filter reading only the diagonal of its own covariance, and builds a
+backend over a model without altering the model.
+
+``ConstructorSet`` and ``InferenceSet`` collect each axis under a version, so a change
+to either is a change to a line of source.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
+from enum import Enum
+from typing import Protocol, TypeVar
 
 import jax.numpy as jnp
 import numpy as np
 from numpy.typing import ArrayLike
 
+from cpomdp.backends.base import InferenceBackend
+from cpomdp.backends.degraded import DiagonalCovarianceBackend, WrongFixedRBackend
+from cpomdp.backends.kalman import KalmanBackend
 from cpomdp.dynamics import DynamicsNoise
 from cpomdp.observation import ObservationModel
 from cpomdp.structure import ModelStructure
 from cpomdp.types import Belief, LinearGaussianModel
 
-__all__ = ["CORRECT", "ConstructorSet", "ModelSpec", "Perturbation"]
+__all__ = [
+    "CORRECT",
+    "EXACT_INFERENCE",
+    "ConstructorSet",
+    "InferenceKind",
+    "InferenceRule",
+    "InferenceSet",
+    "ModelSpec",
+    "Perturbation",
+]
 
 _UNVERSIONED = (
     "version must be a non-empty string — the {subject} is declared and versioned"
@@ -224,22 +245,16 @@ class ConstructorSet:
 
     def __post_init__(self) -> None:
         """Reject an unversioned, empty, duplicated or wholly perturbed set."""
-        if not isinstance(self.version, str) or not self.version:
-            raise ValueError(_UNVERSIONED.format(subject="set"))
-        if not self.perturbations:
-            raise ValueError("a ConstructorSet needs at least one perturbation")
-        names = [p.name for p in self.perturbations]
-        duplicates = sorted({n for n in names if names.count(n) > 1})
-        if duplicates:
-            raise ValueError(
-                f"duplicate perturbation name(s) {duplicates}; a cell is identified by "
-                f"its name alone"
-            )
-        if not [p for p in self.perturbations if p.parameter is None]:
-            raise ValueError(
+        _validate_declared(
+            self.perturbations,
+            self.version,
+            subject="set",
+            contains=lambda p: p.parameter is None,
+            requirement=(
                 "no member of this set is unperturbed, so no cell builds the model the "
                 "spec declares; include CORRECT"
-            )
+            ),
+        )
 
     @property
     def names(self) -> tuple[str, ...]:
@@ -262,6 +277,164 @@ class ConstructorSet:
             its own object and shares no array with any other.
         """
         return tuple((p.name, spec.build(p)) for p in self.perturbations)
+
+
+class InferenceKind(Enum):
+    """What a filter does differently from exact inference under the model.
+
+    ``EXACT`` is the per-step Kalman filter, which for a fixed-noise linear-Gaussian
+    model is the Bayesian posterior. The other three each drop something: the per-step
+    gain, the declared observation noise, or the covariance's off-diagonal terms.
+    """
+
+    EXACT = "exact"
+    FROZEN_GAIN = "FrozenGain"
+    WRONG_FIXED_R = "WrongFixedR"
+    DIAGONAL_COVARIANCE_ONLY = "DiagonalCovarianceOnly"
+
+
+@dataclass(frozen=True)
+class InferenceRule:
+    """A named way of inferring under a model, built into a backend on demand.
+
+    The model is never altered. ``WrongFixedR`` reads a scaled observation noise and is
+    the only kind with a magnitude to read; the rest are the kind alone.
+
+    Args:
+        name: The cell's label, non-empty and unique within a set.
+        kind: Which of the four declared kinds this cell is.
+        magnitude: Relative change to the filter's observation noise. Must be ``0.0``
+            unless ``kind`` is ``WRONG_FIXED_R``.
+    """
+
+    name: str
+    kind: InferenceKind
+    magnitude: float = 0.0
+
+    def __post_init__(self) -> None:
+        """Reject a nameless rule, and a magnitude on a kind with nothing to scale."""
+        if not isinstance(self.name, str) or not self.name:
+            raise ValueError("an InferenceRule needs a name, so a cell can be labelled")
+        if self.magnitude != 0.0 and self.kind is not InferenceKind.WRONG_FIXED_R:
+            raise ValueError(
+                f"{self.kind.value} reads no magnitude, and {self.name!r} names "
+                f"{self.magnitude}; only WrongFixedR scales anything"
+            )
+
+    def build(self, model: LinearGaussianModel) -> InferenceBackend:
+        """The backend this cell infers with, over ``model``.
+
+        Args:
+            model: The model the agent is scored under. Every backend built here
+                reports it as ``backend.model``, degraded or not.
+
+        Returns:
+            An inference backend.
+
+        Raises:
+            ValueError: If the kind cannot be built over this model — a frozen gain on
+                state-dependent noise, or a magnitude leaving no valid covariance.
+        """
+        if self.kind is InferenceKind.EXACT:
+            return KalmanBackend(model)
+        if self.kind is InferenceKind.FROZEN_GAIN:
+            return KalmanBackend(model, steady_state=True)
+        if self.kind is InferenceKind.WRONG_FIXED_R:
+            return WrongFixedRBackend(model, magnitude=self.magnitude)
+        if self.kind is InferenceKind.DIAGONAL_COVARIANCE_ONLY:
+            return DiagonalCovarianceBackend(KalmanBackend(model))
+        # Not a fallthrough: a kind added without a branch here would otherwise be
+        # built as whichever branch came last, and report a cell it never ran.
+        raise ValueError(f"{self.kind} names no way of building a backend")
+
+
+EXACT_INFERENCE = InferenceRule(name="exact", kind=InferenceKind.EXACT)
+"""The cell that infers exactly, against which the other cells are a degradation."""
+
+
+@dataclass(frozen=True)
+class InferenceSet:
+    """A declared, versioned set of ways to infer, to run one model through.
+
+    Names are unique. At least one member is exact, so the set always contains the cell
+    a degradation is measured against.
+
+    Args:
+        rules: The declared members, in the order they are reported.
+        version: A non-empty tag, so a member added later shows up in the diff.
+    """
+
+    rules: tuple[InferenceRule, ...]
+    version: str
+
+    def __post_init__(self) -> None:
+        """Reject an unversioned, empty, duplicated or wholly degraded set."""
+        _validate_declared(
+            self.rules,
+            self.version,
+            subject="set",
+            contains=lambda r: r.kind is InferenceKind.EXACT,
+            requirement=(
+                "no member of this set infers exactly, so no cell is the one the "
+                "others are degraded from; include EXACT_INFERENCE"
+            ),
+        )
+
+    @property
+    def names(self) -> tuple[str, ...]:
+        """The declared names, in declaration order."""
+        return tuple(rule.name for rule in self.rules)
+
+    @property
+    def size(self) -> int:
+        """The member count."""
+        return len(self.rules)
+
+    def build_all(
+        self, model: LinearGaussianModel
+    ) -> tuple[tuple[str, InferenceBackend], ...]:
+        """Every member built over ``model``, paired with the name that produced it.
+
+        Args:
+            model: The model each member infers under.
+
+        Returns:
+            One ``(name, backend)`` pair per member, in declaration order. Every backend
+            reports ``model`` as its own.
+        """
+        return tuple((rule.name, rule.build(model)) for rule in self.rules)
+
+
+class _Named(Protocol):
+    """Anything a declared set holds: it has a name, and that name identifies it."""
+
+    name: str
+
+
+_Member = TypeVar("_Member", bound=_Named)
+
+
+def _validate_declared(
+    members: tuple[_Member, ...],
+    version: str,
+    *,
+    subject: str,
+    contains: Callable[[_Member], bool],
+    requirement: str,
+) -> None:
+    """The checks both declared sets share: versioned, non-empty, unique, complete."""
+    if not isinstance(version, str) or not version:
+        raise ValueError(_UNVERSIONED.format(subject=subject))
+    if not members:
+        raise ValueError(f"a declared {subject} needs at least one member")
+    names = [member.name for member in members]
+    duplicates = sorted({name for name in names if names.count(name) > 1})
+    if duplicates:
+        raise ValueError(
+            f"duplicate name(s) {duplicates}; a cell is identified by its name alone"
+        )
+    if not [member for member in members if contains(member)]:
+        raise ValueError(requirement)
 
 
 def _frozen(value: ArrayLike) -> np.ndarray:
