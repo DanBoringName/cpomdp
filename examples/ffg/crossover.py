@@ -888,9 +888,15 @@ def _print_tables() -> None:
         if ext_star is not None and ext_star <= EXT_BAR
         else f"FAILS (bar H* <= {EXT_BAR})"
     )
+    # Derived like the report's, and for the same reason: a fixed sentence beside a
+    # computed number reads as a finding on any measurement, including one that refutes.
+    movement = (
+        f"the horizon does not move from {EDGE_H_STAR}, so extension saturates"
+        if ext_star == EDGE_H_STAR
+        else f"the horizon moves from {EDGE_H_STAR} to {ext_star}"
+    )
     print(f"   extension {{-4,...,2}} -> H* = {ext_star}, argmin {ext_policy}.")
-    print(f"   registered before the run, so this {verdict}. The -4 return is used,")
-    print("   and the horizon does not move: extension saturates at 6.")
+    print(f"   registered before the run, so this {verdict}. {movement}.")
     print(f"   refinement: measured, recorded, not re-run here ({refine_cost} scored")
     print("   steps at step-0.5 alone). H* = 7 at step-0.5 and step-0.25 alike, the")
     print("   two agreeing to the digit, and no sub-step action in any argmin.")

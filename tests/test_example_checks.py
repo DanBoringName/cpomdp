@@ -159,11 +159,17 @@ class TestCrossoverFalsifierReporting:
         reports = crossover.falsifiers(*self._pair(), extension=_extension(7))
         assert reports[4].outcome is Outcome.FIRED
         assert "registered bar" in reports[4].detail
+        # A moved horizon must not print the sentence describing the one that did not
+        # move. Asserting only "registered bar" let the saturating text through, which
+        # is how this survived a review round.
+        assert "saturates" not in reports[4].detail
+        assert "moves from" in reports[4].detail
 
     def test_no_crossover_on_the_extension_fires_row_five(self):
         reports = crossover.falsifiers(*self._pair(), extension=_extension(None))
         assert reports[4].outcome is Outcome.FIRED
         assert "no cue-ward argmin" in reports[4].detail
+        assert "saturates" not in reports[4].detail
 
     def test_the_recorded_refinement_matches_the_published_numbers(self):
         # The re-measurement's whole point. `research/r10_open_loop_crossover.md`
