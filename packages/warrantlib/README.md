@@ -3,13 +3,131 @@
 A column of `PASS` cannot say whether anything was decided. A grid sample over a
 continuous range and an exhaustive enumeration over a declared finite set can both come
 back clean. Only the second settled the question. warrantlib is a small vocabulary for
-keeping that difference in a check suite's output instead of losing it there.
+keeping that difference in a check suite's output instead of losing it there, and a
+pytest plugin that reports it.
 
 ```bash
-pip install warrantlib
+pip install "warrantlib[pytest]"   # the vocabulary and the plugin
+pip install warrantlib             # the vocabulary alone
 ```
 
-Python 3.11 and up. The standard library is the only dependency.
+Python 3.11 and up. The standard library is the only dependency. The extra adds pytest
+and nothing else, and `import warrantlib` pulls in no pytest either way.
+
+## Running checks under pytest
+
+The plugin loads through pytest's `pytest11` entry point. Nothing to configure and no
+`-p` flag.
+
+A test hands its findings over with the `record_check` fixture.
+
+```python
+def test_the_coefficient_is_closed_form(record_check):
+    record_check(measure_c2())
+```
+
+```text
+test_the_coefficient_is_closed_form NOT TRIGGERED                        [100%]
+
+=============================== warrant summary ================================
+1 registered, 1 tested here, none fired
+   PROVED        NOT TRIGGERED   1
+```
+
+A check's outcome decides its test's, in pytest's own three:
+
+| Outcome | The test | Letter | `-v` reads |
+| --- | --- | --- | --- |
+| `NOT_TRIGGERED` | passes | `.` | `NOT TRIGGERED` |
+| `FIRED` | fails | `F` | `FIRED` |
+| `NOT_RESOLVED` | fails | `?` | `NOT RESOLVED` |
+| `NOT_APPLICABLE` | skips | `v` | `NOT APPLICABLE` |
+| `NOT_RUN_HERE` | skips | `e` | `NOT RUN HERE` |
+
+`NOT_RESOLVED` fails because a falsifier that ran and could not decide has not left the
+claim standing. The two that never ran skip, and the letters keep them apart where the
+skip does not.
+
+The counting category stays pytest's own, so `N passed` counts what it always counted
+and `assert_outcomes` still sees it. A fired check reads like any other failing test: a
+`FAILURES` block carrying the check's reason, a row in the short summary, and the run's
+accounting underneath with the fired count in it.
+
+### Flags
+
+| Flag | What it does |
+| --- | --- |
+| *(none)* | progress letters, then the registered / tested here / fired accounting |
+| `-v` | one line per check, naming it and its outcome |
+| `--warrant-detail` | each check's own line: outcome, warrant, tier, the reason it gives, the refs it was registered at |
+| `-vv` | the same as `--warrant-detail`, which is pytest's own spelling for more detail |
+
+```bash
+pytest --warrant-detail
+```
+
+```text
+================================ warrant checks ================================
+T3 gain: NOT TRIGGERED (PROVED, tier exact). PASS — K = σ²/R̄ − σ⁴/R̄² + O(σ⁶).
+got: K = sigma**2/Rbar - sigma**4/Rbar**2 provenance: Step 3, the expansion in
+prior spread (registered at 99e3c34, measured at 23f0c47)
+```
+
+The row a run prints without it carries the verdict and not the reason, which is the
+half a reader acts on.
+
+## Declaring what a suite is registered to report
+
+A count of checks says a suite got shorter. It cannot say which check left, and a check
+renamed or swapped for another leaves the count untouched, so the gate passes on a suite
+that is now measuring something else.
+
+A manifest declares them instead. It names each suite's entry point and every id it
+reported when the file was written.
+
+```toml
+# Generated. Do not edit by hand.
+schema_version = "1.0"
+
+[suites.series_kernel]
+entry_point = "research.checks.series_kernel:run_checks"
+checks = [
+  "series_kernel.first_cumulant_is_the_mean",
+]
+```
+
+Point pytest at it and give it the path to collect:
+
+```toml
+# pyproject.toml
+[tool.pytest.ini_options]
+warrant_manifest = "research/registered_checks.toml"
+```
+
+```bash
+pytest research/registered_checks.toml
+```
+
+Every declared check becomes an item, and the item exists because the manifest declares
+it rather than because the suite reported it. A check that stops reporting still has a
+row, and the row fails naming the check and the entry point it went missing from. One
+further item per suite fails on any id the run reported that the manifest does not
+carry, so a rename reports as one drop and one addition, which is what it is.
+
+The suite runs once per session however many checks it declares, so a suite costing half
+a minute costs that once rather than once per row.
+
+### Keeping it current
+
+| Command | What it does |
+| --- | --- |
+| `python -m warrantlib.manifest <path>` | rewrite it from the suites it names |
+| `python -m warrantlib.manifest --check <path>` | say whether it is current, change nothing, exit non-zero if not |
+
+`--check` is the form to run in CI. It compares the file as text, so a layout the writer
+no longer produces counts as stale too. Adding a suite means adding its
+`[suites.<name>]` table by hand, with no checks, and then rewriting. The new ids land in
+the diff, which is where they get reviewed.
 
 ## Warrant
 
@@ -66,41 +184,6 @@ obligation, and this is where it is discharged rather than assumed.
 
 `check_summary` prints a run as counts per `(warrant, outcome)`.
 
-## Provenance
-
-Evidence says a claim was decided. It does not say when the bar was set, and a bar chosen
-after the number is visible decides nothing. `Provenance` is the pointer a reviewer
-follows: the ref where the prediction or the derivation was registered, the ref whose
-tree produced the number, and one line saying what they will find at the first.
-
-A ref is a git commit SHA, an http(s) URL or a DOI. A path, a branch, a tag and `HEAD`
-are refused, because each resolves to a different tree every time it is read. A `PROVED`
-report requires one, on the same terms as it requires evidence.
-
-Where the two refs name one commit, the render says the ordering is not established by
-history. That is not a failure. It is what happens whenever a check and the derivation
-behind it land together, and the marker keeps it from reading as something a reviewer
-could verify.
-
-The type compares refs. It cannot order them, so a registration written after the fact
-still renders without a marker. That is a `git merge-base --is-ancestor` away, which is
-why the refs are refs.
-
-## Two names per check
-
-A report carries prose and a key, and they do different jobs.
-
-`name` reads in a summary line, so it is reworded whenever the wording improves.
-`check_id` is what a manifest declares before a run and what joins one run's report to
-the next: dot-separated segments of letters, digits and underscores, refused at
-construction if anything else appears in it.
-
-Deriving the key from the prose ties the two together, and the first reworded name then
-reads as one check dropped and one added, which is the reading a comparison exists to
-rule out.
-
-## Use
-
 ```python
 from warrantlib import (
     CheckReport, Outcome, Provenance, SymbolicReduction, Tier, Warrant, check_summary,
@@ -140,6 +223,39 @@ print(check_summary([report]))
 Registering four falsifiers and testing two is a different claim from testing four, and
 one number cannot carry both. The header separates them.
 
+## Two names per check
+
+A report carries prose and a key, and they do different jobs.
+
+`name` reads in a summary line, so it is reworded whenever the wording improves.
+`check_id` is what a manifest declares before a run and what joins one run's report to
+the next: dot-separated segments of letters, digits and underscores, refused at
+construction if anything else appears in it.
+
+Deriving the key from the prose ties the two together, and the first reworded name then
+reads as one check dropped and one added, which is the reading a comparison exists to
+rule out.
+
+## Provenance
+
+Evidence says a claim was decided. It does not say when the bar was set, and a bar chosen
+after the number is visible decides nothing. `Provenance` is the pointer a reviewer
+follows: the ref where the prediction or the derivation was registered, the ref whose
+tree produced the number, and one line saying what they will find at the first.
+
+A ref is a git commit SHA, an http(s) URL or a DOI. A path, a branch, a tag and `HEAD`
+are refused, because each resolves to a different tree every time it is read. A `PROVED`
+report requires one, on the same terms as it requires evidence.
+
+Where the two refs name one commit, the render says the ordering is not established by
+history. That is not a failure. It is what happens whenever a check and the derivation
+behind it land together, and the marker keeps it from reading as something a reviewer
+could verify.
+
+The type compares refs. It cannot order them, so a registration written after the fact
+still renders without a marker. That is a `git merge-base --is-ancestor` away, which is
+why the refs are refs.
+
 ## Writing a run down
 
 A run that prints and exits leaves nothing to compare against. `report_to_dict` writes
@@ -165,34 +281,6 @@ whatever fits.
 Nothing here touches a filesystem. The caller decides where the bytes go. A JSON Schema
 for the record ships beside the code at `warrantlib/report.schema.json`, for a consumer
 reading a ledger without Python.
-
-## Under pytest
-
-`pip install "warrantlib[pytest]"` adds a plugin, loaded through pytest's `pytest11`
-entry point. A test hands its findings over and the run reports them in the vocabulary
-the check used.
-
-```python
-def test_the_coefficient_is_closed_form(record_check):
-    record_check(measure_c2())
-```
-
-```text
-test_the_coefficient_is_closed_form NOT TRIGGERED  [100%]
-
-============== warrant summary ==============
-1 registered, 1 tested here, none fired
-   PROVED        NOT TRIGGERED   1
-```
-
-A fired check fails its test, and so does an unresolved one. The two that never ran here
-skip, and the progress letters keep them apart: `v` for void by construction, `e` for
-measured elsewhere.
-
-A manifest takes it further. It declares every check a suite is registered to report, so
-a check that stops reporting fails by name instead of shrinking a count that could not
-say which one left. Generate one with `python -m warrantlib.manifest <path>` and ask
-whether it is current with `--check`.
 
 ## Where it comes from
 
