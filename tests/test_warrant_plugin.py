@@ -431,7 +431,8 @@ def test_it():
         result.stdout.fnmatch_lines(
             [
                 "*2 registered, 2 tested here, none fired*",
-                "*1 suite reconciled against the manifest*",
+                "*1 suite reconciled against the manifest, which pytest counts and "
+                "the rows above do not*",
             ],
             consecutive=False,
         )
@@ -440,5 +441,129 @@ def test_it():
         # The plural, and the case where the vocabulary block would otherwise be silent.
         path = _manifest_suite(pytester, declared=["a.one"], reported=["a.one"])
         pytester.runpytest(path).stdout.fnmatch_lines(
-            ["*1 suite reconciled against the manifest*"]
+            ["*1 suite reconciled against the manifest, which pytest counts*"]
         )
+
+
+class TestTheDetailFlag:
+    """The reason a check gives, which the verdict alone does not carry."""
+
+    def test_it_is_off_by_default(self, pytester):
+        _suite(
+            pytester,
+            """
+def test_it(record_check):
+    record_check(_report("s.a", Outcome.NOT_TRIGGERED))
+""",
+        )
+        assert "warrant checks" not in pytester.runpytest().stdout.str()
+
+    def test_it_prints_each_check_in_full(self, pytester):
+        _suite(
+            pytester,
+            """
+def test_it(record_check):
+    record_check(_report("s.a", Outcome.NOT_TRIGGERED))
+""",
+        )
+        result = pytester.runpytest("--warrant-detail")
+        result.stdout.fnmatch_lines(
+            [
+                "*warrant checks*",
+                "*a check: NOT TRIGGERED (CORROBORATED, tier computed).*",
+            ],
+            consecutive=False,
+        )
+
+    def test_the_order_is_the_id_order_not_the_run_order(self, pytester):
+        # Under `-n auto` the reporting order is whatever the workers finish in, so a
+        # log nobody can diff against the last one is the alternative.
+        _suite(
+            pytester,
+            """
+def test_b(record_check):
+    record_check(_report("s.zeta", Outcome.NOT_TRIGGERED, name="zeta"))
+
+def test_a(record_check):
+    record_check(_report("s.alpha", Outcome.NOT_TRIGGERED, name="alpha"))
+""",
+        )
+        lines = [
+            line
+            for line in pytester.runpytest("--warrant-detail").stdout.lines
+            if line.startswith(("alpha:", "zeta:"))
+        ]
+        assert [line.split(":")[0] for line in lines] == ["alpha", "zeta"]
+
+    def test_double_verbose_turns_it_on(self, pytester):
+        # pytest's own spelling for more detail than `-v`, so the plugin does not mint
+        # a short flag of its own into an alphabet the ecosystem has nearly used up.
+        _suite(
+            pytester,
+            """
+def test_it(record_check):
+    record_check(_report("s.a", Outcome.NOT_TRIGGERED))
+""",
+        )
+        assert "warrant checks" in pytester.runpytest("-vv").stdout.str()
+
+    def test_single_verbose_does_not(self, pytester):
+        _suite(
+            pytester,
+            """
+def test_it(record_check):
+    record_check(_report("s.a", Outcome.NOT_TRIGGERED))
+""",
+        )
+        assert "warrant checks" not in pytester.runpytest("-v").stdout.str()
+
+
+class TestAFiringCheckReadsLikeAFailingTest:
+    """No flags. What pytest gives natively for a failure, the check gives too."""
+
+    def test_the_failure_block_carries_the_checks_reason(self, pytester):
+        _suite(
+            pytester,
+            """
+def test_it(record_check):
+    record_check(_report("s.gain", Outcome.FIRED))
+""",
+        )
+        result = pytester.runpytest()
+        result.stdout.fnmatch_lines(
+            ["*FAILURES*", "*s.gain: why it reports what it reports*"],
+            consecutive=False,
+        )
+
+    def test_the_short_summary_does_not_repeat_the_word(self, pytester):
+        # The row prefix and the short summary both carry the word already, so putting
+        # it at the head of the reason gives `FIRED ...::test_it - FIRED`.
+        _suite(
+            pytester,
+            """
+def test_it(record_check):
+    record_check(_report("s.gain", Outcome.FIRED))
+""",
+        )
+        rows = [
+            line
+            for line in pytester.runpytest("-rA").stdout.lines
+            if line.startswith("FIRED ")
+        ]
+        assert rows
+        assert not any(row.rstrip().endswith("- FIRED") for row in rows)
+
+    def test_the_accounting_still_prints_when_something_fired(self, pytester):
+        _suite(
+            pytester,
+            """
+def test_a(record_check):
+    record_check(_report("s.a", Outcome.NOT_TRIGGERED))
+
+def test_b(record_check):
+    record_check(_report("s.b", Outcome.FIRED))
+""",
+        )
+        result = pytester.runpytest()
+        result.assert_outcomes(passed=1, failed=1)
+        result.stdout.fnmatch_lines(["*2 registered, 2 tested here, 1 fired*"])

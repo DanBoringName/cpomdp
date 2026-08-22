@@ -23,6 +23,8 @@ an exposure rather than a result.
   or refresh one with `python -m warrantlib.manifest <path>`, and ask whether it is
   current with `--check`, which is the form CI runs. The file compares as text rather
   than as parsed content, so a layout the writer no longer produces counts as stale.
+  `--warrant-detail`, or `-vv`, prints each check's own line the way a suite run on its
+  own does.
   The pytest plugin collects the manifest, turning every declared check into an item.
   The item exists because the check was declared, so a check that stops reporting still
   has a row and the row fails naming it.

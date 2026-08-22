@@ -110,6 +110,15 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     Args:
         parser: the option parser.
     """
+    parser.getgroup("warrant").addoption(
+        "--warrant-detail",
+        action="store_true",
+        help=(
+            "print every check's own line: its outcome, its warrant, its tier, the "
+            "reason it gives and the refs it was registered at. `-vv` does the same, "
+            "which is pytest's own spelling for more detail than `-v`"
+        ),
+    )
     parser.addini(
         "warrant_manifest",
         help=(
@@ -349,7 +358,7 @@ def _apply_outcome(
         records: what it recorded.
     """
     worst = _worst(records)
-    outcome, _, _, word = _STATUS[worst]
+    outcome = _STATUS[worst][0]
     report.outcome = outcome
     setattr(report, _STATUS_ATTRIBUTE, worst.value)
     deciding = [record for record in records if record.outcome is worst]
@@ -359,7 +368,10 @@ def _apply_outcome(
         # strips its own prefix from.
         report.longrepr = (str(item.path), item.location[1] or 0, f"Skipped: {reason}")
     elif outcome == "failed":
-        report.longrepr = f"{word}\n{reason}"
+        # No leading word. `pytest_report_teststatus` already puts it in the row and in
+        # the short summary, and the short summary takes its reason from the first line
+        # of this, so repeating it there gives `FIRED ...::gain - FIRED`.
+        report.longrepr = reason
 
 
 def _worst(records: list[CheckReport]) -> Outcome:
@@ -456,6 +468,13 @@ class _WarrantRun:
         """
         if not self.records:
             return
+        if config.getoption("warrant_detail") or config.get_verbosity() >= 2:
+            # What a suite prints when it is run on its own. A row's outcome reaches
+            # the terminal without this and the reason the check gives does not, so a
+            # run replacing those suites would keep the verdicts and lose the record.
+            terminalreporter.write_sep("=", "warrant checks")
+            for record in sorted(self.records, key=lambda one: one.check_id):
+                terminalreporter.write_line(str(record))
         terminalreporter.write_sep("=", "warrant summary")
         for line in check_summary(self.records).splitlines():
             terminalreporter.write_line(line)

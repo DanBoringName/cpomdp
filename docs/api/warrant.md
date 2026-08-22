@@ -177,6 +177,16 @@ so a rename reports as one drop and one addition, which is what it is.
 The suite runs once per session however many checks it declares, so a suite costing half
 a minute costs that once rather than once per row.
 
+`--warrant-detail` prints every check's own line: its outcome, its warrant, its tier,
+the reason it gives and the refs it was registered at. `-vv` does the same, which is
+pytest's own spelling for more detail than `-v` and is why the plugin claims no short
+flag of its own. The row a run prints without either carries the verdict and not the
+reason, which is the half a reader acts on.
+
+A check that fires reads like any other failing test. It gets a `FAILURES` block naming
+the check and carrying its reason, a row in the short summary, and the run's accounting
+prints underneath with the fired count in it. No flag is needed for that.
+
 pytest's own total counts those reconciliation items and the warrant accounting does not,
 because they are not checks and carry no warrant. Seventy declared checks across three
 suites collect as seventy-three items, and the summary says which three so the difference

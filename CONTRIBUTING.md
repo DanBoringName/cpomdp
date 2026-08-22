@@ -122,6 +122,7 @@ have their own command, and their own CI job:
 
 ```bash
 uv run pytest research/registered_checks.toml   # every registered check, reconciled
+uv run pytest research/registered_checks.toml --warrant-detail  # + each check's reason (or -vv)
 uv run python -m warrantlib.manifest --check research/registered_checks.toml
 ```
 

@@ -127,8 +127,13 @@ jobs:
       # This replaced three pinned count strings, which could say a suite got shorter and
       # could not say which check left, and which a different check arriving in place of
       # the one that went would have satisfied.
+      #
+      # `--warrant-detail` prints each check's own line, which is what the suites printed
+      # when this job ran them directly. The outcome reaches the terminal without it and
+      # the reason the check gives does not, so the job would otherwise have kept the
+      # verdicts and lost the record.
       - name: symbolic suites, reconciled against the manifest
-        run: uv run --no-sync pytest research/registered_checks.toml
+        run: uv run --no-sync pytest research/registered_checks.toml --warrant-detail
       # The manifest is generated, so a suite gaining or losing a check without it being
       # rewritten is caught here rather than at the next person's review.
       - name: the manifest is current
