@@ -152,6 +152,7 @@
     "pluginmanager",
     "prags",
     "prec",
+    "PRNG",
     "pymdp",
     "pypi",
     "pyproject",
