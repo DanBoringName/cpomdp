@@ -1,5 +1,6 @@
 import contextlib
 import inspect
+from collections.abc import Mapping
 
 import jax
 import jax.numpy as jnp
@@ -41,10 +42,11 @@ def _model(*, damping: float = 1.0) -> LinearGaussianModel:
 def _reachable(root: object, *, limit: int = 20_000) -> set[int]:
     """Every object id reachable from ``root`` by attribute and container traversal.
 
-    Follows closure cells and a bound method's ``__self__`` as well as attributes, so a
-    captured reference counts as reaching. Arrays are terminal: they hold numbers, not
-    references onward, and iterating a traced array is a mistake in its own right. The
-    limit is a runaway guard; a cycle is already handled by ``seen``.
+    Follows closure cells, argument defaults, a bound method's ``__self__`` and the
+    attributes of an object's class, as well as its own, so a captured reference counts
+    as reaching. Arrays are terminal: they hold numbers, not references onward, and
+    iterating a traced array is a mistake in its own right. The limit is a runaway
+    guard. A cycle is already handled by ``seen``.
     """
     seen: set[int] = set()
     queue = [root]
@@ -62,18 +64,57 @@ def _reachable(root: object, *, limit: int = 20_000) -> set[int]:
         if isinstance(obj, list | tuple | set | frozenset):
             queue.extend(obj)
             continue
-        queue.extend(vars(obj).values() if hasattr(obj, "__dict__") else ())
-        queue.extend(
-            getattr(obj, name)
-            for name in getattr(obj, "__slots__", ())
-            if hasattr(obj, name)
-        )
+        # getattr rather than vars(): a descriptor found on a class has a __dict__ that
+        # is not a mapping, and vars() raises on it.
+        namespace = getattr(obj, "__dict__", None)
+        if isinstance(namespace, Mapping):
+            queue.extend(namespace.values())
+        slots = getattr(obj, "__slots__", ())
+        if isinstance(slots, str):
+            slots = (slots,)
+        if isinstance(slots, list | tuple):
+            queue.extend(
+                getattr(obj, name)
+                for name in slots
+                if isinstance(name, str) and hasattr(obj, name)
+            )
         if (bound := getattr(obj, "__self__", None)) is not None:
             queue.append(bound)
-        for cell in getattr(obj, "__closure__", None) or ():
-            with contextlib.suppress(ValueError):  # empty cell: a recursive definition
-                queue.append(cell.cell_contents)
+        # Every dunder below is type-checked before use. Reached through a class rather
+        # than an instance each resolves to the descriptor implementing it, and a
+        # descriptor is not the tuple or dict the name suggests.
+        if isinstance(defaults := getattr(obj, "__defaults__", None), tuple):
+            queue.extend(defaults)
+        if isinstance(kwdefaults := getattr(obj, "__kwdefaults__", None), dict):
+            queue.extend(kwdefaults.values())
+        if not isinstance(obj, type):
+            # Class attributes are not in vars(obj), and a reference parked on the class
+            # is held just as firmly as one parked on the instance.
+            queue.extend(vars(type(obj)).values())
+        if isinstance(closure := getattr(obj, "__closure__", None), tuple):
+            for cell in closure:
+                # An empty cell comes from a recursive definition and holds nothing yet.
+                with contextlib.suppress(ValueError, AttributeError):
+                    queue.append(cell.cell_contents)
     return seen
+
+
+def _defaulted(world):
+    """A function holding the world in a positional default, not in a closure."""
+
+    def held(w=world):
+        return w
+
+    return held
+
+
+def _kwdefaulted(world):
+    """The same, in a keyword-only default."""
+
+    def held(*, w=world):
+        return w
+
+    return held
 
 
 # --- the detector, before the seam it is pointed at ---------------------------------
@@ -90,6 +131,8 @@ def _reachable(root: object, *, limit: int = 20_000) -> set[int]:
         pytest.param(lambda world: {"w": world}, id="inside a dict"),
         pytest.param(lambda world: world.step, id="bound method"),
         pytest.param(lambda world: lambda: world, id="closure cell"),
+        pytest.param(_defaulted, id="argument default"),
+        pytest.param(_kwdefaulted, id="keyword-only default"),
     ],
 )
 def test_the_walk_finds_a_planted_reference(leak):
@@ -97,6 +140,17 @@ def test_the_walk_finds_a_planted_reference(leak):
     agent = ScoredAgent(_model())
     agent._leak = leak(world)  # ty: ignore[unresolved-attribute]
     assert id(world) in _reachable(agent)
+
+
+def test_the_walk_finds_a_reference_parked_on_the_class():
+    world = World(_model())
+    agent = ScoredAgent(_model())
+
+    class _Leaky(ScoredAgent):
+        held = world
+
+    assert id(world) in _reachable(_Leaky(_model()))
+    assert id(world) not in _reachable(agent)
 
 
 def test_the_walk_finds_a_planted_parameter():

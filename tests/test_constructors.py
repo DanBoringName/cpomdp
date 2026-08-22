@@ -267,12 +267,19 @@ def test_correct_still_builds_on_a_state_dependent_spec():
 def test_a_fixed_sensor_shadows_nothing(parameter):
     sensor = FixedSensor([[1.0, 0.0]], observation_noise=[[1e-2]])
     spec = _spec(observation_model=sensor)
-    assert spec.build(Perturbation("read", parameter, -0.5)) is not None
+    built = spec.build(Perturbation("read", parameter, -0.5))
+    assert np.allclose(
+        np.asarray(getattr(built, parameter)),
+        np.asarray(getattr(_spec(), parameter)) * 0.5,
+    )
 
 
 def test_a_fixed_process_noise_shadows_nothing():
     spec = _spec(dynamics_noise_model=_FixedProcessNoise())
-    assert spec.build(Perturbation("read", "dynamics_noise", -0.5)) is not None
+    built = spec.build(Perturbation("read", "dynamics_noise", -0.5))
+    assert np.allclose(
+        np.asarray(built.dynamics_noise), np.asarray(_spec().dynamics_noise) * 0.5
+    )
 
 
 # --- the spec compares and hashes rather than raising -------------------------------
