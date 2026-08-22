@@ -2936,3 +2936,81 @@ would have gone the other way, and the manifest would have been JSON.
   point of the target, and it is what stops the floor being nominal.
 - The manifest's writer is ours to maintain. A field whose value is not a string or a
   list of strings needs the writer extended, and the round-trip test is what says so.
+
+---
+
+## ADR-046 — a run is reconciled against a declared inventory, not against a count
+
+**Date:** 2026-08-22
+**Status:** Accepted
+**Extends:** ADR-042 (a check has a key), ADR-039 (the vocabulary is its own distribution)
+
+### The question
+
+Three strings in `.github/workflows/ci.yml` were the only thing standing between a
+dropped stage and a green run:
+
+    run_suite series_kernel    "23 registered, 23 tested here, none fired"
+
+ADR-042 gave every check a key and said in its closing consequence that nothing yet
+replaced those strings. This is what replaces them.
+
+A count has three defects and they compound. It cannot say which check left, so a failing
+build sends a reader to a diff to work it out. It is satisfied by a different check
+arriving in place of the one that went, so a rename passes silently and the suite is
+measuring something else under the same number. And it fails only when a person notices a
+number moved, which is the kind of attention that lapses exactly when a branch is busy.
+
+### Decision
+
+**The inventory is declared in a file, generated from the suites.**
+`research/registered_checks.toml` names each suite's entry point and every check id it
+reported when the file was last written. `python -m warrantlib.manifest <path>` rewrites
+it, and `--check` asks whether it is current, which is what CI runs.
+
+**A declared check is a pytest item, whether or not the suite reported it.** warrantlib's
+plugin collects the manifest as a file and yields an item per declared id. The item exists
+because the manifest declares it, so a check that stops reporting still has a row, and the
+row fails naming the check and the entry point it went missing from. There is no count
+anywhere for a shorter run to satisfy.
+
+**Both directions are checked.** A second item per suite fails on any id the run reported
+that the manifest does not declare. A renamed check therefore reports as one drop and one
+addition, which is what it is. Under the old strings a rename left `18 registered, 18
+tested here, none fired` untouched and the gate passed.
+
+**The suite runs once per session, not once per check.** `gap_series` derives `c₂` and
+`c₄` symbolically and costs about half a minute. One run per declared check would have
+multiplied that by twenty-nine. Whichever item runs first pays, and the rest read the
+result, which is the front-loading this repository applies to its hot paths.
+
+**The manifest is compared as text.** The declared ids can agree while the file is stale,
+because the writer's own layout is generated too. Comparing parsed content would let a
+change to the header never reach the file while `--check` kept passing.
+
+**It stays out of `testpaths`.** The symbolic suites have always run in their own CI job,
+and folding thirty seconds into every pull request buys nothing the separate job does not
+already give. `pytest research/registered_checks.toml` is what runs them.
+
+**Two suites are not in it.** `gap_expansion` and `predictive_truncation` take required
+parameters, so their runners are not entry points a manifest can call. Neither was pinned
+by the old strings either, so nothing regressed. Giving them zero-argument runners is the
+work that would bring them in.
+
+### Consequences
+
+- **The three count strings are gone**, and with them the only gate that could pass a
+  renamed check. The `symbolic` job runs pytest and a manifest freshness check.
+- **70 checks are declared**, being the 23, 18 and 29 the strings asserted. That number
+  now appears in a generated file rather than in three hand-maintained places.
+- **A new check fails the run until it is registered.** That is the intended cost. The
+  fix is to rewrite the manifest, which puts the new id in a diff where it is reviewed.
+- **A suite that fails to import fails every one of its items**, with the import error on
+  each. The alternative was reporting its whole inventory as dropped, which is true and
+  much less useful.
+- **The manifest's freshness check runs the suites a second time in CI.** Thirty seconds,
+  on a job that was already the long one. Reusing the first run's results would mean the
+  gate trusting the thing it is checking.
+- `conftest.py` exempts manifest items from the slow-marker report. They are not on the
+  pull-request path, so the marker has nothing to move them off, and the cost belongs to
+  the suite rather than to whichever check happened to run first.

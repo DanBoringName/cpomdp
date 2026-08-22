@@ -116,17 +116,29 @@ uv run --extra examples ty check # type checking (examples are in the checked tr
 uv run pre-commit run --all-files
 ```
 
-The symbolic suites aren't on the pytest path. Each is a module you run directly, and
-each exits non-zero if one of its checks fires:
+The symbolic suites are deliberately not in `testpaths`. `gap_series` derives `c₂` and
+`c₄` symbolically and costs about half a minute, which nobody wants on every run. They
+have their own command, and their own CI job:
+
+```bash
+uv run pytest research/registered_checks.toml   # every registered check, reconciled
+uv run python -m warrantlib.manifest --check research/registered_checks.toml
+```
+
+The first turns each check the manifest declares into an item, so a check that stops
+reporting fails by name. The second says whether the manifest itself is current. Rewrite
+it after adding or renaming a check:
+
+```bash
+uv run python -m warrantlib.manifest research/registered_checks.toml
+```
+
+The new ids land in the diff, which is where they get reviewed. Each suite is also still
+runnable on its own, printing its summary and exiting non-zero if a check fires:
 
 ```bash
 uv run python -m research.checks.series_kernel --check
-uv run python -m research.checks.log_ratio_series --check
-uv run python -m research.checks.gap_series --check
 ```
-
-CI pins the registered count each of them prints. A count that moves means a stage
-stopped running, so change one only with the diff that justifies it.
 
 The `rxinfer` tests boot a Julia runtime (the RxInfer backend is an independent
 oracle the native filter is checked against). They're slow and need the extra:

@@ -419,3 +419,26 @@ def test_it():
 """,
         )
         pytester.runpytest().assert_outcomes(passed=1)
+
+    def test_the_summary_accounts_for_the_reconciliation_items(self, pytester):
+        # pytest counts three items and the vocabulary counts two checks. Leaving the
+        # reader to subtract is how a correct summary reads like a wrong one.
+        path = _manifest_suite(
+            pytester, declared=["a.one", "a.two"], reported=["a.one", "a.two"]
+        )
+        result = pytester.runpytest(path)
+        result.assert_outcomes(passed=3)
+        result.stdout.fnmatch_lines(
+            [
+                "*2 registered, 2 tested here, none fired*",
+                "*1 suite reconciled against the manifest*",
+            ],
+            consecutive=False,
+        )
+
+    def test_a_suite_recording_no_checks_still_names_its_reconciliation(self, pytester):
+        # The plural, and the case where the vocabulary block would otherwise be silent.
+        path = _manifest_suite(pytester, declared=["a.one"], reported=["a.one"])
+        pytester.runpytest(path).stdout.fnmatch_lines(
+            ["*1 suite reconciled against the manifest*"]
+        )

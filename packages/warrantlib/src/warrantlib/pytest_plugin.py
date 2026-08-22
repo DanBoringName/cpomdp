@@ -92,6 +92,11 @@ _REPORT_ATTRIBUTE = "warrant_records"
 #: error as the outcome of a check that survived, and the error would read as a pass.
 _STATUS_ATTRIBUTE = "warrant_status"
 
+#: The suite a reconciliation item checked, set on that item's report alone. Those items
+#: are not checks and carry no record, so without this the accounting says 70 where
+#: pytest says 73, and the reader is left subtracting.
+_RECONCILED_ATTRIBUTE = "warrant_reconciled"
+
 
 #: Every suite's reports, run once per session and read by each of its items. Front
 #: loaded on purpose: a suite deriving a coefficient symbolically costs tens of seconds,
@@ -317,6 +322,8 @@ def pytest_runtest_makereport(
         The report, with the records on it.
     """
     report = yield
+    if isinstance(item, _UndeclaredItem) and report.when == "call":
+        setattr(report, _RECONCILED_ATTRIBUTE, item.suite.name)
     records = item.stash.get(_RECORDS, [])
     if not records:
         return report
@@ -416,6 +423,7 @@ class _WarrantRun:
     def __init__(self) -> None:
         """Start with nothing recorded."""
         self.records: list[CheckReport] = []
+        self.reconciled: list[str] = []
 
     def pytest_runtest_logreport(self, report: TestReport) -> None:
         """Gather a report's checks, on the controller and on a worker alike.
@@ -426,6 +434,9 @@ class _WarrantRun:
         if report.when != "call":
             return
         self.records.extend(_records_of(report))
+        suite = getattr(report, _RECONCILED_ATTRIBUTE, None)
+        if suite is not None:
+            self.reconciled.append(suite)
 
     def pytest_terminal_summary(
         self,
@@ -448,3 +459,12 @@ class _WarrantRun:
         terminalreporter.write_sep("=", "warrant summary")
         for line in check_summary(self.records).splitlines():
             terminalreporter.write_line(line)
+        if self.reconciled:
+            # These are not checks and carry no warrant, so they are absent from the
+            # counts above. Named here because pytest counts them and a reader
+            # otherwise has to work out why its total is larger.
+            suites = len(set(self.reconciled))
+            terminalreporter.write_line(
+                f"{suites} suite{'s' if suites != 1 else ''} reconciled against the "
+                "manifest, which pytest counts and the rows above do not"
+            )

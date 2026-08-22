@@ -166,6 +166,34 @@ Nothing here touches a filesystem. The caller decides where the bytes go. A JSON
 for the record ships beside the code at `warrantlib/report.schema.json`, for a consumer
 reading a ledger without Python.
 
+## Under pytest
+
+`pip install "warrantlib[pytest]"` adds a plugin, loaded through pytest's `pytest11`
+entry point. A test hands its findings over and the run reports them in the vocabulary
+the check used.
+
+```python
+def test_the_coefficient_is_closed_form(record_check):
+    record_check(measure_c2())
+```
+
+```text
+test_the_coefficient_is_closed_form NOT TRIGGERED  [100%]
+
+============== warrant summary ==============
+1 registered, 1 tested here, none fired
+   PROVED        NOT TRIGGERED   1
+```
+
+A fired check fails its test, and so does an unresolved one. The two that never ran here
+skip, and the progress letters keep them apart: `v` for void by construction, `e` for
+measured elsewhere.
+
+A manifest takes it further. It declares every check a suite is registered to report, so
+a check that stops reporting fails by name instead of shrinking a count that could not
+say which one left. Generate one with `python -m warrantlib.manifest <path>` and ask
+whether it is current with `--check`.
+
 ## Where it comes from
 
 warrantlib was factored out of [cpomdp](https://github.com/inferogenesis/cpomdp), where
