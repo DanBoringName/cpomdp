@@ -67,6 +67,7 @@ plugins:
 nav:
   - Home: index.md
   - Step-by-step guide: guides/step-by-step.md
+  - Surge margin derivation: guides/surge_margin_derivation.md
   - Examples:
       - Gallery: examples.md
       - FFG examples: examples-ffg.md
