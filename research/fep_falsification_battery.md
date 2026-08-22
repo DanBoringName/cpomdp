@@ -260,9 +260,11 @@ raising a parameter until the result fires. Require the sign flip at the registe
 - Build: toolbox A shipped at v0.4.4, `cpomdp.enumeration` supplying exhaustive `|A|^H`
   search under a cardinality certificate, which is what makes the flip decided rather
   than sampled. Toolbox E (control bracket) outstanding, PR-5.
-- Falsify: no crossover at any feasible H; or a flip that is not clean at H\* and
-  H\* − 1; or not reproducible across seeds; **or H\* not stable under action-set
-  refinement**.
+- Falsify: no crossover at any feasible H. Or a flip that is not clean at H\* and
+  H\* − 1. Or not reproducible across seeds. **Or H\* not stable under action-set
+  change**, which is two falsifiers rather than one: **refinement** at finer spacing over
+  the same range, and **extension** at a wider range. The suite emits five rows for that
+  reason.
 - **Fourth falsifier, registered before it is run.** Two axes, separate and not
   interchangeable: **extension** is a wider magnitude range at the same spacing,
   **refinement** is finer spacing over the same range. Write the predicted direction and
@@ -275,6 +277,199 @@ raising a parameter until the result fires. Require the sign flip at the registe
   detour", which is geometry, not a result.
 - Does not buy: a prediction about the planning horizon, not about the R(x) mechanism. A
   null weakens the "reach becomes walk" reading without touching Thm 1.
+
+### PRE-REGISTRATION 2026-08-20: the fourth D3 falsifier, both axes
+
+Written before any cell below is run in this repository. The registered set is `V1 = [−2,−1,0,1,2]` at
+`H* = 7`. `V1_EDGE = [−3,−2,−1,0,1,2]` is already measured at `H* = 6`.
+
+Geometry the arguments rest on, from `cue_maze`: the agent starts at `0`, the cue sits at
+`+1`, the prior goal at `−3`. The cue-ward branch spends one step reaching the cue and
+then covers a displacement of `−4`. The prior-ward branch covers `−3` directly.
+
+**Extension. Directional prediction, `H* ≤ 6`.** The named cell is `{−4,…,2}`, seven
+actions, same spacing. The argument is an asymmetry. At `−3` the prior-ward branch already
+covers its `−3` in one step, so a magnitude of `4` buys it nothing. The cue-ward branch
+still needs two steps for its `−4` return, and `−4` cuts that to one. The extension
+therefore helps the cue-ward branch alone, and a branch that gets cheaper cannot win later.
+Predicted `H* ≤ 6`, and plausibly `5`.
+
+This is an argument, not a proof: the argmin over a superset may move either way, since a
+larger set changes both branches' scores and not only their step counts. A measured rise
+is a real refutation rather than a modelling surprise, and it would say the step-count
+reading of this task is wrong.
+
+**Refinement. No direction is arguable, so a stability test at `|ΔH*| ≤ 1`.** The cells
+are step `0.5` (nine actions) and step `0.25` (seventeen), both over the same `[−2, 2]`.
+Neither changes the largest magnitude, so neither branch's minimum step count moves: the
+cue-ward return still needs two steps and the prior-ward reach two. Refinement buys finer
+positioning only, and the cue at `+1` is already exactly reachable on `V1`, so it buys no
+reachability either. With nothing to argue in either direction, this is registered as a
+stability test and not dressed as a prediction. `|ΔH*| ≤ 1` is `PASS`, `|ΔH*| ≥ 2` is
+`FAIL`.
+
+**Correction, before this entry landed: the step-`0.5` cell is not virgin ground.**
+`research/r10_open_loop_crossover.md` already reports it, with numbers: on a step-`0.5`
+grid the argmin is byte-identical to the coarse set at `H = 6` (`Gmin = 364.6430`,
+prior-ward) and `H = 7` (`Gmin = 425.1631`, the same walk), no intermediate action scoring
+lower `G`, concluding that `H*` is stable under refinement and reading falsifier 4 as *not
+triggered*. An earlier draft of this registration called that cell unmeasured. It is not,
+and a pre-registration that mis-states what is already known is the failure it exists to
+prevent.
+
+What remains is narrower and worth stating exactly. **No commit in this repository builds
+a nine-action step-`0.5` set**, so the published numbers have no in-repo reproduction, and
+the repository disagrees with itself about the outcome: the write-up reads falsifier 4 as
+not triggered while `examples/ffg/crossover.py` reports it `NOT_RUN_HERE` with no warrant.
+That is the same shape as the extension row this entry already retracted, still standing.
+So the step-`0.5` cell is registered as a **re-measurement under a completeness
+certificate**, against the published `364.6430` and `425.1631`, and the stability test
+above is what it reports against. The `H = 8` and step-`0.25` cells are new ground and
+carry no prior claim.
+
+**Void guard, discharged before the run.** `cue_maze.best_reachable_noise` returns exactly
+`R_LO = 0.02` on all four sets, so every lattice lands on the cue and no cell is void by
+geometry. A null from any of them is about the objective.
+
+**Budget, and the two units disagree.** Declared in both, because a cell can sit inside one
+and outside the other. Time is at the measured 39.0k policies/s.
+
+| cell | actions | H | policies | scored steps | time |
+| --- | --- | --- | --- | --- | --- |
+| `V1`, registered | 5 | 7 | 78,125 | 546,875 | 2s |
+| `V1_EDGE`, measured | 6 | 7 | 279,936 | 1,959,552 | 7s |
+| extension `{−4,…,2}` | 7 | 7 | 823,543 | 5,764,801 | 21s |
+| refinement step `0.5` | 9 | 7 | 4,782,969 | 33,480,783 | 2.0m |
+| refinement step `0.5` | 9 | 8 | 43,046,721 | 344,373,768 | 18.4m |
+| refinement step `0.25` | 17 | 7 | 410,338,673 | 2,872,370,711 | 2.92h |
+
+The ledger's `H_max = 9` budget is 17.6M *scored steps*. The step-`0.5` cell at `H = 7` is
+33.5M, double that, while its policy count sits far inside the `9^7` line. Both numbers are
+declared so neither can be quoted alone.
+
+**`9^8` and `17^7`: accepted, and only on the chunked path.** Time is not what gates them.
+`enumeration_cost` describes the front-loaded path, and on this machine, with 19 GiB free,
+it reads 14.11 GiB for `9^8` and 131.46 GiB for `17^7`. The measured correction is 1.6x,
+giving 22.6 GiB and 210.3 GiB. Both exceed the ceiling, and the WSL cap is configured
+rather than physical, so a front-loaded attempt takes the session down rather than raising
+`MemoryError`. Both cells run under `ChunkedEfeSearch`, whose peak is block-determined and
+flat in `|A|^H` (ADR-036). A front-loaded run of either is **VOID (budget)**, not a result.
+
+**Outcome vocabulary.** Each axis reports `PASS`, `FAIL` or `VOID` against the above. Budget
+overrun is `VOID`, meaning unmeasured, and never "stable".
+
+### AMENDMENT 2026-08-21: what a `Gmin` disagreement means, registered before the run
+
+The step-`0.5` re-measurement compares against two published numbers, `Gmin = 364.6430` at
+`H = 6` and `425.1631` at `H = 7`. The registered falsifier is `|ΔH*| ≤ 1`, which is a
+statement about the horizon and says nothing about those scores. Without a rule written
+first, a disagreement would be adjudicated after the fact by whoever preferred which
+answer.
+
+**The two are reported separately, and neither is collapsed into the other.**
+
+- **`H*` is the falsifier.** `|ΔH*| ≤ 1` reports `NOT_TRIGGERED`; `|ΔH*| ≥ 2` reports
+  `FIRED`. That verdict does not depend on the scores agreeing.
+- **A `Gmin` disagreement is a separate result.** It says the published numbers are wrong,
+  not that refinement moved the optimum. It lands as its own dated `RESULT`, retracts the
+  published values and records the measured ones. It does **not** fire falsifier 4 on its
+  own.
+- **Tolerance.** The published values carry four decimal places, so agreement means equal
+  to within `5e-5`, the half-ulp of the last printed digit. A disagreement larger than that
+  is a real difference rather than a rounding artefact of the transcription.
+
+Both outcomes get stated. A run where `H*` is stable and the scores disagree is a passing
+falsifier beside a retracted number, and reporting only the first would bury the second.
+
+The two new-ground cells, `H = 8` and step-`0.25`, have no published values to compare
+against, so this amendment does not apply to them.
+
+### RESULT 2026-08-20: extension axis, `{−4,…,2}`, **PASS**
+
+Registered above at `H* ≤ 6` before the run. Measured `H* = 6`. Certified `PROVED (set
+v1-ext, |A|^H = 7^6 = 117649, visited 117649)`, one certificate per horizon, front-loaded
+at 0.42 GiB against 19 GiB free.
+
+| H | policies | `Gmin` | argmin | plan |
+| --- | --- | --- | --- | --- |
+| 5 | 16,807 | 303.6592 | `[−3, 0, 0, 0, 0]` | reach |
+| 6 | 117,649 | 363.9394 | `[+1, −4, 0, 0, 0, 0]` | walk |
+
+**The registered mechanism is the one that fires.** The argument for `H* ≤ 6` was that `−4`
+cuts the cue-ward return from two steps to one while buying the prior-ward reach nothing.
+The winning policy at `H = 6` is exactly that: one step to the cue at `+1`, then a single
+`−4` to the goal at `−3`. The prediction did not merely pass, its mechanism is visible in
+the argmin.
+
+**Two things the prediction got wrong, recorded as such.** The parenthetical "plausibly 5"
+did not hold: `H = 5` is still prior-ward even though the walk `[+1, −4, 0, 0, 0]` is
+feasible there. Feasibility of the shorter return is not what sets the crossover. The
+epistemic and pragmatic balance does, and the step-count argument says nothing about it. And
+extension **saturates**: `H* = 6` on both `{−3,…,2}` and `{−4,…,2}`, so the one-step return
+is used without advancing the horizon.
+
+**What this settles in the write-up.** `research/r10_open_loop_crossover.md` retracted a row
+reading "`H* = 6`, unchanged (`−3` already optimal)" as deduced rather than measured. The
+retraction was right and the number was right. The stated reason was wrong: `−3` is *not*
+what the optimal policy uses at `H = 6`, `−4` is. A row can carry a correct number for a
+false reason, and only the measurement tells them apart.
+
+### RESULT 2026-08-21: refinement axis, step-`0.5` — **PASS**, and the published numbers hold
+
+Measured on the chunked path at `3619016`, reproducible with
+`python examples/ffg/crossover.py --refinement`.
+
+| H | measured `Gmin` | published | argmin | plan |
+| --- | --- | --- | --- | --- |
+| 6 | 364.642964185792 | 364.6430 | `[−2,−1,0,0,0,0]` | prior-ward |
+| 7 | 425.163110098734 | 425.1631 | `[+1,−2,−2,0,0,0,0]` | cue-ward |
+
+`H* = 7` on the refined set against 7 on the coarse one, so `|ΔH*| = 0`, inside the
+registered bar of 1. Falsifier 4 reports `NOT_TRIGGERED` with both certificates as
+evidence, `PROVED (set v1-refine-0.5, 9^6 = 531441)` and `9^7 = 4782969`, each visited in
+full.
+
+**The published numbers are confirmed to the digit.** Both agree within the `5e-5`
+tolerance the 2026-08-21 amendment registered, so the disagreement branch does not fire
+and nothing is retracted. What the write-up lacked was a run in this repository, not
+accuracy. The retraction was about provenance and it is now discharged.
+
+**No half-step action appears in either argmin.** Byte-identity to the coarse set is
+expected, since the coarse set is a subset. The evidential half is that subdividing
+offered the optimum nothing it took.
+
+**`9^8` is not required.** The registration made the H = 8 cell contingent on `H*` rising
+under refinement. It did not rise, so the cell answers a question that did not arise. It
+was started and stopped rather than run to completion, and it is not outstanding work.
+
+**Still outstanding: step-`0.25`.** 410,338,673 policies, projected 2.7 hours at the
+measured 41,982 policies/s, peak flat at 0.46 GiB. Deferred on time, not on budget or
+memory. The registered stability test stands for it.
+
+### RESULT 2026-08-21: refinement axis, step-`0.25` — **PASS**, and both cells agree exactly
+
+Measured at `c37fac3` on the chunked path, 410,338,673 policies at `H = 7` in 2.5 hours at
+46,124 policies/s, peak 0.47 GiB.
+
+| H | policies | `Gmin` | argmin | plan |
+| --- | --- | --- | --- | --- |
+| 6 | 24,137,569 | 364.642964185792 | `[−2,−1,0,0,0,0]` | prior-ward |
+| 7 | 410,338,673 | 425.163110098734 | `[+1,−2,−2,0,0,0,0]` | cue-ward |
+
+`H* = 7`, so `|ΔH*| = 0` against the registered bar of 1. Both horizons certified
+`PROVED`, every policy visited.
+
+**The two refinement cells agree to the digit.** `364.642964185792` and
+`425.163110098734` are byte-identical to the step-`0.5` values, across a set with twice
+the actions and 86 times the policies. No quarter-step action reaches either argmin, just
+as no half-step did.
+
+Byte-identity is the expected half: the coarser set is a subset, so if the argmin lies in
+it the scores must match. The evidential half is that the argmin does lie in it. Twice
+now, at two spacings, subdividing offered the optimum nothing it took.
+
+**Both axes now report.** Extension `PASS` at `H* = 6`, refinement `PASS` at `H* = 7` on
+both cells. The fourth D3 falsifier is discharged and PR-2's merge gate is met.
 
 **D4 · certified discretisation bound · GATE-D4** · SEVERE · R9 · toolbox C · tier `BOUNDED` · **PR-8 · v0.4.5, hard gate**
 

@@ -74,6 +74,7 @@ from research.checks.gap_kernel import (
     assert_positive_noise,
     core_and_tail,
     plugin_noise_of,
+    sigma_slug,
 )
 from warrantlib import CheckReport, Outcome, Tier, Warrant, check_summary
 
@@ -329,6 +330,7 @@ def _check_preconditions(family: NoiseFamily) -> CheckReport:
         The check's report.
     """
     name = f"G0 preconditions [{family.name}]"
+    check_id = f"gap_expansion.preconditions_{family.key}"
     widest = max(EXPANSION_SIGMAS)
     half_width = MEASUREMENT_MULTIPLIER * math.sqrt(widest**2 + plugin_noise_of(family))
     centre = family.prior_mean
@@ -338,6 +340,7 @@ def _check_preconditions(family: NoiseFamily) -> CheckReport:
     except ValueError as failure:
         return CheckReport(
             name=name,
+            check_id=check_id,
             warrant=Warrant.CORROBORATED,
             outcome=Outcome.FIRED,
             tier=Tier.BOUNDED,
@@ -347,6 +350,7 @@ def _check_preconditions(family: NoiseFamily) -> CheckReport:
     if derivative is not None and derivative == 0.0:
         return CheckReport(
             name=name,
+            check_id=check_id,
             warrant=Warrant.CORROBORATED,
             outcome=Outcome.NOT_TRIGGERED,
             tier=Tier.BOUNDED,
@@ -357,6 +361,7 @@ def _check_preconditions(family: NoiseFamily) -> CheckReport:
         )
     return CheckReport(
         name=name,
+        check_id=check_id,
         warrant=Warrant.CORROBORATED,
         outcome=Outcome.NOT_TRIGGERED,
         tier=Tier.BOUNDED,
@@ -368,11 +373,12 @@ def _check_preconditions(family: NoiseFamily) -> CheckReport:
 
 
 def _check_certification(
-    measurement: GapMeasurement, certification: float
+    family: NoiseFamily, measurement: GapMeasurement, certification: float
 ) -> CheckReport:
     """G3: is the gap converged on all three axes at this `σ`?
 
     Args:
+        family: the declared `R` the cell was measured on.
         measurement: the measured cell.
         certification: the bar each axis is checked against.
 
@@ -380,9 +386,13 @@ def _check_certification(
         The check's report.
     """
     name = f"G3 certification [{measurement.family}, σ={measurement.sigma:.3f}]"
+    check_id = (
+        f"gap_expansion.certification_{family.key}_sigma{sigma_slug(measurement.sigma)}"
+    )
     if measurement.void_reason is not None:
         return CheckReport(
             name=name,
+            check_id=check_id,
             warrant=None,
             outcome=Outcome.NOT_APPLICABLE,
             tier=Tier.BOUNDED,
@@ -391,6 +401,7 @@ def _check_certification(
     fired = measurement.outcome is Outcome.FIRED
     return CheckReport(
         name=name,
+        check_id=check_id,
         warrant=Warrant.CORROBORATED,
         outcome=measurement.outcome,
         tier=Tier.BOUNDED,
@@ -423,9 +434,11 @@ def _check_c2(
         The check's report.
     """
     name = f"G1 c₂ closed form [{family.name}]"
+    check_id = f"gap_expansion.c2_closed_form_{family.key}"
     if family.log_noise_derivative is None:
         return CheckReport(
             name=name,
+            check_id=check_id,
             warrant=None,
             outcome=Outcome.NOT_APPLICABLE,
             tier=Tier.BOUNDED,
@@ -435,6 +448,7 @@ def _check_c2(
     if expected == 0.0:
         return CheckReport(
             name=name,
+            check_id=check_id,
             warrant=None,
             outcome=Outcome.NOT_APPLICABLE,
             tier=Tier.BOUNDED,
@@ -444,6 +458,7 @@ def _check_c2(
     if len(usable) < 2:
         return CheckReport(
             name=name,
+            check_id=check_id,
             warrant=None,
             outcome=Outcome.NOT_APPLICABLE,
             tier=Tier.BOUNDED,
@@ -459,6 +474,7 @@ def _check_c2(
     error = abs(measured / expected - 1.0)
     return CheckReport(
         name=name,
+        check_id=check_id,
         warrant=Warrant.CORROBORATED,
         outcome=Outcome.FIRED if error > tolerance else Outcome.NOT_TRIGGERED,
         tier=Tier.EXACT,
@@ -489,9 +505,11 @@ def _check_vanishing(
         The check's report.
     """
     name = f"G2 vanishing gap [{family.name}]"
+    check_id = f"gap_expansion.vanishing_gap_{family.key}"
     if family.log_noise_derivative != 0.0:
         return CheckReport(
             name=name,
+            check_id=check_id,
             warrant=None,
             outcome=Outcome.NOT_APPLICABLE,
             tier=Tier.EXACT,
@@ -501,6 +519,7 @@ def _check_vanishing(
     fired = not (worst < tolerance)
     return CheckReport(
         name=name,
+        check_id=check_id,
         warrant=Warrant.CORROBORATED,
         outcome=Outcome.FIRED if fired else Outcome.NOT_TRIGGERED,
         tier=Tier.EXACT,
@@ -539,10 +558,12 @@ def _check_residual_exponent(
         One report per leg.
     """
     name = f"G4 residual exponent [{family.name}]"
+    check_id = f"gap_expansion.residual_exponent_{family.key}"
     if family.log_noise_derivative is None or closed_form_c2(family) == 0.0:
         return [
             CheckReport(
                 name=name,
+                check_id=check_id,
                 warrant=None,
                 outcome=Outcome.NOT_APPLICABLE,
                 tier=Tier.BOUNDED,
@@ -554,6 +575,7 @@ def _check_residual_exponent(
         return [
             CheckReport(
                 name=name,
+                check_id=check_id,
                 warrant=None,
                 outcome=Outcome.NOT_APPLICABLE,
                 tier=Tier.BOUNDED,
@@ -567,6 +589,7 @@ def _check_residual_exponent(
     reports = [
         _exponent_report(
             name=f"G4a quartic leading [{family.name}]",
+            check_id=f"gap_expansion.quartic_leading_{family.key}",
             sigmas=sigmas,
             residual=gaps - quadratic,
             expected=QUARTIC_EXPONENT,
@@ -578,6 +601,7 @@ def _check_residual_exponent(
         reports.append(
             CheckReport(
                 name=f"G4b candidate c₄ [{family.name}]",
+                check_id=f"gap_expansion.candidate_c4_{family.key}",
                 warrant=None,
                 outcome=Outcome.NOT_RUN_HERE,
                 tier=Tier.BOUNDED,
@@ -597,6 +621,7 @@ def _check_residual_exponent(
     reports.append(
         _exponent_report(
             name=f"G4b candidate c₄ [{family.name}]",
+            check_id=f"gap_expansion.candidate_c4_{family.key}",
             sigmas=sigmas,
             residual=residual,
             expected=SEXTIC_EXPONENT + (2.0 if c6_candidate is not None else 0.0),
@@ -607,6 +632,7 @@ def _check_residual_exponent(
     reports.append(
         _stability_report(
             name=f"G4c exponent stability [{family.name}]",
+            check_id=f"gap_expansion.exponent_stability_{family.key}",
             sigmas=sigmas,
             residual=residual,
             tolerance=tolerance,
@@ -618,6 +644,7 @@ def _check_residual_exponent(
 def _stability_report(
     *,
     name: str,
+    check_id: str,
     sigmas: np.ndarray,
     residual: np.ndarray,
     tolerance: float,
@@ -636,6 +663,7 @@ def _stability_report(
 
     Args:
         name: the check's name.
+        check_id: the check's key, as a manifest and a ledger name it.
         sigmas: the spreads measured at.
         residual: what is left after the subtraction.
         tolerance: the spread bar, shared with G4b so the two are commensurable.
@@ -649,6 +677,7 @@ def _stability_report(
     if tuple(np.round(sigmas, 12)) != tuple(np.round(sorted(EXPANSION_SIGMAS), 12)):
         return CheckReport(
             name=name,
+            check_id=check_id,
             warrant=None,
             outcome=Outcome.NOT_APPLICABLE,
             tier=Tier.BOUNDED,
@@ -661,6 +690,7 @@ def _stability_report(
     if len(sigmas) < 4 or float(np.min(magnitudes)) < QUADRATURE_FLOOR:
         return CheckReport(
             name=name,
+            check_id=check_id,
             warrant=None,
             outcome=Outcome.NOT_APPLICABLE,
             tier=Tier.BOUNDED,
@@ -678,6 +708,7 @@ def _stability_report(
     unstable = spread > tolerance
     return CheckReport(
         name=name,
+        check_id=check_id,
         warrant=Warrant.CORROBORATED,
         outcome=Outcome.FIRED if unstable else Outcome.NOT_TRIGGERED,
         tier=Tier.BOUNDED,
@@ -692,6 +723,7 @@ def _stability_report(
 def _exponent_report(
     *,
     name: str,
+    check_id: str,
     sigmas: np.ndarray,
     residual: np.ndarray,
     expected: float,
@@ -702,6 +734,7 @@ def _exponent_report(
 
     Args:
         name: the check's name.
+        check_id: the check's key, as a manifest and a ledger name it.
         sigmas: the spreads measured at.
         residual: what is left after the subtraction.
         expected: the exponent the structure predicts.
@@ -715,6 +748,7 @@ def _exponent_report(
     if bool(np.any(magnitudes <= 0.0)) or float(np.min(magnitudes)) < QUADRATURE_FLOOR:
         return CheckReport(
             name=name,
+            check_id=check_id,
             warrant=None,
             outcome=Outcome.NOT_APPLICABLE,
             tier=Tier.BOUNDED,
@@ -728,6 +762,7 @@ def _exponent_report(
     fired = drift > tolerance
     return CheckReport(
         name=name,
+        check_id=check_id,
         warrant=Warrant.CORROBORATED,
         outcome=Outcome.FIRED if fired else Outcome.NOT_TRIGGERED,
         tier=Tier.BOUNDED,
@@ -775,7 +810,7 @@ def run_checks(
             for sigma in ordered
         ]
         reports.append(_check_preconditions(family))
-        reports += [_check_certification(cell, certification) for cell in cells]
+        reports += [_check_certification(family, cell, certification) for cell in cells]
         reports.append(_check_c2(family, cells, c2_tolerance))
         reports.append(_check_vanishing(family, cells, zero_tolerance))
         reports += _check_residual_exponent(
@@ -815,6 +850,7 @@ def _control_report(reports: Sequence[CheckReport], tolerance: float) -> CheckRe
     if not ran:
         return CheckReport(
             name="G4c control",
+            check_id="gap_expansion.control",
             warrant=None,
             outcome=Outcome.NOT_APPLICABLE,
             tier=Tier.BOUNDED,
@@ -823,6 +859,7 @@ def _control_report(reports: Sequence[CheckReport], tolerance: float) -> CheckRe
     unstable = [report for report in ran if report.outcome is Outcome.FIRED]
     return CheckReport(
         name="G4c control",
+        check_id="gap_expansion.control",
         warrant=Warrant.CORROBORATED,
         outcome=Outcome.FIRED if len(unstable) == len(ran) else Outcome.NOT_TRIGGERED,
         tier=Tier.BOUNDED,

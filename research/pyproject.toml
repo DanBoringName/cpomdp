@@ -7,7 +7,7 @@ requires-python = ">=3.10"
 # member so the checks are linted, typed and importable like the rest of the tree.
 classifiers = ["Private :: Do Not Upload"]
 dependencies = [
-    "warrantlib>=0.2",
+    "warrantlib>=0.3",
     "numpy>=1.24",
     "scipy>=1.15.3",
     "sympy>=1.13",

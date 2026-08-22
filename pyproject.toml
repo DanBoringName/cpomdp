@@ -52,6 +52,9 @@ dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
     "pytest-xdist>=3.8.0",
+    # Validates warrantlib's shipped report schema against the records it writes.
+    # A test-only dependency: warrantlib itself stays on the standard library.
+    "jsonschema>=4.0",
     "pre-commit>=4.0",
     # The check suites, and with them scipy and sympy. Declared here rather than left to
     # `uv sync --all-packages`, so a plain `uv sync` or `uv run` cannot produce an

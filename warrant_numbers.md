@@ -237,6 +237,14 @@ identical either way, since it does not depend on the epistemic target.
 
 ### The statistic and its sign
 
+**These are post-selection, and the qualifier travels with them.** The walk and reach the
+`Δ` numbers contrast at `H > 1` are the pair the exhaustive search *found*, so scoring
+them back across the horizon exhibits the mechanism and cannot establish the flip. The
+flip is established by the enumeration, which is selection-free. A reader quoting `Δε(H)`
+or `Δc(H)` as evidence *for* the crossover has the direction backwards. At `H = 1` the
+pair collapses to the registered constant anchors below, which were declared before the
+search and are not post-selection.
+
 `Δε(H) = Σ_k [ε_k(walk) − ε_k(reach)]`, `Δc(H) = Σ_k [c_k(walk) − c_k(reach)]`, and
 `ΔG(H) = Δc − Δε`. The pragmatic term is a cost (lower better) and the epistemic a value
 (higher better), so `ΔG < 0` is the crossover. `ΔG` is defined as `Δc − Δε`, asserted at
@@ -273,13 +281,120 @@ The H=1 anchors force `H* > 1`; the exhaustive varying-sequence search finds whe
 actually flips. `examples/ffg/crossover.py` pins these; the horizon is the free variable of
 the statistic, not a tuned parameter.
 
+**Every number in this section is open-loop.** The `H*` rows come from
+`EnumeratedEfeSearch.over_backend(...).evaluate(...)`, which scores whole length-H action
+sequences and never re-plans between steps. `ΔG(7)` comes from `_numpy_score` and the
+pragmatic-only crossing from `epistemic_counterfactual`, neither of which goes through
+that call, and both of which are open-loop by the same construction. Nothing here drives
+`RecedingHorizonSelector` or `OpenLoopSelector`.
+
+The same statistic under a receding-horizon driver is a different quantity, and **it has
+not been measured**. The closed-loop leg is open (`research/warrant_ledger.md`), and
+ADR-034 records that M7b drives the enumeration open-loop deliberately. The reason to name
+the seam is that a sentence like "the exhaustive argmin flips at 7" reads the same under
+either mode, so a row without the seam lets a reader take it for the mode they had in
+mind. `research/r10_open_loop_crossover.md` is the write-up.
+
 | number | value | what it is |
 | --- | --- | --- |
 | `H*` (registered set) | 7 | first horizon whose exhaustive argmin over `crossover-v1^H` is cue-ward — a two-phase walk `[+1,−2,−2,0,0,0,0]`. Cue-ward at H = 7, 8, 9 |
-| `H*` (with the one-step reach) | 6 | on `{−3,…,2}`, which contains `−3`, the action reaching the goal in one step from the start. So the registered 7 is an upper bound (the grid clips the reach at `−2`). Wider sets are not measured: `−3` is not established as optimal, since the walk arrives at the cue at `x = +1`, from where the goal is a displacement of `−4` |
+| `H*` (with the one-step reach) | 6 | on `{−3,…,2}`, which contains `−3`, the action reaching the goal in one step from the start. So the registered 7 is an upper bound (the grid clips the reach at `−2`). `−3` is not established as optimal: the walk arrives at the cue at `x = +1`, from where the goal is a displacement of `−4`. The seven-action `{−4,…,2}` is measured below and also gives 6; wider sets are not measured |
 | `ΔG(7)` | −0.1520 | `G(walk) − G(reach)` at H=7; the flip margin. Relative size 3.6e−4 against `G ≈ 425`, so the margin is small and must be shown well-conditioned |
 | pragmatic-only crossing | H ≈ 10 | with the epistemic term zeroed, the argmin is prior-ward through H = 9 and crosses near 10 — so the ~1.7-nat epistemic pull is what advances the flip to 7 |
 | `H_max` | 9 | declared feasibility bound; enumeration cost `5⁹·9 = 17,578,125` scored steps, measured. Larger H_max is a declared budget increase |
+
+**The `H = 7` in `examples/crossover_horizon_figure.py` is a different number.** That plane
+contrasts two named plans on a different model with a different backend, whole-state
+epistemic, and no search at all. Its crossing is an exact statement about those two plans;
+this `H*` is an argmin over every policy in a declared set. The integers coincide and mean
+nothing by it. Disclaimed once here, beside the number, and once in the README.
+
+#### `H*` stability under action-set change: registered, extension measured
+
+Declared 2026-08-20, before any cell was run in this repository. The full argument is the
+`PRE-REGISTRATION 2026-08-20` entry in `research/fep_falsification_battery.md`. The
+numbers are here because this is where they are quoted from. The extension row is a
+result and says so; the refinement rows are not, with the qualification below.
+
+| axis | cell | registered prediction | outcome |
+| --- | --- | --- | --- |
+| extension | `{−4,…,2}`, 7 actions, spacing 1 | `H* ≤ 6`. `−4` shortens the cue-ward return from two steps to one and buys the prior-ward reach nothing, since `−3` already covers it in one | **PASS**, measured `H* = 6`, see below |
+| refinement | step `0.5`, 9 actions over `[−2,2]` | stability, `\|ΔH*\| ≤ 1`. No direction is arguable: the largest magnitude does not move, so neither branch's step count does | **PASS**, `H* = 7`, `\|ΔH*\| = 0`, see below |
+| refinement | step `0.25`, 17 actions over `[−2,2]` | stability, `\|ΔH*\| ≤ 1`, same argument | **PASS**, `H* = 7`, `\|ΔH*\| = 0`, byte-identical to step `0.5` |
+
+Budget, declared in both units because they disagree. Time at the measured 39.0k
+policies/s. `VOID (budget)` on overrun, which means unmeasured and never "stable".
+
+| cell | actions | H | policies | scored steps | front-loaded peak, ×1.6 | time |
+| --- | --- | --- | --- | --- | --- | --- |
+| extension `{−4,…,2}` | 7 | 1–6 | 137,256 | 800,667 | 0.06 GiB | 16s |
+| refinement `0.5` | 9 | 7 | 4,782,969 | 33,480,783 | 2.45 GiB | 2.0m |
+| refinement `0.5` | 9 | 8 | 43,046,721 | 344,373,768 | 22.58 GiB | 18.4m |
+| refinement `0.25` | 17 | 7 | 410,338,673 | 2,872,370,711 | 210.34 GiB | 2.92h |
+
+The extension row budgets the sweep that was actually run. `H*` is the *first* cue-ward
+horizon, so the sweep stops at the registered bar of 6 and never enumerates `7^7`. An
+earlier version of this table budgeted `7^7 = 823,543` at `H = 7`, a cell no run visits.
+
+Two lines to read carefully. The step-`0.5` cell at `H = 7` costs 33.5M scored steps
+against the `H_max = 9` budget of 17.6M, so it is inside one declared unit and double the
+other. And the last two rows exceed the 19 GiB free on the reference machine, so both run
+under `ChunkedEfeSearch`, whose peak is block-determined and flat in `|A|^H` (ADR-036). The
+memory column is `cue_maze.enumeration_cost` times its measured 1.6x correction, and it
+describes the front-loaded path only. A front-loaded attempt at either is `VOID (budget)`:
+the WSL cap is configured rather than physical, so it takes the session down instead of
+raising `MemoryError`.
+
+`cue_maze.best_reachable_noise` returns `R_LO = 0.02` exactly on all four sets, so every
+lattice lands on the cue and no cell is void by geometry.
+
+#### Measured 2026-08-21: refinement step-`0.5` → `H* = 7`, **PASS**
+
+| number | value | what it is |
+| --- | --- | --- |
+| `Gmin` at H=6 | 364.642964185792 | step-`0.5` over `[−2,2]`, argmin `[−2,−1,0,0,0,0]`, prior-ward. Certified `PROVED (set v1-refine-0.5, 9^6 = 531441 visited)` |
+| `Gmin` at H=7 | 425.163110098734 | argmin `[+1,−2,−2,0,0,0,0]`, cue-ward. Certified at `9^7 = 4782969` |
+| `H*` on step-`0.5` | 7 | unchanged from the coarse set, so `\|ΔH*\| = 0` against a registered bar of 1 |
+| chunked rate | 41,982 policies/s | measured, and the basis for the step-`0.25` projection |
+| chunked peak | 0.46 GiB | flat in `\|A\|^H` (ADR-036), against 22.6 GiB front-loaded at `9^8` |
+
+Both scores agree with the published `364.6430` and `425.1631` inside the `5e-5` tolerance
+registered on 2026-08-21, so nothing is retracted. No half-step action appears in either
+argmin. The `9^8` cell was contingent on `H*` rising and is therefore not required.
+
+**step-`0.25` gives the identical numbers.** Measured at `c37fac3`: `364.642964185792` at
+`H = 6` over 24,137,569 policies and `425.163110098734` at `H = 7` over 410,338,673, both
+certified `PROVED`, 2.5 hours at 46,124 policies/s, peak 0.47 GiB. Not a digit moves
+against step-`0.5`, across twice the actions and 86 times the policies, and no
+quarter-step action reaches either argmin. `H* = 7` on both cells, so the refinement axis
+passes at both spacings.
+
+**The step-`0.5` cell already has published numbers, and no run behind them.**
+`research/r10_open_loop_crossover.md` reports the argmin byte-identical to the coarse set
+at `H = 6` (`Gmin = 364.6430`) and `H = 7` (`Gmin = 425.1631`), and reads falsifier 4 as
+not triggered. When that was written no commit in this repository built a nine-action step-`0.5` set,
+so the numbers had no in-repo reproduction and the check suite reported the falsifier
+`NOT_RUN_HERE`. Both are now false: `crossover.py` builds the set, the cell was
+re-measured under a completeness certificate against `364.6430` and `425.1631`, and the
+falsifier carries `PROVED`. The re-measurement is recorded above.
+
+#### Measured 2026-08-20: extension `{−4,…,2}` → `H* = 6`, **PASS**
+
+| number | value | what it is |
+| --- | --- | --- |
+| `H*` on `{−4,…,2}` | 6 | first cue-ward exhaustive argmin on the seven-action set, `[+1,−4,0,0,0,0]`. Certified `PROVED (set v1-ext, \|A\|^H = 7^6 = 117649, visited 117649)` |
+| `Gmin` at H=6 | 363.9394 | on `{−4,…,2}`. At H=5 it is 303.6592 and still prior-ward, `[−3,0,0,0,0]` |
+
+Registered at `H* ≤ 6` before the run, so this passes. The mechanism the argument rested on
+is the one that fires: the winning policy steps to the cue at `+1` and then takes a single
+`−4` to the goal at `−3`, which is the one-step return `−4` was predicted to buy.
+
+Two qualifications belong beside the number. The parenthetical "plausibly 5" did not hold.
+`H = 5` stays prior-ward even though the walk `[+1,−4,0,0,0]` is feasible there, so
+feasibility of the shorter return is not what sets the crossover. And extension
+**saturates**: `H* = 6` on `{−3,…,2}` and on `{−4,…,2}` alike, so `−4` is used without
+moving the horizon. Both facts are compatible with the registered prediction and neither was
+predicted by it.
 
 The conditioning of the H=7 walk clears the numerical-hygiene bars (recorded above): every
 `Σ⁺`, `S`, `Σ_post` positive definite; `min_eig(Σ_post) = 3.66e−3` against `MIN_EIG_FLOOR =

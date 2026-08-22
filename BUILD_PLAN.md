@@ -359,31 +359,37 @@ tracks the block rather than the enumeration. **ADR-036.** — met.
 
 Gate-independent. Paper 3's G9 inherits the qualifier this produces.
 
-- [ ] **Declare the action mode on the registered result.** `RecedingHorizonSelector` and
+- [x] **Declare the action mode on the registered result.** `RecedingHorizonSelector` and
       `OpenLoopSelector` genuinely differ, and v0.4.4 requires a measurement to say which
       it used. The M7b sweep drove `EnumeratedEfeSearch` directly, which is open-loop.
       Confirm that in code, then carry the declaration into the paper. The ledger requires
       R10 reported under its seam, never silently read as closed-loop.
-- [ ] **Run the fourth D3 falsifier: `H*` stability under action-set refinement.**
+      Confirmed in code: `examples/ffg/crossover.py` calls
+      `EnumeratedEfeSearch.over_backend(...).evaluate(...)` and instantiates neither
+      selector. The declaration now travels with the number, in both `PROVED` falsifier
+      details (rows 1 and 2; row 5 states its own registered bar instead) and at the head
+      of `warrant_numbers.md`'s crossover section, which had not
+      named the seam at all. The write-up and ADR-034 already carried it. No number moved.
+- [x] **Run the fourth D3 falsifier: `H*` stability under action-set refinement.**
       Registered in the battery before it is run, which is what keeps it a test. It is
       load-bearing rather than precautionary, because the release itself calls `H* = 7` an
       upper bound *because the grid clips the reach*.
-  - [ ] Two axes, registered separately. **Extension** is a wider magnitude range at the
+  - [x] Two axes, registered separately. **Extension** is a wider magnitude range at the
         same spacing. **Refinement** is finer spacing over the same range.
-  - [ ] Predicted direction and its argument written down **before running**, on each
+  - [x] Predicted direction and its argument written down **before running**, on each
         axis. Where no direction can be argued in advance, register a stability test at a
         stated tolerance (`|ΔH*| ≤ 1`) rather than dressing a stability check as a
         directional prediction.
-  - [ ] Pre-declare the compute budget, in **both units**, because they disagree: the
+  - [x] Pre-declare the compute budget, in **both units**, because they disagree: the
         cell counts here are policies (`5^7 = 78,125`, `7^7 = 823,543`,
         `9^7 = 4,782,969`, `9^8 ≈ 4.3 × 10^7`) while the ledger's `H_max = 9` is 17.6M
         *scored steps*. `9^7` at H = 7 is 33.5M scored steps: inside one budget, double
         the other. Budget exceeded is **VOID**, meaning unmeasured, never "stable".
-  - [ ] Decide `9^8` and `17^7` deliberately rather than by contingency. PR-1b removed
+  - [x] Decide `9^8` and `17^7` deliberately rather than by contingency. PR-1b removed
         the memory wall, so they are 18 minutes and 2.9 hours at the measured 39.0k
         policies/s, not the `VOID (memory)` they were. Accept or decline each in the
         registration, before the run.
-  - [ ] The extension axis has one named unmeasured cell to answer, `{−4,…,2}`.
+  - [x] The extension axis has one named unmeasured cell to answer, `{−4,…,2}`.
         `research/r10_open_loop_crossover.md` carried a row for it reading "`H* = 6`,
         unchanged (`−3` already optimal)", deduced from `−3` reaching the goal in one step
         rather than measured. No commit in this repo builds that set, so the row is
@@ -391,24 +397,43 @@ Gate-independent. Paper 3's G9 inherits the qualifier this produces.
         walk arrives at the cue at `x = +1`, from where the goal at `x = −3` is a
         displacement of `−4`, so a set containing `−4` offers a one-step return the
         six-action set does not. Measure it under a completeness certificate.
-  - [ ] Size the run against `free -g` before launching it. `cue_maze.enumeration_cost`
+        Measured 2026-08-20: `H* = 6`, `PROVED (set v1-ext, 7^6 = 117649 visited)`, argmin
+        `[+1,−4,0,0,0,0]`. The deduced row's number was right and its reason was wrong, since
+        the argmin uses `−4` rather than `−3`. Extension saturates at 6.
+  - [x] Size the run against `free -g` before launching it. `cue_maze.enumeration_cost`
         describes the **front-loaded** path only. On the chunked path peak is
         block-determined and flat in `|A|^H`, so re-derive any budget line taken from the
         old figure. The WSL memory cap is configured rather than physical, and an
         over-sized enumeration takes the whole session down.
-  - [ ] Wire `cue_maze.best_reachable_noise` in as the void guard. A refined set that
+  - [x] Wire `cue_maze.best_reachable_noise` in as the void guard. A refined set that
         cannot land on the cue produces a null indistinguishable from "information is
         never worth the detour", which is pure geometry and not a result.
-  - [ ] Carry the `slow` marker. This runs on merge-to-main, not on pull requests.
-- [ ] Carry the post-selection disclosure into the paper. The mechanism split in
+  - [x] Carry the `slow` marker. This runs on merge-to-main, not on pull requests.
+        **Discharged differently, and the difference is the point.** Nothing carries the
+        marker, because no *refinement* cell re-enumerates on any gate. The measured rows are
+        recorded
+        constants with their certificates and a provenance, and `--refinement` is the
+        reproduction route, off both the test path and `--check`. Cheap tests assert the
+        recorded values against the published ones. Slow-marking the sweep
+        would have put two minutes on every merge to re-derive a number that cannot
+        drift, since a recorded constant changes only when someone edits it.
+- [x] Carry the post-selection disclosure into the paper. The mechanism split in
       `crossover.py` is disclosed as post-selection, because the scored pair was found by
-      the search.
-- [ ] Keep the `H = 7` coincidence disclaimed once, near the number.
+      the search. Now stated in `warrant_numbers.md` beside the `Δ` numbers themselves,
+      which is where a paper author quotes them from, alongside the existing disclosures
+      in the write-up, the ledger and the demo.
+- [x] Keep the `H = 7` coincidence disclaimed once, near the number.
       `examples/crossover_horizon_figure.py` crosses at the same integer on a different
-      model, a different backend, whole-state epistemic, no search.
+      model, a different backend, whole-state epistemic, no search. Disclaimed beside the
+      `H*` table in `warrant_numbers.md`, which had it nowhere, and once in the README.
 
 **Merge gate:** both axes report an outcome, `PASS`, `FAIL` or `VOID`, against their
 registered prediction. **ADR on landing.**
+
+**Met 2026-08-21.** Extension `PASS` at `H* = 6` on `{−4,…,2}`; refinement `PASS` at
+`H* = 7` on step-`0.5` and step-`0.25` alike, `|ΔH*| = 0` against a bar of 1. ADR-043
+records the extension axis and step-`0.5`, ADR-044 step-`0.25`, and the `9^8` cell turned
+out moot rather than deferred.
 
 ## PR-3 — World/Agent seam, exogenous action, constructors
 

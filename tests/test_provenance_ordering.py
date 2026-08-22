@@ -5,9 +5,9 @@ a property of the commit graph and not of a string. So a registration written af
 number it claims to precede constructs, renders without a marker, and reads exactly like
 one written before. This is where that is caught.
 
-The rule: for every `Source` whose two refs differ, `registered_at` must be an ancestor
-of `measured_at`. Same-ref sources are skipped, since they already say in their own
-render that history establishes no ordering.
+The rule: for every declared provenance whose two refs differ, `registered_at` must be
+an ancestor of `measured_at`. Same-ref ones are skipped, since they already say in their
+own render that history establishes no ordering.
 
 Three sources fail it today. The xfail marks record which and why, rather than
 softening the rule until it stops reporting.
@@ -19,6 +19,7 @@ import pytest
 
 from research.checks import gap_series, series_kernel
 from research.checks.series_kernel import Source
+from warrantlib import Provenance
 
 #: Sources whose registration landed after the measurement that relies on it. The
 #: derivation in `research/c4_hand_derivation.md` was committed 2026-08-17, later than
@@ -33,13 +34,24 @@ _KNOWN_BACKWARDS = {
 
 
 def _sources():
-    """Every `Source` the check modules declare, as `(module.name, source)` pairs."""
+    """Every declared provenance, as `(name, provenance)` pairs.
+
+    Covers the `Source` records in the check suites and the bare `Provenance` constants
+    the demos declare. A registration that only the demo carries is a registration
+    nothing checks, which is the gap this module exists to close.
+    """
+    import crossover
+
     found = []
     for module in (series_kernel, gap_series):
         for name in dir(module):
             value = getattr(module, name)
             if isinstance(value, Source):
-                found.append((name, value))
+                found.append((name, value.provenance))
+    for name in dir(crossover):
+        value = getattr(crossover, name)
+        if isinstance(value, Provenance):
+            found.append((name, value))
     return sorted(set(found), key=lambda pair: pair[0])
 
 
@@ -76,17 +88,23 @@ pytestmark = pytest.mark.skipif(
 
 def test_the_suites_declare_sources():
     # Guards the collection above. A rename that stops `_sources` finding anything
-    # would turn every case below into a silent pass.
-    assert len(_sources()) >= 8
+    # would turn every case below into a silent pass. Floored per source rather than in
+    # total: the check suites alone clear 8, so a total-only floor would let the whole
+    # demo half vanish and still pass.
+    names = {name for name, _ in _sources()}
+    assert len(names) >= 11
+    from_checks = {n for n in names if n.endswith("_SOURCE")}
+    assert len(from_checks) >= 9, from_checks
+    assert len(names - from_checks) >= 2, names - from_checks
 
 
 @pytest.mark.parametrize(
     ("name", "source"), _sources(), ids=[name for name, _ in _sources()]
 )
 def test_the_registration_ref_exists(name, source):
-    found = _git("cat-file", "-e", f"{source.provenance.registered_at}^{{commit}}")
+    found = _git("cat-file", "-e", f"{source.registered_at}^{{commit}}")
     assert found.returncode == 0, (
-        f"{name}: registered_at={source.provenance.registered_at} is not a commit in "
+        f"{name}: registered_at={source.registered_at} is not a commit in "
         "this repository"
     )
 
@@ -95,8 +113,7 @@ def test_the_registration_ref_exists(name, source):
     ("name", "source"), _sources(), ids=[name for name, _ in _sources()]
 )
 def test_the_registration_precedes_the_measurement(name, source, request):
-    provenance = source.provenance
-    if provenance.same_ref:
+    if source.same_ref:
         pytest.skip("one ref: the render already says history orders nothing")
     if name in _KNOWN_BACKWARDS:
         request.node.add_marker(
@@ -111,11 +128,11 @@ def test_the_registration_precedes_the_measurement(name, source, request):
     ancestor = _git(
         "merge-base",
         "--is-ancestor",
-        provenance.registered_at,
-        provenance.measured_at,
+        source.registered_at,
+        source.measured_at,
     )
     assert ancestor.returncode == 0, (
-        f"{name}: registered_at={provenance.registered_at} is not an ancestor of "
-        f"measured_at={provenance.measured_at}, so the bar was not fixed before the "
+        f"{name}: registered_at={source.registered_at} is not an ancestor of "
+        f"measured_at={source.measured_at}, so the bar was not fixed before the "
         "number it is quoted against"
     )

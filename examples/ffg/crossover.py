@@ -27,9 +27,12 @@ one-time detour cost. So the reach's advantage decays with the horizon and the w
 at H = 7 -- the gradient decays below the constant pull, not the pull past the gradient.
 
 ``--check`` asserts the flip, the mechanism split, an independent NumPy oracle on the
-headline number, and the kernel's numerical inertness, with no plotting deps::
+headline number, and the kernel's numerical inertness, with no plotting deps.
+``--refinement`` re-runs the registered refinement cells on the chunked path, which is
+minutes to hours and so sits off every gate::
 
     uv run --no-sync python examples/ffg/crossover.py --check
+    uv run --no-sync python examples/ffg/crossover.py --refinement
     uv run --no-sync python examples/ffg/crossover.py
 """
 
@@ -39,6 +42,7 @@ import itertools
 import sys
 from typing import NamedTuple
 
+import cue_maze as demo_maze
 import epistemic_dissociation_figure as demo
 import jax
 import jax.numpy as jnp
@@ -48,6 +52,7 @@ from cpomdp.crossover import crossover_statistic
 from cpomdp.diagnostics import logdet_pd, rollout_conditioning
 from cpomdp.efe import policy_efe_ffg, policy_efe_ffg_trace
 from cpomdp.enumeration import (
+    ChunkedEfeSearch,
     CompletenessCertificate,
     EnumeratedEfeSearch,
     FiniteActionSet,
@@ -72,13 +77,28 @@ COND_CEILING = 1e8
 # grid edge -2, so it needs two steps to reach the goal at -3. A set containing -3,
 # which reaches the goal in one step from the start, flips one horizon sooner (see the
 # +edge measurement below). H* on this set is therefore an upper bound, and the honest
-# headline number. Wider sets are unmeasured: -3 is the one-step reach from the start,
-# not an established optimum, since the walk arrives at the cue at +1.
+# headline number. -3 is the one-step reach from the start, not an established optimum,
+# since the walk arrives at the cue at +1. The seven-action set below supplies that
+# one-step return and also gives 6, so extension saturates; wider sets are unmeasured.
 V1 = [-2.0, -1.0, 0.0, 1.0, 2.0]  # the registered action set (clips the reach at -2)
 V1_EDGE = [-3.0, *V1]  # + the one-step reach -3; flips one horizon sooner
+# + the one-step *return*: the walk reaches the cue at +1, and the goal at -3 is then a
+# displacement of -4. The extension axis of the fourth D3 falsifier, registered at
+# `H* <= 6` before it ran (see fep_falsification_battery.md, 2026-08-20).
+V1_EXT = [-4.0, *V1_EDGE]
 ACTION_SET = FiniteActionSet([[a] for a in V1], version="v1")
 EDGE_SET = FiniteActionSet([[a] for a in V1_EDGE], version="v1-edge")
+EXT_SET = FiniteActionSet([[a] for a in V1_EXT], version="v1-ext")
+# The refinement axis: the same [-2, 2] range at finer spacing, so the largest magnitude
+# does not move and neither branch's step count can. Registered as a stability test at
+# |dH*| <= 1 (fep_falsification_battery.md, 2026-08-20). Both run chunked: front-loaded
+# peak is 22.6 GiB at 9^8 and 210 GiB at 17^7, against a chunked 0.46 GiB (ADR-036).
+REFINE_05 = [round(-2.0 + 0.5 * i, 2) for i in range(9)]
+REFINE_025 = [round(-2.0 + 0.25 * i, 2) for i in range(17)]
+REFINE_05_SET = FiniteActionSet([[a] for a in REFINE_05], version="v1-refine-0.5")
+REFINE_025_SET = FiniteActionSet([[a] for a in REFINE_025], version="v1-refine-0.25")
 FLIP_H = 7  # the crossover horizon on ACTION_SET
+EDGE_H_STAR = 6  # measured on V1_EDGE, and on V1_EXT too, which is the saturation
 MAX_H = 7  # the exhaustive sweep budget (feasibility is |A|^H * H, printed below)
 # Declared feasibility bound: enumeration is feasible to H_MAX (5^9 * 9 = 17.6M scored
 # steps, measured); the crossover at H=7 sits well inside it and is cue-ward through 9.
@@ -158,6 +178,255 @@ class FlipMeasurement(NamedTuple):
     def separated(self) -> bool:
         """Whether the margin clears the error bound, so the ordering is decidable."""
         return abs(self.delta_g) > self.bound
+
+
+class ExtensionMeasurement(NamedTuple):
+    """The extension axis of the fourth D3 falsifier, as its report reads it.
+
+    Attributes:
+        h_star: the first horizon whose exhaustive argmin is cue-ward, or ``None`` if
+            none is within the swept range.
+        certificate: the completeness certificate at that horizon, or at the last
+            swept one when no flip was found.
+        policy: the argmin there, so the mechanism is readable beside the number.
+        sensed: whether the lattice can land on the cue at all. A set that cannot
+            produces a null about the geometry rather than about the objective, which
+            is what the registered void guard exists to separate.
+    """
+
+    h_star: int | None
+    certificate: CompletenessCertificate
+    policy: object
+    sensed: bool
+
+
+#: The registered bar for the extension axis, from the 2026-08-20 pre-registration.
+EXT_BAR = 6
+
+#: Where that prediction was registered, and the ref whose tree measured against it.
+#: Registered before the run, which is what the ordering claim rests on and what
+#: `Provenance` exists to let a reviewer check.
+EXT_PROVENANCE = Provenance(
+    registered_at="86d1f22",
+    measured_at="17a1be7",
+    registered="extension axis registered at H* <= 6 (battery, 2026-08-20)",
+)
+
+
+class RefinementRow(NamedTuple):
+    """One refined-set horizon, measured on the chunked path.
+
+    Attributes:
+        horizon: the horizon enumerated.
+        gmin: the exhaustive minimum EFE there.
+        policy: the argmin, so a half-step action would be visible in it.
+        cue_ward: whether that argmin visits the cue.
+        certificate: the completeness certificate the loop's own count produced.
+    """
+
+    horizon: int
+    gmin: float
+    policy: tuple[float, ...]
+    cue_ward: bool
+    certificate: CompletenessCertificate
+
+
+def measure_refinement(action_set, horizon: int) -> RefinementRow:
+    """Enumerate a refined set at one horizon, in blocks.
+
+    Chunked rather than front-loaded, because these sets are why the chunked path
+    exists: the score vector alone is 3.28 GB at ``17^7``. Peak here is
+    block-determined and flat in ``|A|^H``, measured at 0.46 GiB on the step-0.5 set.
+    """
+    # The registered void guard, which names a *refined* set as its case: one that
+    # cannot land on the cue gives a null about the geometry rather than the objective.
+    # Computed here rather than asserted in prose, and refused rather than reported.
+    if demo_maze.best_reachable_noise(action_set, 1, horizon) > demo_maze.R_LO:
+        raise ValueError(
+            f"{action_set.version} cannot land on the cue within H = {horizon}, so any "
+            "null it produces is geometry and not a result (registered void guard)"
+        )
+    backend, belief, preference, info_block = _setup()
+    search = ChunkedEfeSearch.over_backend(
+        backend, action_set, info_block=info_block, horizon=horizon
+    )
+    result = search.reduce(belief, preference)
+    policy = np.asarray(result.best_policy).ravel()
+    return RefinementRow(
+        horizon=horizon,
+        gmin=float(result.best_g),
+        policy=tuple(float(a) for a in policy),
+        cue_ward=_cue_ward(policy),
+        certificate=result.certificate,
+    )
+
+
+#: The step-0.5 refinement, measured on the chunked path at `3619016` and reproducible
+#: with `--refinement`. Recorded rather than re-run on any gate: 5.3M policies at H = 6
+#: and 4.8M at H = 7 is minutes, not the seconds a check may take. What makes this a
+#: record rather than the write-up claim it replaces is that a commit builds the set,
+#: each row carries its completeness certificate, and the provenance names both refs.
+REFINEMENT_05_ROWS = (
+    RefinementRow(
+        horizon=6,
+        gmin=364.642964185792,
+        policy=(-2.0, -1.0, 0.0, 0.0, 0.0, 0.0),
+        cue_ward=False,
+        certificate=CompletenessCertificate(
+            expected=9**6,
+            visited=9**6,
+            warrant=Warrant.PROVED,
+            action_set_size=9,
+            horizon=6,
+            action_set_version="v1-refine-0.5",
+        ),
+    ),
+    RefinementRow(
+        horizon=7,
+        gmin=425.163110098734,
+        policy=(1.0, -2.0, -2.0, 0.0, 0.0, 0.0, 0.0),
+        cue_ward=True,
+        certificate=CompletenessCertificate(
+            expected=9**7,
+            visited=9**7,
+            warrant=Warrant.PROVED,
+            action_set_size=9,
+            horizon=7,
+            action_set_version="v1-refine-0.5",
+        ),
+    ),
+)
+
+#: The step-0.25 refinement, measured at `c37fac3` and reproducible with `--refinement`.
+#: 410,338,673 policies at H = 7, 2.5 hours at 46k policies/s, peak 0.47 GiB. Both
+#: scores are byte-identical to the step-0.5 cell across 86x the policies, and no
+#: quarter-step action reaches either argmin.
+REFINEMENT_025_ROWS = (
+    RefinementRow(
+        horizon=6,
+        gmin=364.642964185792,
+        policy=(-2.0, -1.0, 0.0, 0.0, 0.0, 0.0),
+        cue_ward=False,
+        certificate=CompletenessCertificate(
+            expected=17**6,
+            visited=17**6,
+            warrant=Warrant.PROVED,
+            action_set_size=17,
+            horizon=6,
+            action_set_version="v1-refine-0.25",
+        ),
+    ),
+    RefinementRow(
+        horizon=7,
+        gmin=425.163110098734,
+        policy=(1.0, -2.0, -2.0, 0.0, 0.0, 0.0, 0.0),
+        cue_ward=True,
+        certificate=CompletenessCertificate(
+            expected=17**7,
+            visited=17**7,
+            warrant=Warrant.PROVED,
+            action_set_size=17,
+            horizon=7,
+            action_set_version="v1-refine-0.25",
+        ),
+    ),
+)
+
+#: The crossover rows' registration. One commit derived the separation bar from the
+#: declared conditioning ceiling and reported these falsifiers against it, so the two
+#: refs are one and the render says the history orders nothing. Module scope rather than
+#: a local, so `tests/test_provenance_ordering.py` collects it: a registration only a
+#: function body holds is a registration nothing checks.
+FLIP_PROVENANCE = Provenance(
+    registered_at="efc43e2",
+    measured_at="efc43e2",
+    registered="the flip separation bar, derived from the conditioning ceiling",
+)
+
+
+class RefinementCell(NamedTuple):
+    """One refined action set, its measured rows, and the ref that measured them.
+
+    Bundled rather than kept as parallel constants so a cell can be injected whole. The
+    falsifier reads its outcome off these, and a refuting cell is what lets the refuting
+    branch be executed by a test instead of only described.
+
+    Attributes:
+        label: the spacing, as the detail line names it.
+        rows: one measured row per horizon.
+        provenance: which ref registered the stability test, and which measured this
+            cell. The two cells were measured at different commits, so the ref belongs
+            here rather than on a single constant covering both.
+    """
+
+    label: str
+    rows: tuple[RefinementRow, ...]
+    provenance: Provenance
+
+
+#: The registered tolerance for the refinement axis: `|dH*| <= 1` is PASS, `>= 2` FAIL
+#: (fep_falsification_battery.md, PRE-REGISTRATION 2026-08-20). The falsifier reads this
+#: rather than testing equality, which would fail a measurement the registration passes.
+REFINEMENT_TOLERANCE = 1
+
+#: The two measured cells. Each names the ref that measured it: step-0.5 ran at
+#: `3619016` and step-0.25 at `c37fac3`, so one provenance covering both would cite a
+#: tree that never produced half the rows.
+REFINEMENT_CELLS = (
+    RefinementCell(
+        label="step-0.5",
+        rows=REFINEMENT_05_ROWS,
+        provenance=Provenance(
+            registered_at="86d1f22",
+            measured_at="3619016",
+            registered="refinement stability at |dH*| <= 1 (battery, 2026-08-20)",
+        ),
+    ),
+    RefinementCell(
+        label="step-0.25",
+        rows=REFINEMENT_025_ROWS,
+        provenance=Provenance(
+            registered_at="86d1f22",
+            measured_at="c37fac3",
+            registered="refinement stability at |dH*| <= 1 (battery, 2026-08-20)",
+        ),
+    ),
+)
+
+#: The published values the re-measurement was checked against, and the tolerance the
+#: 2026-08-21 amendment registered for them: the half-ulp of the last printed digit.
+PUBLISHED_REFINEMENT_GMIN = {6: 364.6430, 7: 425.1631}
+GMIN_TOLERANCE = 5e-5
+
+
+def refinement_h_star(rows=REFINEMENT_05_ROWS) -> int | None:
+    """The first cue-ward horizon on a recorded refinement sweep."""
+    return next((r.horizon for r in rows if r.cue_ward), None)
+
+
+def measure_extension(max_horizon: int = EXT_BAR) -> ExtensionMeasurement:
+    """Sweep the extension set for its crossover, with a certificate either way.
+
+    A sweep that finds no cue-ward argmin has still enumerated every horizon in full, so
+    it is decided rather than sampled and carries the certificate at the last one. The
+    report needs evidence whichever way the falsifier goes.
+    """
+    # The registered void guard, computed rather than asserted. A refined or extended
+    # set that cannot reach the cue returns "no crossover" for a reason that has nothing
+    # to do with the objective, and the outcome for that is NOT APPLICABLE.
+    sensed = demo_maze.best_reachable_noise(EXT_SET, 1, max_horizon) <= demo_maze.R_LO
+    # One enumeration per horizon, and the certificate comes off that same search. Going
+    # back for it through a second `over_backend` would enumerate the set twice.
+    backend, belief, preference, info_block = _setup()
+    policy = ()
+    for horizon in range(1, max_horizon + 1):
+        search = EnumeratedEfeSearch.over_backend(
+            backend, EXT_SET, info_block=info_block, horizon=horizon
+        )
+        policy = np.asarray(search.evaluate(belief, preference).best_policy).ravel()
+        if _cue_ward(policy):
+            return ExtensionMeasurement(horizon, search.certificate, policy, sensed)
+    return ExtensionMeasurement(None, search.certificate, policy, sensed)
 
 
 def measure_flip(horizon: int) -> FlipMeasurement:
@@ -359,19 +628,23 @@ def _bar(*measurements: FlipMeasurement) -> str:
 def falsifiers(
     at_prior: FlipMeasurement | None = None,
     at_flip: FlipMeasurement | None = None,
+    extension: ExtensionMeasurement | None = None,
+    refinement: tuple[RefinementCell, ...] | None = None,
 ) -> tuple[CheckReport, ...]:
-    """The four D3 falsifiers registered for this crossover, one report each.
+    """The five D3 falsifiers registered for this crossover, one report each.
 
     A falsifier does not pass. ``NOT TRIGGERED`` is "it ran and the condition did not
     obtain", so the claim survives it. ``NOT APPLICABLE`` is void by construction, so
     it is evidence for nothing and is not a survivor. ``NOT RUN HERE`` was measured
-    elsewhere. Neither of the last two ran, so neither carries a warrant: the prover
-    cell is ``—``, because attributing one would claim evidence that was never produced.
+    elsewhere. Row 3 is the only one that produced no evidence: it is void by
+    construction, with no observation draw to vary, so its prover cell is ``—`` because
+    attributing one would claim evidence that was never produced. No row returns
+    ``NOT RUN HERE`` any more.
 
-    Rows 1 and 2 read on both axes at once. On the prover axis they are ``PROVED``,
-    resting on exhaustive enumeration and carrying its certificates. On the tier axis
-    they are ``B``, the margin read against the error ``COND_CEILING`` allows on a
-    difference of two scores.
+    Rows 1, 2, 4 and 5 read on both axes at once. On the prover axis they are
+    ``PROVED``, resting on exhaustive enumeration and carrying its certificates. On the
+    tier axis they are ``B``, the margin read against the error ``COND_CEILING``
+    allows on a difference of two scores.
 
     Every outcome and every detail here is computed from the measurements. The direction
     comes from ``cue_ward``, off the exhaustive argmin, so a reversed result reports
@@ -386,9 +659,14 @@ def falsifiers(
     Args:
         at_prior: the measurement at ``H*-1``. Enumerated live when omitted.
         at_flip: the measurement at ``H*``. Enumerated live when omitted.
+        extension: the extension-axis sweep. Enumerated live when omitted.
+        refinement: the refinement-axis cells. The recorded ones when omitted; a
+            refuting set is what lets this row's FIRED branch be executed.
     """
     at_prior = measure_flip(FLIP_H - 1) if at_prior is None else at_prior
     at_flip = measure_flip(FLIP_H) if at_flip is None else at_flip
+    extension = measure_extension() if extension is None else extension
+    refinement = REFINEMENT_CELLS if refinement is None else refinement
 
     def crossover_exists() -> Outcome:
         """Fires when the exhaustive argmin is not cue-ward at H*."""
@@ -403,6 +681,126 @@ def falsifiers(
         clean = at_flip.cue_ward and not at_prior.cue_ward
         return Outcome.NOT_TRIGGERED if clean else Outcome.FIRED
 
+    def extension_holds() -> Outcome:
+        """Fires when the extension pushes H* past its registered bar of 6.
+
+        A set that cannot land on the cue is void by construction, so its null is about
+        the geometry and reports NOT APPLICABLE rather than counting as a survivor.
+        """
+        if not extension.sensed:
+            return Outcome.NOT_APPLICABLE
+        if extension.h_star is None:
+            return Outcome.FIRED
+        return Outcome.NOT_TRIGGERED if extension.h_star <= EXT_BAR else Outcome.FIRED
+
+    def extension_warrant() -> Warrant | None:
+        """The prover class the sweep earns, or None where it could not have fired.
+
+        Exhaustive over a declared finite set, so the bar is decided rather than
+        sampled. A void set produced no evidence here, so it carries no warrant at all.
+        """
+        if not extension.sensed:
+            return None
+        return extension.certificate.warrant
+
+    def extension_detail() -> str:
+        """The measured horizon, the argmin that produced it, and the bar it met."""
+        if not extension.sensed:
+            return (
+                "v1-ext cannot land on the cue, so any null is geometry rather than a "
+                "result (registered void guard, cue_maze.best_reachable_noise)"
+            )
+        if extension.h_star is None:
+            return (
+                f"no cue-ward argmin through H = {EXT_BAR} on v1-ext, so H* > "
+                f"{EXT_BAR} against the registered bar"
+            )
+        policy = np.asarray(extension.policy).ravel()
+        # Every clause after the number is derived from it. A hardcoded reading beside
+        # a computed number is the defect rows 1 and 2 were rewritten to remove.
+        verdict = (
+            "inside the bar"
+            if extension.h_star <= EXT_BAR
+            else "past the bar, so the extension moved H*"
+        )
+        movement = (
+            "H* does not move from {-3,...,2}, so extension saturates"
+            if extension.h_star == EDGE_H_STAR
+            else f"H* moves from {EDGE_H_STAR} on {{-3,...,2}} to {extension.h_star}"
+        )
+        return (
+            f"H* = {extension.h_star} on v1-ext against a registered bar of "
+            f"H* <= {EXT_BAR}, {verdict}. argmin {policy}. {movement}"
+        )
+
+    def refinement_deltas():
+        """``(label, h_star, |dH*|)`` per cell, with ``None`` where nothing flipped."""
+        rows = []
+        for cell in refinement:
+            h_star = refinement_h_star(cell.rows)
+            delta = None if h_star is None else abs(h_star - FLIP_H)
+            rows.append((cell.label, h_star, delta))
+        return rows
+
+    def refinement_holds() -> Outcome:
+        """Fires when a cell moves H* past the registered tolerance.
+
+        Reads the registered bar rather than testing equality. `|dH*| <= 1` is the
+        pre-registered PASS, so a cell landing on 6 or 8 survives this falsifier and
+        must not be reported as refuting it.
+        """
+        deltas = [delta for _, _, delta in refinement_deltas()]
+        if any(delta is None for delta in deltas):
+            return Outcome.FIRED
+        return (
+            Outcome.NOT_TRIGGERED
+            if all(delta <= REFINEMENT_TOLERANCE for delta in deltas)
+            else Outcome.FIRED
+        )
+
+    def refinement_detail() -> str:
+        """Every clause computed: the horizons, the spread, the argmins, the scores."""
+        measured = refinement_deltas()
+        per_cell = ", ".join(f"{label} H* = {h_star}" for label, h_star, _ in measured)
+        deltas = [delta for _, _, delta in measured]
+        if any(delta is None for delta in deltas):
+            return (
+                f"{per_cell} against the coarse {FLIP_H}: a cell has no cue-ward "
+                f"argmin at all, so the registered bar of {REFINEMENT_TOLERANCE} "
+                "cannot be met"
+            )
+        worst = max(deltas)
+        verdict = (
+            f"|dH*| = {worst} within the registered bar of {REFINEMENT_TOLERANCE}"
+            if worst <= REFINEMENT_TOLERANCE
+            else f"|dH*| = {worst} past the registered bar of {REFINEMENT_TOLERANCE}"
+        )
+        every_row = [row for cell in refinement for row in cell.rows]
+        sub_step = [
+            row.horizon
+            for row in every_row
+            if any(float(a) != int(a) for a in row.policy)
+        ]
+        lattice = (
+            "no sub-step action reaches any argmin"
+            if not sub_step
+            else f"a sub-step action reaches the argmin at H = {sub_step}"
+        )
+        by_horizon = {}
+        for row in every_row:
+            by_horizon.setdefault(row.horizon, set()).add(row.gmin)
+        agree = all(len(scores) == 1 for scores in by_horizon.values())
+        agreement = (
+            "the cells agree to the digit"
+            if agree
+            else "the cells disagree on at least one score"
+        )
+        return (
+            f"{per_cell} against the coarse {FLIP_H}, so {verdict}. {lattice}, and "
+            f"{agreement}. Recorded from the chunked runs, reproducible with "
+            "--refinement"
+        )
+
     def where(measurement: FlipMeasurement) -> str:
         return "cue-ward" if measurement.cue_ward else "prior-ward"
 
@@ -414,42 +812,42 @@ def falsifiers(
         f"H* = {FLIP_H} is an upper bound "
         "(set clips the reach at -2, one-step reach -3)"
     )
-    # One commit derived the separation bar from the declared conditioning ceiling and
-    # reported these falsifiers against it. Registering and measuring together is what
-    # happened, so the two refs are one and the render says the history orders nothing.
-    registration = Provenance(
-        registered_at="efc43e2",
-        measured_at="efc43e2",
-        registered="the flip separation bar, derived from the conditioning ceiling",
-    )
+    # Travels with the number for the same reason `upper` does. `evaluate` scores whole
+    # length-H sequences and never re-plans, so this argmin is an open-loop one. The
+    # same statistic under `RecedingHorizonSelector` is a different measurement, and a
+    # row that does not name the seam reads as either (ADR-034).
+    seam = "scored open-loop (EnumeratedEfeSearch.evaluate, no re-planning)"
     return (
         CheckReport(
             name="1. no crossover at feasible H",
+            check_id="crossover.no_crossover_at_feasible_h",
             warrant=Warrant.PROVED,
             outcome=crossover_exists(),
             tier=Tier.BOUNDED,
             detail=(
                 f"argmin is {where(at_flip)} at H = {at_flip.horizon}, inside "
-                f"H_MAX = {H_MAX}. {upper}. {_bar(at_flip)}"
+                f"H_MAX = {H_MAX}, {seam}. {upper}. {_bar(at_flip)}"
             ),
             evidence=(at_flip.certificate,),
-            provenance=(registration,),
+            provenance=(FLIP_PROVENANCE,),
         ),
         CheckReport(
             name="2. flip not clean at H*/H*-1",
+            check_id="crossover.flip_not_clean_at_h_star",
             warrant=Warrant.PROVED,
             outcome=flip_is_clean(),
             tier=Tier.BOUNDED,
             detail=(
                 f"argmin is {where(at_prior)} at H = {at_prior.horizon} and "
-                f"{where(at_flip)} at H = {at_flip.horizon}. {upper}. "
+                f"{where(at_flip)} at H = {at_flip.horizon}, {seam}. {upper}. "
                 f"{_bar(at_prior, at_flip)}"
             ),
             evidence=(at_prior.certificate, at_flip.certificate),
-            provenance=(registration,),
+            provenance=(FLIP_PROVENANCE,),
         ),
         CheckReport(
             name="3. not reproducible across seeds",
+            check_id="crossover.not_reproducible_across_seeds",
             warrant=None,
             outcome=Outcome.NOT_APPLICABLE,
             tier=Tier.COMPUTED,
@@ -457,13 +855,23 @@ def falsifiers(
         ),
         CheckReport(
             name="4. H* unstable under refinement",
-            warrant=None,
-            outcome=Outcome.NOT_RUN_HERE,
-            tier=Tier.COMPUTED,
-            detail=(
-                f"step-0.5 refinement costs {9**7 * 7} steps. Recorded in the "
-                "write-up, and the live exposure on this number"
-            ),
+            check_id="crossover.h_star_unstable_under_refinement",
+            warrant=Warrant.PROVED,
+            outcome=refinement_holds(),
+            tier=Tier.BOUNDED,
+            detail=refinement_detail(),
+            evidence=tuple(row.certificate for cell in refinement for row in cell.rows),
+            provenance=tuple(cell.provenance for cell in refinement),
+        ),
+        CheckReport(
+            name="5. H* unstable under extension",
+            check_id="crossover.h_star_unstable_under_extension",
+            warrant=extension_warrant(),
+            outcome=extension_holds(),
+            tier=Tier.BOUNDED,
+            detail=extension_detail(),
+            evidence=() if not extension.sensed else (extension.certificate,),
+            provenance=(EXT_PROVENANCE,),
         ),
     )
 
@@ -496,6 +904,7 @@ def _print_tables() -> None:
     flip = exhaustive_flip()
     mech = mechanism_curve()
     edge = exhaustive_flip(action_set=EDGE_SET, max_horizon=FLIP_H - 1)
+    ext = exhaustive_flip(action_set=EXT_SET, max_horizon=EXT_BAR)
 
     print("1. Exhaustive argmin per horizon (selection-free, exact enumeration):")
     print(
@@ -509,7 +918,10 @@ def _print_tables() -> None:
             f"{policy!s:<22} {kind}"
         )
     h_star = next((h for h, _, _, _, cue in flip if cue), None)
-    print(f"   -> the argmin flips reach -> walk at H* = {h_star}\n")
+    print(
+        f"   -> the argmin flips reach -> walk at H* = {h_star}, "
+        "scored open-loop (no re-planning)\n"
+    )
 
     print("2. Mechanism (post-selection: the walk the search picked, scored back):")
     print(f"   {'H':>2} {'Δε (pull)':>11} {'Δc (grad)':>11} {'ΔG':>10}   reading")
@@ -568,18 +980,34 @@ def _print_tables() -> None:
     print("      epistemic term and the reach still wins, crossing only at H~10.")
 
     edge_star = next((h for h, _, _, _, cue in edge if cue), None)
+    ext_star = next((h for h, _, _, _, cue in ext if cue), None)
+    ext_policy = next((p for _, _, _, p, cue in ext if cue), None)
     refine_cost = 9**7 * 7
     hmax_cost = 5**H_MAX * H_MAX
     print("\n5. Action-set dependence and feasibility:")
     print(f"   one-step reach -3 -> H* = {edge_star}; the registered set clips the")
     print(f"   reach to -2, so H* = {FLIP_H} is an upper bound.")
-    print(f"   recorded, not re-run here (cost {refine_cost} steps): a step-0.5")
-    print("   refinement of the same range left the H=6 and H=7 argmins unchanged,")
-    print("   no intermediate action scoring lower G (a subset check; step-0.25")
-    print("   dropped on cost).")
+    verdict = (
+        f"PASSES (bar H* <= {EXT_BAR})"
+        if ext_star is not None and ext_star <= EXT_BAR
+        else f"FAILS (bar H* <= {EXT_BAR})"
+    )
+    # Derived like the report's, and for the same reason: a fixed sentence beside a
+    # computed number reads as a finding on any measurement, including one that refutes.
+    movement = (
+        f"the horizon does not move from {EDGE_H_STAR}, so extension saturates"
+        if ext_star == EDGE_H_STAR
+        else f"the horizon moves from {EDGE_H_STAR} to {ext_star}"
+    )
+    print(f"   extension {{-4,...,2}} -> H* = {ext_star}, argmin {ext_policy}.")
+    print(f"   registered before the run, so this {verdict}. {movement}.")
+    print(f"   refinement: measured, recorded, not re-run here ({refine_cost} scored")
+    print("   steps at step-0.5 alone). H* = 7 at step-0.5 and step-0.25 alike, the")
+    print("   two agreeing to the digit, and no sub-step action in any argmin.")
+    print("   Reproduce with --refinement.")
     print("   analytic bound: relief <= 0.77/step vs 2.77 detour -> H* >= 6.")
     print(f"   feasibility: declared to H_MAX = {H_MAX} (cost {hmax_cost} scored")
-    print("   steps); the argmin is cue-ward at H = 7, 8, 9.")
+    print("   steps); the argmin is cue-ward at H = 7, 8, 9, open-loop throughout.")
     _print_falsifiers(falsifiers())
 
 
@@ -588,7 +1016,9 @@ def check() -> None:
     """Assert the flip, the mechanism split, the oracle, and the kernel's inertness.
 
     The exhaustive enumerations are scoped to the flip boundary and H* (the horizons the
-    assertions bear on), so the gate enumerates ~230k policies, not the full sweep.
+    assertions bear on), plus the extension sweep's 137,256, so the gate enumerates
+    ~325k policies rather than the full one. The recorded refinement rows are read, not
+    re-enumerated.
     """
     # 1. Decisive: the exhaustive argmin is a reach at H*-1 and a cue-ward walk at H*.
     #    Measured once here and handed to `falsifiers()` below, so the two enumerations
@@ -608,8 +1038,18 @@ def check() -> None:
     # a reversed argmin reports FIRED, both from the measurements above, so this reads
     # the outcomes rather than re-deriving them. NOT RESOLVED and NOT APPLICABLE are
     # findings to report; only FIRED is a gate failure.
-    reports = falsifiers(at_prior, at_flip)
+    # Enumerated once and passed in, so the sweep is not paid for twice.
+    extension = measure_extension()
+    reports = falsifiers(at_prior, at_flip, extension)
     fired = [r.name for r in reports if r.outcome is Outcome.FIRED]
+    # The registered bar is `H* <= 6`, and the registration calls 5 plausible. Asserting
+    # equality here would fail a measurement that passed its own registration.
+    assert extension.sensed, "v1-ext cannot reach the cue: void by geometry"
+    assert extension.h_star is not None, "no cue-ward argmin on v1-ext"
+    assert extension.h_star <= EXT_BAR, (
+        f"extension H* = {extension.h_star}, registered bar was <= {EXT_BAR}"
+    )
+    assert extension.certificate.warrant is Warrant.PROVED
     assert not fired, f"registered falsifiers fired: {fired}"
     for report in reports:
         if report.outcome is Outcome.NOT_RESOLVED:
@@ -658,10 +1098,38 @@ def check() -> None:
     _print_falsifiers(reports)
 
 
+def print_refinement() -> None:
+    """Re-run every registered refinement cell and print it, certificates included.
+
+    Off both the test and the `--check` paths on purpose: the cheapest cell is 531,441
+    policies and the dearest 410,338,673, which is minutes to hours rather than the
+    seconds a gate may take. This is the reproduction route for the recorded
+    constants, run by hand when the numbers are challenged.
+    """
+    # Exactly the recorded rows, so the route reproduces what it claims to. The 9^8
+    # cell is absent on purpose: the registration made it contingent on H* rising under
+    # refinement, it did not rise, and no row records it.
+    cells = tuple((REFINE_05_SET, row.horizon) for row in REFINEMENT_05_ROWS) + tuple(
+        (REFINE_025_SET, row.horizon) for row in REFINEMENT_025_ROWS
+    )
+    print("Refinement axis, chunked (peak is flat in |A|^H, ADR-036):")
+    print(f"   {'set':<18} {'H':>2} {'policies':>12} {'Gmin':>12}  argmin")
+    for action_set, horizon in cells:
+        row = measure_refinement(action_set, horizon)
+        print(
+            f"   {action_set.version:<18} {row.horizon:>2} "
+            f"{row.certificate.visited:>12,} {row.gmin:>12.4f}  {row.policy}"
+        )
+        print(f"      {row.certificate}")
+
+
 def main():
-    """``--check`` asserts; the bare command prints the four measurement tables."""
+    """``--check`` asserts, ``--refinement`` re-runs the recorded cells, bare prints."""
     if "--check" in sys.argv:
         check()
+        return
+    if "--refinement" in sys.argv:
+        print_refinement()
         return
     _print_tables()
 
