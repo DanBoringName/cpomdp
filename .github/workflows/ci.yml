@@ -61,7 +61,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
     env:
       JAX_COMPILATION_CACHE_DIR: ${{ github.workspace }}/.jax-cache
       JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS: "0"
@@ -117,38 +117,29 @@ jobs:
       # sync installs it along with sympy and scipy. Nothing under `src/cpomdp` imports
       # either of those.
       - run: uv sync --locked
-      # `ty` covers `research/src` and `pytest` still does not (`testpaths = ["tests"]`),
-      # so without this job a check that imports cleanly but no longer runs reaches main
-      # and is found by hand or not at all.
+      # `ty` covers `research/src` and the ordinary pytest run still does not
+      # (`testpaths = ["tests"]`), so without this job a check that imports cleanly but
+      # no longer runs reaches main and is found by hand or not at all.
       #
-      # Each module already exits non-zero when an identity fires. The counts are pinned
-      # on top of that, because a stage quietly dropped from `run_checks` removes its
-      # checks without failing anything — the suite would go green by asking less.
-      # Changing a count here is meant to be a deliberate edit, reviewed with the diff.
-      - name: symbolic suites, counts pinned
-        run: |
-          set -uo pipefail
-          status=0
-          run_suite() {
-            module=$1
-            expected=$2
-            echo "::group::$module"
-            if ! output=$(uv run --no-sync python -m "research.checks.$module" --check 2>&1); then
-              echo "::error::$module: a check fired"
-              status=1
-            fi
-            echo "$output"
-            summary=$(printf '%s\n' "$output" | grep -E '^[0-9]+ registered' || true)
-            if [ "$summary" != "$expected" ]; then
-              echo "::error::$module: expected '$expected', got '$summary'"
-              status=1
-            fi
-            echo "::endgroup::"
-          }
-          run_suite series_kernel    "23 registered, 23 tested here, none fired"
-          run_suite log_ratio_series "18 registered, 18 tested here, none fired"
-          run_suite gap_series       "29 registered, 29 tested here, none fired"
-          exit $status
+      # The manifest is what makes that a failure rather than a shorter run. It declares
+      # every check each suite is registered to report, warrantlib's pytest plugin turns
+      # each one into an item, and a declared check that stops reporting fails by name.
+      # This replaced three pinned count strings, which could say a suite got shorter and
+      # could not say which check left, and which a different check arriving in place of
+      # the one that went would have satisfied.
+      #
+      # `--warrant-detail` prints each check's own line, which is what the suites printed
+      # when this job ran them directly. The outcome reaches the terminal without it and
+      # the reason the check gives does not, so the job would otherwise have kept the
+      # verdicts and lost the record.
+      - name: symbolic suites, reconciled against the manifest
+        run: uv run --no-sync pytest research/registered_checks.toml --warrant-detail
+      # The manifest is generated, so a suite gaining or losing a check without it being
+      # rewritten is caught here rather than at the next person's review.
+      - name: the manifest is current
+        run: >-
+          uv run --no-sync python -m warrantlib.manifest --check
+          research/registered_checks.toml
 
   oracle:
     name: rxinfer oracle (Julia)

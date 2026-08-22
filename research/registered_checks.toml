@@ -1,0 +1,97 @@
+# Generated. Do not edit by hand.
+#
+# Every check a suite is registered to report. A check declared here that stops
+# reporting fails the run by name, which is what a count of them could not do.
+#
+# Rewrite after a suite changes:  python -m warrantlib.manifest <this file>
+# Ask whether it is current:      python -m warrantlib.manifest --check <this file>
+#
+# Adding a suite: add its [suites.<name>] table with an entry_point and no checks,
+# then rewrite.
+
+schema_version = "1.0"
+
+[suites.series_kernel]
+entry_point = "research.checks.series_kernel:run_checks"
+checks = [
+  "series_kernel.assembled_w_to_sigma1",
+  "series_kernel.assembled_w_to_sigma2",
+  "series_kernel.assembled_w_to_sigma3",
+  "series_kernel.assembled_w_to_sigma4",
+  "series_kernel.exponential_expansion",
+  "series_kernel.first_cumulant_is_the_mean",
+  "series_kernel.gain_expansion",
+  "series_kernel.moment_z0",
+  "series_kernel.moment_z1",
+  "series_kernel.moment_z10",
+  "series_kernel.moment_z2",
+  "series_kernel.moment_z3",
+  "series_kernel.moment_z4",
+  "series_kernel.moment_z5",
+  "series_kernel.moment_z6",
+  "series_kernel.moment_z7",
+  "series_kernel.moment_z8",
+  "series_kernel.moment_z9",
+  "series_kernel.second_cumulant_is_the_variance",
+  "series_kernel.truncate_composes_downward",
+  "series_kernel.truncate_is_idempotent",
+  "series_kernel.truncate_keeps_below_the_cut",
+  "series_kernel.width_expansion",
+]
+
+[suites.log_ratio_series]
+entry_point = "research.checks.log_ratio_series:run_checks"
+checks = [
+  "log_ratio_series.constant_in_z",
+  "log_ratio_series.degree_in_z",
+  "log_ratio_series.delta_constant_term",
+  "log_ratio_series.delta_h1",
+  "log_ratio_series.delta_h2",
+  "log_ratio_series.delta_h3",
+  "log_ratio_series.delta_h4",
+  "log_ratio_series.displacement_sigma1",
+  "log_ratio_series.displacement_sigma2",
+  "log_ratio_series.displacement_sigma3",
+  "log_ratio_series.first_order_expectation",
+  "log_ratio_series.first_order_term",
+  "log_ratio_series.flat_noise",
+  "log_ratio_series.gain",
+  "log_ratio_series.kalman_shift",
+  "log_ratio_series.no_sigma0_term",
+  "log_ratio_series.reciprocal_identity",
+  "log_ratio_series.width",
+]
+
+[suites.gap_series]
+entry_point = "research.checks.gap_series:run_checks"
+checks = [
+  "gap_series.c2_closed_form",
+  "gap_series.c2_is_free_of_nu",
+  "gap_series.c4_lies_in_the_declared_basis",
+  "gap_series.cumulant_accounting_at_sigma4",
+  "gap_series.direction_independence_at_sigma2",
+  "gap_series.directions_part_at_sigma4",
+  "gap_series.exponential_family_c2",
+  "gap_series.exponential_family_c4",
+  "gap_series.fixed_y_coefficient_depends_on_nu",
+  "gap_series.fixed_y_coefficient_is_non_negative",
+  "gap_series.fixed_y_sigma2_coefficient",
+  "gap_series.fraction_l1_l3",
+  "gap_series.fraction_l1_pow4",
+  "gap_series.fraction_l1_sq_l2",
+  "gap_series.fraction_l1_sq_over_r",
+  "gap_series.fraction_l2_sq",
+  "gap_series.gap_and_half_variance_part_at_sigma4",
+  "gap_series.gap_is_half_the_variance_at_sigma2",
+  "gap_series.innovation_average",
+  "gap_series.no_bare_r_bar_averaged_sigma2",
+  "gap_series.no_bare_r_bar_averaged_sigma4",
+  "gap_series.no_bare_r_bar_fixed_y_sigma2",
+  "gap_series.predicted_zero_l2_over_r",
+  "gap_series.predicted_zero_l4",
+  "gap_series.predictives_agree_at_sigma2",
+  "gap_series.predictives_part_at_sigma4",
+  "gap_series.scale_covariance_averaged_sigma2",
+  "gap_series.scale_covariance_averaged_sigma4",
+  "gap_series.scale_covariance_fixed_y_sigma2",
+]

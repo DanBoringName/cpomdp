@@ -18,6 +18,10 @@ its own module and is absent from the published surface. The source is read rath
 the imported module, because the imported module cannot tell a definition from an
 import.
 
+`warrantlib.pytest_plugin` is outside that rule, also deliberately. Its public names
+are pytest hooks and a fixture, which pytest finds through the entry point, and putting
+them in `__all__` would publish an import path nobody should use.
+
 `cpomdp.warrant` is held to a weaker rule, and deliberately. It exists so import paths
 that predate the split keep working, so it mirrors the names cpomdp itself once
 exported and does not grow as warrantlib does. A name that was never in cpomdp has no
@@ -45,10 +49,29 @@ if leaked:
     raise SystemExit("warrantlib pulled in " + ", ".join(leaked))
 """
 
+_NO_PYTEST = """
+import sys
+import warrantlib
+
+if "pytest" in sys.modules:
+    raise SystemExit("warrantlib pulled in pytest")
+"""
+
 
 def test_warrantlib_imports_nothing_from_cpomdp():
     completed = subprocess.run(
         [sys.executable, "-c", _NO_CPOMDP], capture_output=True, text=True
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+
+
+def test_warrantlib_imports_no_pytest():
+    # The plugin module imports pytest and is reached through the `pytest11` entry
+    # point, never from `__init__`. An import added there would put pytest on the
+    # dependency list of a distribution whose list is empty on purpose (ADR-039), and
+    # nothing else in the suite would notice, because pytest is always installed here.
+    completed = subprocess.run(
+        [sys.executable, "-c", _NO_PYTEST], capture_output=True, text=True
     )
     assert completed.returncode == 0, completed.stdout + completed.stderr
 

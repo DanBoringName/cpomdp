@@ -2,7 +2,7 @@
 name = "cpomdp-research"
 version = "0.0.0"
 description = "Programme registrations and symbolic check suites. Not for distribution."
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 # PyPI rejects an upload carrying this, which is the point. The package is a workspace
 # member so the checks are linted, typed and importable like the rest of the tree.
 classifiers = ["Private :: Do Not Upload"]

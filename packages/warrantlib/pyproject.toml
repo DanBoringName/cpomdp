@@ -3,7 +3,7 @@ name = "warrantlib"
 version = "0.3.0"
 description = "A vocabulary for how well a claim is warranted, kept separate from whether it held."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Inferogenesis" }]
@@ -14,7 +14,6 @@ classifiers = [
     # `license` expression above, and PyPI rejects the upload if both appear.
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -24,6 +23,19 @@ classifiers = [
 ]
 # Empty on purpose.
 dependencies = []
+
+# The pytest plugin, which is the only part of this distribution that imports anything
+# outside the standard library. Optional, so `pip install warrantlib` is unchanged, and
+# `import warrantlib` still pulls in no pytest: the plugin module is reached through the
+# entry point below and never from `__init__`.
+[project.optional-dependencies]
+pytest = ["pytest>=8"]
+
+# pytest reads this group from every installed distribution, so the plugin is active
+# wherever both are present and needs no `-p` flag. Nothing reads it when pytest is
+# absent, because there is no pytest to do the reading.
+[project.entry-points.pytest11]
+warrant = "warrantlib.pytest_plugin"
 
 [project.urls]
 Homepage = "https://github.com/inferogenesis/cpomdp"

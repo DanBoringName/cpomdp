@@ -15,6 +15,32 @@ an exposure rather than a result.
 
 ### Added
 
+- `warrantlib.manifest` (warrantlib 0.3.0) — the checks a suite is registered to report,
+  declared in a generated TOML file and reconciled against what a run actually produced.
+  A count could say a suite got shorter. It could not say which check left, and it was
+  satisfied by a different check arriving in place of the one that went. The manifest
+  names both directions: declared and not reported, reported and not declared. Generate
+  or refresh one with `python -m warrantlib.manifest <path>`, and ask whether it is
+  current with `--check`, which is the form CI runs. The file compares as text rather
+  than as parsed content, so a layout the writer no longer produces counts as stale.
+  `--warrant-detail`, or `-vv`, prints each check's own line the way a suite run on its
+  own does.
+  The pytest plugin collects the manifest, turning every declared check into an item.
+  The item exists because the check was declared, so a check that stops reporting still
+  has a row and the row fails naming it.
+- A pytest plugin, behind `pip install "warrantlib[pytest]"` (warrantlib 0.3.0). A test
+  hands its findings to the run with the `record_check` fixture, and the run reports them
+  in the warrant vocabulary: the progress letter separates a void check from one measured
+  elsewhere, `-v` prints `NOT TRIGGERED` where it would have printed `PASSED`, and the run
+  closes with the registered / tested here / fired accounting rather than a count of dots.
+  A fired check fails its test, and so does an unresolved one, because a falsifier that
+  ran and could not decide has not left the claim standing. The pytest outcome underneath
+  stays one of pytest's own three: `junitxml` branches on that and nothing else, so a
+  fourth value would write the row as no row at all. Categories stay standard too, so
+  `N passed` still counts what it always did and `assert_outcomes` still sees it. Loaded
+  through the `pytest11` entry point, so no configuration is needed; `dependencies` stays
+  empty and importing `warrantlib` still pulls in no pytest, which a test asserts in a
+  clean interpreter.
 - `report_to_dict` / `report_from_dict` / `SCHEMA_VERSION` (warrantlib 0.3.0) — a
   report as a machine record and back. Every value is JSON-ready and the key order is
   fixed, so two runs of one suite produce the same bytes and a diff shows what changed
@@ -137,6 +163,21 @@ an exposure rather than a result.
 
 ### Changed
 
+- The `symbolic` CI job reconciles the three symbolic suites against
+  `research/registered_checks.toml` instead of comparing three hand-typed strings. The
+  strings said `23 registered, 23 tested here, none fired` and two more like it. They
+  could report that a suite got shorter. They could not say which check left, and a check
+  renamed or swapped for another left the count untouched, so the gate passed. Every one
+  of the 70 checks is now an item that fails by name, in both directions: declared and
+  not reported, reported and not declared.
+- **Breaking:** cpomdp and warrantlib require Python 3.11, up from 3.10. The check
+  manifest is TOML so the generated file can say what it is and how to regenerate it, and
+  `tomllib` reads TOML from the standard library only from 3.11. Taking `tomli` instead
+  would have ended warrantlib's "the standard library is the only dependency", which is
+  the property that makes it installable beside a check suite wanting nothing else.
+  Python 3.10 reaches end of life in October 2026, which is what makes the trade cheap
+  rather than what makes it right (ADR-045). The published warrantlib 0.2.0 keeps its
+  `>=3.10` metadata, so an existing 3.10 install resolves as it always did.
 - `cpomdp-research` requires `warrantlib>=0.3`, for `CheckReport.check_id`. cpomdp's own
   floor stays at `>=0.2`: nothing under `src/cpomdp` constructs a report, and moving the
   floor would re-arm ADR-040's publish-ordering race for no gain.

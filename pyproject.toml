@@ -3,7 +3,7 @@ name = "cpomdp"
 version = "0.4.4"
 description = "Continuous active inference for Python — the continuous-state sibling of pymdp."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Inferogenesis" }]
@@ -14,7 +14,6 @@ classifiers = [
     # `license` expression above, and PyPI rejects the upload if both appear.
     "Development Status :: 2 - Pre-Alpha",
     "Intended Audience :: Science/Research",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -89,7 +88,7 @@ cpomdp-research = { workspace = true }
 
 [tool.ruff]
 line-length = 88
-target-version = "py310"
+target-version = "py311"
 src = ["src", "tests", "packages/warrantlib/src", "research/src"]
 
 [tool.ruff.lint]
@@ -148,7 +147,7 @@ convention = "google"
 "examples/ffg/*" = ["E402"]
 
 [tool.ty.environment]
-python-version = "3.10"
+python-version = "3.11"
 extra-paths = ["examples", "examples/ffg"]
 
 [tool.ty.src]
@@ -163,6 +162,12 @@ include = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# warrantlib's plugin turns every check this manifest declares into an item, so a check
+# dropped from a suite fails by name instead of shrinking a count nobody is obliged to
+# notice. Deliberately not in `testpaths`: the symbolic suites cost half a minute and
+# have always run in their own CI job. Run them with
+# `pytest research/registered_checks.toml`.
+warrant_manifest = "research/registered_checks.toml"
 addopts = "-ra"
 markers = [
     "rxinfer: tests that require the RxInfer/Julia backend (deselect with '-m \"not rxinfer\"')",

@@ -16,6 +16,12 @@ import os
 import sys
 from pathlib import Path
 
+# `pytester` runs a pytest inside this one, which is the only way to assert on what a
+# run *reports* rather than on what its checks returned. warrantlib's plugin is loaded
+# through an entry point, so it is active in the inner run too. Declared here because
+# pytest reads `pytest_plugins` from the rootdir conftest alone.
+pytest_plugins = ["pytester"]
+
 _examples = Path(__file__).parent / "examples"
 sys.path.insert(0, str(_examples))
 sys.path.insert(0, str(_examples / "ffg"))
@@ -42,6 +48,10 @@ os.environ.setdefault("JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS", "0")
 # reference, serially, before adding a marker.
 SLOW_TEST_SECONDS = 20.0
 
+# Nodeids under this are warrant checks, collected from the manifest rather than from
+# `tests`. See the reporter below for why they are exempt from the threshold.
+_WARRANT_MANIFEST = "research/registered_checks.toml"
+
 _over_threshold: list[tuple[str, float]] = []
 
 
@@ -50,10 +60,15 @@ def pytest_runtest_logreport(report) -> None:
 
     Only the call phase counts. Setup and teardown are fixture cost, which marking the
     test would not move off the pull-request path anyway.
+
+    Checks collected from the warrant manifest are exempt. They are not in `testpaths`,
+    so they never reach the pull-request path and the marker has nothing to move them
+    off. Their cost is also the suite's rather than the item's: whichever check runs
+    first pays for the whole symbolic derivation and the rest read the result.
     """
     if report.when != "call" or report.duration <= SLOW_TEST_SECONDS:
         return
-    if "slow" in report.keywords:
+    if "slow" in report.keywords or report.nodeid.startswith(_WARRANT_MANIFEST):
         return
     _over_threshold.append((report.nodeid, report.duration))
 

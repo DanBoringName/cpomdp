@@ -10,7 +10,7 @@ This guide is aimed at complete beginners to the field of AIF and computational 
 
 ## Setup
 
->Note: cpomdp requires Python 3.10+
+>Note: cpomdp requires Python 3.11+
 
 ```bash
 pip install cpomdp

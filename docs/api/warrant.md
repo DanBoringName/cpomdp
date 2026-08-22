@@ -122,3 +122,77 @@ the preconditions the constructor enforces: the key's shape, that a `PROVED` rec
 carries evidence and a registration, and that a check which never ran carries no
 warrant. The test suite validates the writer's own output against it, since a schema
 nothing checks drifts from the writer without saying so.
+
+## Running checks under pytest
+
+`pip install "warrantlib[pytest]"` adds a plugin, loaded through pytest's `pytest11`
+entry point. It needs no configuration to do the first half of its job.
+
+A test hands its findings over with the `record_check` fixture, and the run reports them
+in the vocabulary the check used rather than as a column of dots.
+
+```python
+def test_the_coefficient_is_closed_form(record_check):
+    record_check(measure_c2())
+```
+
+A fired check fails its test. So does an unresolved one, because a falsifier that ran and
+could not decide has not left the claim standing. The two that never ran here skip, and
+the progress letters keep them apart: `v` for void by construction, `e` for measured
+elsewhere. Under `-v` the row reads `NOT TRIGGERED` where it would have read `PASSED`,
+and the run closes with the registered / tested here / fired accounting.
+
+The pytest outcome underneath is one of pytest's own three, and so is the counting
+category. `junitxml` branches on the outcome and reads nothing else, so a fourth value
+writes the row as no row at all. A fresh category would move every check out of
+`N passed` into a name no existing tool reads. The vocabulary is worth carrying. A broken
+tally is not the price to pay for it.
+
+## Declaring what a suite is registered to report
+
+The other half needs a manifest. A count of checks says a suite got shorter. It cannot
+say which check left, and a check renamed or swapped for another leaves the count
+untouched, so the gate passes on a suite that is now measuring something else.
+
+`warrantlib.manifest` declares them instead. The file names each suite's entry point and
+every id it reported when the file was written.
+
+```toml
+schema_version = "1.0"
+
+[suites.series_kernel]
+entry_point = "research.checks.series_kernel:run_checks"
+checks = [
+  "series_kernel.first_cumulant_is_the_mean",
+]
+```
+
+Point pytest at it with the `warrant_manifest` ini option and give it the path to
+collect. Every declared check becomes an item, and the item exists because the manifest
+declares it rather than because the suite reported it. A check that stops reporting still
+has a row, and the row fails naming the check and the entry point it went missing from. A
+second item per suite fails on any id the run reported that the manifest does not carry,
+so a rename reports as one drop and one addition, which is what it is.
+
+The suite runs once per session however many checks it declares, so a suite costing half
+a minute costs that once rather than once per row.
+
+`--warrant-detail` prints every check's own line: its outcome, its warrant, its tier,
+the reason it gives and the refs it was registered at. `-vv` does the same, which is
+pytest's own spelling for more detail than `-v` and is why the plugin claims no short
+flag of its own. The row a run prints without either carries the verdict and not the
+reason, which is the half a reader acts on.
+
+A check that fires reads like any other failing test. It gets a `FAILURES` block naming
+the check and carrying its reason, a row in the short summary, and the run's accounting
+prints underneath with the fired count in it. No flag is needed for that.
+
+pytest's own total counts those reconciliation items and the warrant accounting does not,
+because they are not checks and carry no warrant. Seventy declared checks across three
+suites collect as seventy-three items, and the summary says which three so the difference
+is not left as arithmetic.
+
+Regenerate the file with `python -m warrantlib.manifest <path>` after a suite changes, and
+ask whether it is current with `--check`, which returns non-zero on a stale one and is
+the form to run in CI. It compares as text, so a layout the writer no longer produces
+counts as stale too.

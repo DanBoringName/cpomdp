@@ -57,7 +57,7 @@ it, open its `.code-workspace`, and it resolves against that worktree's venv.
 ## How the rules are enforced
 
 There's one source of truth for style and linting: the `[tool.ruff]` section of
-`pyproject.toml`. Nothing depends on which editor you use — `.vscode/settings.json`
+`pyproject.toml`. Nothing depends on which editor you use. `.vscode/settings.json`
 is gitignored, and `cpomdp.code-workspace` is a convenience, not a gate. The config is
 enforced in two places that both read it:
 
@@ -65,26 +65,26 @@ enforced in two places that both read it:
 - **CI**, on every push and PR, running the exact same hooks.
 
 So if it's green locally, it's green in CI. If you want your editor to format on
-save, point it at ruff yourself; just don't rely on it, the hooks are what count.
+save, point it at ruff yourself. Just don't rely on it. The hooks are what count.
 
 ## What the hooks check
 
 - **ruff** lints and formats the code. Line length is 88. Formatting isn't a
   matter of taste here, ruff decides and that's that.
 - **markdown** is linted by [markdownlint-cli2](https://github.com/DavidAnson/markdownlint-cli2)
-  (config in `.markdownlint-cli2.yaml`). It auto-fixes the mechanical stuff —
-  blank lines around headings, fenced blocks and lists — so most of the time it
+  (config in `.markdownlint-cli2.yaml`). It auto-fixes the mechanical stuff:
+  blank lines around headings, fenced blocks and lists. So most of the time it
   just tidies your edit and asks you to re-stage. The only things it can't fix for
   you are ones it can't guess, like naming a code fence's language. Prose lines
   aren't wrapped, so line length isn't checked.
 - **spelling** in markdown and in `src/` docstrings is checked by
   [cspell](https://cspell.org) (`cspell.json`). It's British English and seeded
-  with the project's vocabulary (cpomdp, Kalman, pytree, ...); if it flags a real
+  with the project's vocabulary (cpomdp, Kalman, pytree, ...). If it flags a real
   term it doesn't know yet, add it to the `words` list in that file rather than
   working around it. It splits `snake_case`/`camelCase` into real words, so it
   reads your docstrings without choking on most identifiers.
 - **docstrings** are required on public modules, classes, functions and methods in
-  `src/` (Google style). Tests are exempt; their names are the documentation.
+  `src/` (Google style). Tests are exempt, because their names are the documentation.
   Constructors can be documented at the class level instead of in `__init__`.
 - **commit messages** follow [Conventional Commits](https://www.conventionalcommits.org):
   `feat:`, `fix:`, `docs:`, `test:`, `chore:`, and so on. The commit-msg hook will
@@ -103,7 +103,7 @@ build time and repoints the relative links, so one file reads correctly in both
 places. The stubs are excluded from markdownlint and cspell.
 
 ```bash
-uv run --group docs mkdocs build --strict # how to build mkdocs; what CI runs; fails on a bad link
+uv run --group docs mkdocs build --strict # what CI runs, and it fails on a bad link
 uv run --group docs mkdocs serve          # live preview at localhost:8000
 ```
 
@@ -116,17 +116,37 @@ uv run --extra examples ty check # type checking (examples are in the checked tr
 uv run pre-commit run --all-files
 ```
 
-The symbolic suites aren't on the pytest path. Each is a module you run directly, and
-each exits non-zero if one of its checks fires:
+The symbolic suites are deliberately not in `testpaths`. `gap_series` derives `c₂` and
+`c₄` symbolically and costs about half a minute, which nobody wants on every run. They
+have their own commands, and their own CI job. Two of them read and change nothing,
+and those are what CI runs:
+
+```bash
+uv run pytest research/registered_checks.toml                   # reconcile the run
+uv run pytest research/registered_checks.toml --warrant-detail  # + each reason (or -vv)
+uv run python -m warrantlib.manifest --check research/registered_checks.toml
+```
+
+`pytest` turns each check the manifest declares into an item, so a check that stops
+reporting fails by name and a check nobody declared fails too. `--check` says whether
+the manifest itself is current, and exits non-zero when it is not.
+
+One writes. Run it after adding or renaming a check, once the new ids are the ids you
+meant, and let the diff be the review:
+
+```bash
+uv run python -m warrantlib.manifest research/registered_checks.toml
+```
+
+Reaching for that one in place of `--check` makes the manifest agree with whatever the
+suites currently report, which is the drift it exists to catch.
+
+The new ids land in the diff, which is where they get reviewed. Each suite is also still
+runnable on its own, printing its summary and exiting non-zero if a check fires:
 
 ```bash
 uv run python -m research.checks.series_kernel --check
-uv run python -m research.checks.log_ratio_series --check
-uv run python -m research.checks.gap_series --check
 ```
-
-CI pins the registered count each of them prints. A count that moves means a stage
-stopped running, so change one only with the diff that justifies it.
 
 The `rxinfer` tests boot a Julia runtime (the RxInfer backend is an independent
 oracle the native filter is checked against). They're slow and need the extra:
