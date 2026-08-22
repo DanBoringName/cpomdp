@@ -2748,8 +2748,6 @@ nine-name floor, since a subset rule on its own is satisfied by a shim that has 
   Nothing here replaces a count string. What it removes is the reason one could not be
   replaced.
 
-
-
 ## ADR-043 — the fourth D3 falsifier, registered on two axes and answered on both
 
 **Date:** 2026-08-21

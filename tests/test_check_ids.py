@@ -76,8 +76,12 @@ class TestTheSuitesDeclareDistinctKeys:
 
     @pytest.mark.slow
     def test_the_crossover_falsifiers_declare_distinct_keys(self):
-        ids = [report.check_id for report in crossover.falsifiers()]
-        assert len(set(ids)) == len(ids) == 4
+        # Five since the extension axis landed as its own falsifier. Derived from the
+        # tuple rather than repeated, so adding a row cannot leave the count behind.
+        reports = crossover.falsifiers()
+        ids = [report.check_id for report in reports]
+        assert len(set(ids)) == len(ids) == len(reports)
+        assert len(reports) == 5
 
 
 class TestTheSigmaSlug:
