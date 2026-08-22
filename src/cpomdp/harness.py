@@ -49,9 +49,12 @@ class World:
 
     ``state`` is readable, so a run can score against the true trajectory.
 
-    A state-dependent ``R(x)`` or ``Q(x)`` is refused at construction. Sampling either
-    needs an evaluation point, the departed state or the arrived-at one, and the two
-    give different trajectories.
+    State-dependent noise is read at the state it belongs to. ``R(x)`` is the sensor's,
+    so it is read at the state the step arrived at, which is the state being measured.
+    ``Q(x)`` is the diffusion of the arrived-at state, which is not known until the
+    diffusion has been drawn, so it is read at the mean the step pushes forward to. That
+    mean is what a filter's ``μ⁻`` estimates, so a world reads where a filter reads once
+    the filter's belief sits on the truth.
     """
 
     def __init__(
@@ -69,25 +72,8 @@ class World:
                 the model prior's mean.
 
         Raises:
-            NotImplementedError: If the model carries a state-dependent ``R(x)`` or
-                ``Q(x)``.
             ValueError: If ``initial_state`` is not a 1-D vector of length ``n``.
         """
-        if model.observation_model is not None and not model.observation_model.is_fixed:
-            raise NotImplementedError(
-                "a state-dependent R(x) has no settled evaluation point here: the "
-                "filter reads it at the predicted mean, and a world that knows its "
-                "own state exactly does not. Pass a fixed observation_noise."
-            )
-        if (
-            model.dynamics_noise_model is not None
-            and not model.dynamics_noise_model.is_fixed
-        ):
-            raise NotImplementedError(
-                "a state-dependent Q(x) has no settled evaluation point here: the "
-                "departed state and the arrived-at state give different trajectories. "
-                "Pass a fixed dynamics_noise."
-            )
         self._model = model
         if initial_state is None:
             state = model.prior.mean
@@ -127,6 +113,9 @@ class World:
         reads the state it arrives at. Both noise draws come from ``key``, so two
         worlds given the same key and the same start produce the same reading.
 
+        A state-dependent ``Q(x)`` is read at the mean this step pushes forward to, and
+        a state-dependent ``R(x)`` at the state drawn around it.
+
         Args:
             action: The action applied over this step, shape ``(p,)``. ``None`` for a
                 process with no control matrix.
@@ -157,15 +146,30 @@ class World:
                 )
             mean_next = mean_next + model.control_matrix @ action
 
+        process = model.dynamics_noise_model
+        dynamics_noise = (
+            model.dynamics_noise
+            if process is None or process.is_fixed
+            else process.noise_at(mean_next)
+        )
         # svd rather than the cholesky default: dynamics_noise is only required
         # positive *semi*-definite, so a noiseless state dimension is legal here.
         self._state = jax.random.multivariate_normal(
-            key_dynamics, mean_next, model.dynamics_noise, method="svd"
+            key_dynamics, mean_next, dynamics_noise, method="svd"
         )
+
+        sensor = model.observation_model
+        if sensor is None or sensor.is_fixed:
+            observation_matrix = model.observation_matrix
+            observation_noise = model.observation_noise
+        else:
+            # linearize is exact here rather than approximate: the observation mean is
+            # linear in this regime, so the Jacobian it returns is the map itself.
+            observation_matrix, observation_noise = sensor.linearize(self._state)
         return jax.random.multivariate_normal(
             key_observation,
-            model.observation_matrix @ self._state,
-            model.observation_noise,
+            observation_matrix @ self._state,
+            observation_noise,
         )
 
 

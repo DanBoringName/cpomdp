@@ -8,8 +8,9 @@ import numpy as np
 import pytest
 
 from cpomdp.backends.kalman import KalmanBackend
+from cpomdp.dynamics import CallableProcessNoise
 from cpomdp.harness import ScoredAgent, World
-from cpomdp.observation import CallableSensor
+from cpomdp.observation import CallableSensor, FixedSensor
 from cpomdp.types import Belief, LinearGaussianModel
 
 # The double integrator from test_agent: state = [position, velocity], a force moves
@@ -325,18 +326,127 @@ def test_an_initial_state_of_the_wrong_shape_does_not_construct():
         World(_model(), initial_state=[1.0, 0.0, 0.0])
 
 
-def test_the_world_refuses_a_state_dependent_sensor():
-    def sensor(mean, params):
-        return jnp.array([[1e-2]]) + jnp.sum(jnp.asarray(mean) ** 2)
+# --- state-dependent noise known to the world -----------------------------
+#
+# The filter reads R(x) and Q(x) at its predicted mean, an estimate of the state the
+# step arrives at. A world knows that state, so the two do not read the same point, and
+# each test below pins which point the world used rather than only that it varied.
 
-    model = LinearGaussianModel(
+
+def _sensor_noise_at(mean, params):
+    return jnp.array([[1e-2]]) * (1.0 + 4.0 * jnp.sum(jnp.asarray(mean) ** 2))
+
+
+def _process_noise_at(x, params):
+    return jnp.eye(2) * 1e-4 * (1.0 + 4.0 * jnp.sum(jnp.asarray(x) ** 2))
+
+
+def _sensed_model(*, sensor=True, process=False) -> LinearGaussianModel:
+    return LinearGaussianModel(
         dynamics_matrix=DYNAMICS,
         observation_matrix=SENSOR,
         dynamics_noise=[[1e-4, 0.0], [0.0, 1e-4]],
         observation_noise=[[1e-2]],
-        prior=Belief(mean=[0.0, 0.0], cov=np.eye(2)),
+        prior=Belief(mean=[1.0, 1.0], cov=np.eye(2)),
         control_matrix=CONTROL,
-        observation_model=CallableSensor(SENSOR, sensor, ()),
+        observation_model=(
+            CallableSensor(SENSOR, _sensor_noise_at, ()) if sensor else None
+        ),
+        dynamics_noise_model=(
+            CallableProcessNoise(_process_noise_at, ()) if process else None
+        ),
     )
-    with pytest.raises(NotImplementedError, match="evaluation point"):
-        World(model)
+
+
+def test_a_state_dependent_sensor_constructs():
+    assert World(_sensed_model()).n_observations == 1
+
+
+def test_state_dependent_process_noise_constructs():
+    assert World(_sensed_model(sensor=False, process=True)).n_states == 2
+
+
+def test_the_sensor_noise_is_read_at_the_state_the_step_arrived_at():
+    model = _sensed_model()
+    world = World(model, initial_state=[1.0, 1.0])
+    key = jax.random.PRNGKey(5)
+    observation = world.step([1.0], key)
+
+    _, key_observation = jax.random.split(key)
+    arrived = world.state  # drawn before the reading, and what the sensor measured
+    expected = jax.random.multivariate_normal(
+        key_observation,
+        jnp.asarray(SENSOR) @ arrived,
+        _sensor_noise_at(arrived, ()),
+    )
+    assert float(observation[0]) == float(expected[0])
+
+
+def test_the_sensor_noise_is_not_read_at_the_state_the_step_left():
+    model = _sensed_model()
+    world = World(model, initial_state=[1.0, 1.0])
+    key = jax.random.PRNGKey(5)
+    observation = world.step([1.0], key)
+
+    _, key_observation = jax.random.split(key)
+    departed = jnp.asarray([1.0, 1.0])
+    wrong = jax.random.multivariate_normal(
+        key_observation,
+        jnp.asarray(SENSOR) @ world.state,
+        _sensor_noise_at(departed, ()),
+    )
+    assert float(observation[0]) != float(wrong[0])
+
+
+def test_the_process_noise_is_read_at_the_pushed_forward_mean():
+    model = _sensed_model(sensor=False, process=True)
+    start = jnp.asarray([1.0, 1.0])
+    world = World(model, initial_state=start)
+    key = jax.random.PRNGKey(5)
+    world.step([1.0], key)
+
+    key_dynamics, _ = jax.random.split(key)
+    pushed = jnp.asarray(DYNAMICS) @ start + jnp.asarray(CONTROL) @ jnp.asarray([1.0])
+    expected = jax.random.multivariate_normal(
+        key_dynamics, pushed, _process_noise_at(pushed, ()), method="svd"
+    )
+    assert np.array_equal(np.asarray(world.state), np.asarray(expected))
+
+
+def test_the_process_noise_is_not_read_at_the_state_the_step_left():
+    model = _sensed_model(sensor=False, process=True)
+    start = jnp.asarray([1.0, 1.0])
+    world = World(model, initial_state=start)
+    key = jax.random.PRNGKey(5)
+    world.step([1.0], key)
+
+    key_dynamics, _ = jax.random.split(key)
+    pushed = jnp.asarray(DYNAMICS) @ start + jnp.asarray(CONTROL) @ jnp.asarray([1.0])
+    wrong = jax.random.multivariate_normal(
+        key_dynamics, pushed, _process_noise_at(start, ()), method="svd"
+    )
+    assert not np.array_equal(np.asarray(world.state), np.asarray(wrong))
+
+
+def test_a_fixed_sensor_carried_as_an_observation_model_reads_its_constant():
+    fixed = LinearGaussianModel(
+        dynamics_matrix=DYNAMICS,
+        observation_matrix=SENSOR,
+        dynamics_noise=[[1e-4, 0.0], [0.0, 1e-4]],
+        observation_noise=[[1e-2]],
+        prior=Belief(mean=[1.0, 1.0], cov=np.eye(2)),
+        control_matrix=CONTROL,
+        observation_model=FixedSensor(SENSOR, observation_noise=[[1e-2]]),
+    )
+    plain = World(_model(), initial_state=[1.0, 1.0])
+    carried = World(fixed, initial_state=[1.0, 1.0])
+    key = jax.random.PRNGKey(5)
+    assert float(plain.step([1.0], key)[0]) == float(carried.step([1.0], key)[0])
+
+
+def test_the_fixed_path_is_unmoved_by_the_state_dependent_one():
+    # The regression guard. The number was measured on the commit before state-dependent
+    # noise was admitted, in a worktree of that commit, not read off this branch.
+    world = World(_model(), initial_state=[1.0, 1.0])
+    observation = world.step([1.0], jax.random.PRNGKey(5))
+    assert float(observation[0]) == 1.0105588758439044

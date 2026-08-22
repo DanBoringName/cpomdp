@@ -3125,3 +3125,69 @@ is settled in its own change before the scoring harness needs a world under `R(x
   raises on that combination, on the same grounds as `InferenceRule.build` refusing an
   unhandled kind. Scaling a state-dependent model's own parameters is a separate
   question and is not answered here.
+
+## ADR-048 — where a world reads state-dependent noise
+
+**Date:** 2026-08-23
+**Status:** Accepted
+**Extends:** ADR-047 (the world and the agent, separated and driven from outside)
+
+ADR-047 had `World` refuse a state-dependent `R(x)` or `Q(x)` rather than pick an
+evaluation point with no number yet measured under either. This picks them. No number is
+measured under `R(x)` yet, which is the condition that lets the choice be made on its
+merits rather than fitted to a result.
+
+### The sensor is read at the state it measures
+
+`R(x)` is a property of the sensor at the state producing the reading, and that state is
+drawn before the reading is taken. There is no ambiguity to resolve: the world knows the
+arrived-at state exactly and reads `R` there.
+
+The filter cannot. It reads `R` at its predicted mean, dropping the `½tr(H_R Σ⁺)` Jensen
+term, which `CallableSensor` already documents as a deliberate first-order choice. Having
+the world read at the same point would hand the world the filter's approximation and
+report a smaller inference gap than the one being measured. The gap between `R(μ⁻)` and
+`R` at the truth is the thing under study, so the world has to sit on the other side of
+it.
+
+### The process noise is read at the mean the step pushes forward to
+
+`Q(x)` is the diffusion of the arrived-at state, which `dynamics.py` records as the
+kernel's convention. A world cannot read it there: the arrived-at state is not known
+until the diffusion it parameterises has been drawn.
+
+Two non-circular readings were available.
+
+**The departed state**, `Q(x_t)`, is the Euler–Maruyama discretisation of an Itô
+diffusion and the standard choice in that literature. It was rejected because the filter
+evaluates at the pushed-forward point, so a world reading the departed state would
+disagree with the filter even where the filter's belief sits exactly on the truth. An
+inference gap that cannot reach zero under perfect inference is measuring the convention
+rather than the inference.
+
+**The pushed-forward mean**, `Q(A·x_t + B·u_t)`, was taken. It is a function of the
+current state and action alone, so the transition stays a well-defined Markov kernel. It
+is also the exact point-mass limit of the filter's `μ⁻`, so the world is what the filter
+converges to as its belief concentrates on the truth, which is the property the
+decomposition needs.
+
+The asymmetry between the two is not an inconsistency. `R`'s evaluation point is
+determined by what the sensor physically measures. `Q`'s is not determined by anything,
+so it is set by the requirement above.
+
+### Consequences
+
+- **A world under `R(x)` exists**, which the reference filter and the gated half of the
+  battery both need. Nothing else in the harness changed.
+- **The fixed-noise path is bit-identical.** One reading measured on the commit before
+  this one, in a worktree of it, reproduces exactly: `1.0105588758439044`. A test pins
+  that value rather than a tolerance around it.
+- **A fixed `R` or `Q` carried as a model object rather than as a matrix now works too.**
+  `World` reads `is_fixed` on both, matching what `KalmanBackend` does, where before it
+  refused any non-`None` `dynamics_noise_model`.
+- **`linearize` is exact here rather than approximate**, since the observation mean is
+  linear in this regime and the Jacobian it returns is the map itself. A sensor with a
+  nonlinear mean would need the mean map instead, and issue #21 is where that lands.
+- **The evaluation points are pinned by test, not by comment.** Each is checked against
+  an independently drawn sample at the point claimed, and against the same draw at the
+  point not claimed.
