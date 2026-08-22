@@ -332,6 +332,17 @@ REFINEMENT_025_ROWS = (
     ),
 )
 
+#: The crossover rows' registration. One commit derived the separation bar from the
+#: declared conditioning ceiling and reported these falsifiers against it, so the two
+#: refs are one and the render says the history orders nothing. Module scope rather than
+#: a local, so `tests/test_provenance_ordering.py` collects it: a registration only a
+#: function body holds is a registration nothing checks.
+FLIP_PROVENANCE = Provenance(
+    registered_at="efc43e2",
+    measured_at="efc43e2",
+    registered="the flip separation bar, derived from the conditioning ceiling",
+)
+
 #: Where the stability test was registered, and the ref whose tree measured it.
 REFINEMENT_PROVENANCE = Provenance(
     registered_at="86d1f22",
@@ -696,14 +707,6 @@ def falsifiers(
     # same statistic under `RecedingHorizonSelector` is a different measurement, and a
     # row that does not name the seam reads as either (ADR-034).
     seam = "scored open-loop (EnumeratedEfeSearch.evaluate, no re-planning)"
-    # One commit derived the separation bar from the declared conditioning ceiling and
-    # reported these falsifiers against it. Registering and measuring together is what
-    # happened, so the two refs are one and the render says the history orders nothing.
-    registration = Provenance(
-        registered_at="efc43e2",
-        measured_at="efc43e2",
-        registered="the flip separation bar, derived from the conditioning ceiling",
-    )
     return (
         CheckReport(
             name="1. no crossover at feasible H",
@@ -715,7 +718,7 @@ def falsifiers(
                 f"H_MAX = {H_MAX}, {seam}. {upper}. {_bar(at_flip)}"
             ),
             evidence=(at_flip.certificate,),
-            provenance=(registration,),
+            provenance=(FLIP_PROVENANCE,),
         ),
         CheckReport(
             name="2. flip not clean at H*/H*-1",
@@ -728,7 +731,7 @@ def falsifiers(
                 f"{_bar(at_prior, at_flip)}"
             ),
             evidence=(at_prior.certificate, at_flip.certificate),
-            provenance=(registration,),
+            provenance=(FLIP_PROVENANCE,),
         ),
         CheckReport(
             name="3. not reproducible across seeds",

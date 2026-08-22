@@ -327,10 +327,14 @@ policies/s. `VOID (budget)` on overrun, which means unmeasured and never "stable
 
 | cell | actions | H | policies | scored steps | front-loaded peak, ×1.6 | time |
 | --- | --- | --- | --- | --- | --- | --- |
-| extension `{−4,…,2}` | 7 | 7 | 823,543 | 5,764,801 | 0.42 GiB | 21s |
+| extension `{−4,…,2}` | 7 | 1–6 | 137,256 | 800,667 | 0.06 GiB | 16s |
 | refinement `0.5` | 9 | 7 | 4,782,969 | 33,480,783 | 2.45 GiB | 2.0m |
 | refinement `0.5` | 9 | 8 | 43,046,721 | 344,373,768 | 22.58 GiB | 18.4m |
 | refinement `0.25` | 17 | 7 | 410,338,673 | 2,872,370,711 | 210.34 GiB | 2.92h |
+
+The extension row budgets the sweep that was actually run. `H*` is the *first* cue-ward
+horizon, so the sweep stops at the registered bar of 6 and never enumerates `7^7`. An
+earlier version of this table budgeted `7^7 = 823,543` at `H = 7`, a cell no run visits.
 
 Two lines to read carefully. The step-`0.5` cell at `H = 7` costs 33.5M scored steps
 against the `H_max = 9` budget of 17.6M, so it is inside one declared unit and double the

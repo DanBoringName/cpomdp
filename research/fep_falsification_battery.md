@@ -260,9 +260,11 @@ raising a parameter until the result fires. Require the sign flip at the registe
 - Build: toolbox A shipped at v0.4.4, `cpomdp.enumeration` supplying exhaustive `|A|^H`
   search under a cardinality certificate, which is what makes the flip decided rather
   than sampled. Toolbox E (control bracket) outstanding, PR-5.
-- Falsify: no crossover at any feasible H; or a flip that is not clean at H\* and
-  H\* − 1; or not reproducible across seeds; **or H\* not stable under action-set
-  refinement**.
+- Falsify: no crossover at any feasible H. Or a flip that is not clean at H\* and
+  H\* − 1. Or not reproducible across seeds. **Or H\* not stable under action-set
+  change**, which is two falsifiers rather than one: **refinement** at finer spacing over
+  the same range, and **extension** at a wider range. The suite emits five rows for that
+  reason.
 - **Fourth falsifier, registered before it is run.** Two axes, separate and not
   interchangeable: **extension** is a wider magnitude range at the same spacing,
   **refinement** is finer spacing over the same range. Write the predicted direction and
