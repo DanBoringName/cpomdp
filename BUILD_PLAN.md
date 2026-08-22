@@ -431,7 +431,7 @@ Gate-independent. Paper 3's G9 inherits the qualifier this produces.
 registered prediction. **ADR on landing.**
 
 **Met 2026-08-21.** Extension `PASS` at `H* = 6` on `{−4,…,2}`; refinement `PASS` at
-`H* = 7` on step-`0.5` and step-`0.25` alike, `|ΔH*| = 0` against a bar of 1. ADR-042
+`H* = 7` on step-`0.5` and step-`0.25` alike, `|ΔH*| = 0` against a bar of 1. ADR-043
 records both, and the `9^8` cell turned out moot rather than deferred.
 
 ## PR-3 — World/Agent seam, exogenous action, constructors

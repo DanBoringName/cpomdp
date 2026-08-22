@@ -710,6 +710,7 @@ def falsifiers(
     return (
         CheckReport(
             name="1. no crossover at feasible H",
+            check_id="crossover.no_crossover_at_feasible_h",
             warrant=Warrant.PROVED,
             outcome=crossover_exists(),
             tier=Tier.BOUNDED,
@@ -722,6 +723,7 @@ def falsifiers(
         ),
         CheckReport(
             name="2. flip not clean at H*/H*-1",
+            check_id="crossover.flip_not_clean_at_h_star",
             warrant=Warrant.PROVED,
             outcome=flip_is_clean(),
             tier=Tier.BOUNDED,
@@ -735,6 +737,7 @@ def falsifiers(
         ),
         CheckReport(
             name="3. not reproducible across seeds",
+            check_id="crossover.not_reproducible_across_seeds",
             warrant=None,
             outcome=Outcome.NOT_APPLICABLE,
             tier=Tier.COMPUTED,
@@ -742,6 +745,7 @@ def falsifiers(
         ),
         CheckReport(
             name="4. H* unstable under refinement",
+            check_id="crossover.h_star_unstable_under_refinement",
             warrant=Warrant.PROVED,
             outcome=(
                 Outcome.NOT_TRIGGERED
@@ -765,6 +769,7 @@ def falsifiers(
         ),
         CheckReport(
             name="5. H* unstable under extension",
+            check_id="crossover.h_star_unstable_under_extension",
             warrant=extension_warrant(),
             outcome=extension_holds(),
             tier=Tier.BOUNDED,

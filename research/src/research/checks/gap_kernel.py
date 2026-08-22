@@ -51,6 +51,7 @@ __all__ = [
     "plugin_noise_of",
     "plugin_posterior",
     "predictive_sd",
+    "sigma_slug",
 ]
 
 #: How far past the grid edge a tail integral runs, in absolute `y` units.
@@ -114,6 +115,8 @@ class NoiseFamily:
 
     Args:
         name: how the family prints, in the notation the registration uses.
+        key: the same family as a key, matching its entry in `FAMILIES`. A check's id
+            is built from it, and the printed name carries maths glyphs an id may not.
         noise: `R` — state-dependent sensor noise, evaluated elementwise on arrays.
         prior_mean: μ — the prior mean the gap is expanded about.
         unbounded: whether `R` grows without bound in `x`. A declared property of a
@@ -129,12 +132,36 @@ class NoiseFamily:
     """
 
     name: str
+    key: str
     noise: Callable[[np.ndarray], np.ndarray]
     prior_mean: float
     unbounded: bool
     crossover: Callable[[float], float] | None = None
     reference: dict[float, float] | None = None
     log_noise_derivative: float | None = None
+
+
+def sigma_slug(sigma: float) -> str:
+    """`σ` as a key fragment, for a check id that names the cell it measured.
+
+    A check id admits letters, digits and underscores, so the decimal point cannot
+    travel into one. The value is rendered at full precision rather than rounded: two
+    cells one part in ten thousand apart are two cells, and a rounded slug hands them
+    one id. A ledger joining on a duplicated key is the failure the id exists to stop,
+    and `--sigmas` takes whatever floats a caller passes.
+
+    `repr` of a float round-trips by construction, so distinct values give distinct
+    slugs. The exponent's sign is always written, so dropping `+` cannot collide with
+    anything.
+
+    Args:
+        sigma: σ — the prior standard deviation.
+
+    Returns:
+        The value with the point as ``p`` and a minus as ``m``: ``0.15`` gives ``0p15``
+        and ``1e-05`` gives ``1em05``.
+    """
+    return repr(float(sigma)).replace(".", "p").replace("-", "m").replace("+", "")
 
 
 def _d4_crossover(prior_variance: float) -> float:
@@ -161,6 +188,7 @@ def _d4_crossover(prior_variance: float) -> float:
 FAMILIES: dict[str, NoiseFamily] = {
     "quadratic": NoiseFamily(
         name="1 + x²",
+        key="quadratic",
         noise=lambda x: 1.0 + x**2,
         prior_mean=1.0,
         unbounded=True,
@@ -177,6 +205,7 @@ FAMILIES: dict[str, NoiseFamily] = {
     ),
     "exponential": NoiseFamily(
         name="exp(x)",
+        key="exponential",
         noise=np.exp,
         prior_mean=1.0,
         unbounded=True,
@@ -185,6 +214,7 @@ FAMILIES: dict[str, NoiseFamily] = {
     ),
     "tanh": NoiseFamily(
         name="1.5 + 0.5 tanh(x)",
+        key="tanh",
         noise=lambda x: 1.5 + 0.5 * np.tanh(x),
         prior_mean=1.0,
         unbounded=False,
@@ -194,6 +224,7 @@ FAMILIES: dict[str, NoiseFamily] = {
     ),
     "sin": NoiseFamily(
         name="1.5 + 0.5 sin(x)",
+        key="sin",
         noise=lambda x: 1.5 + 0.5 * np.sin(x),
         prior_mean=1.0,
         unbounded=False,
@@ -204,6 +235,7 @@ FAMILIES: dict[str, NoiseFamily] = {
     #: and was therefore measuring nothing. Kept as a falsifier of the implementation.
     "constant": NoiseFamily(
         name="2 (fixed)",
+        key="constant",
         noise=lambda x: np.full_like(np.asarray(x, dtype=float), 2.0),
         prior_mean=1.0,
         unbounded=False,

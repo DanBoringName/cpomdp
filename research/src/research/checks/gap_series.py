@@ -346,6 +346,7 @@ def check_gap_is_half_the_variance() -> list[CheckReport]:
     return [
         report_identity(
             name="C1 gap is half the variance at σ²",
+            check_id="gap_series.gap_is_half_the_variance_at_sigma2",
             claim="log E_q[e^W] − E_q[W] = ½·Var_q(W) at σ²",
             source=CUMULANT_SOURCE,
             residual=difference.coeff(SIGMA, 2),
@@ -353,6 +354,7 @@ def check_gap_is_half_the_variance() -> list[CheckReport]:
         ),
         report_condition(
             name="C1 they part at σ⁴",
+            check_id="gap_series.gap_and_half_variance_part_at_sigma4",
             claim="½·Var_q(W) is not the gap at σ⁴, because κ₃ enters",
             source=CUMULANT_SOURCE,
             holds=sympy.simplify(difference.coeff(SIGMA, 4)) != 0,
@@ -360,6 +362,7 @@ def check_gap_is_half_the_variance() -> list[CheckReport]:
         ),
         report_identity(
             name="C1 cumulant accounting at σ⁴",
+            check_id="gap_series.cumulant_accounting_at_sigma4",
             claim="the gap is κ₂/2 + κ₃/6 through σ⁴, with κ₄ contributing nothing",
             source=CUMULANT_SOURCE,
             residual=definition - truncate(terms[2] + terms[3], ORDER),
@@ -385,6 +388,7 @@ def check_fixed_observation_coefficient() -> list[CheckReport]:
     return [
         report_identity(
             name="C2 fixed-y σ² coefficient",
+            check_id="gap_series.fixed_y_sigma2_coefficient",
             claim="[σ²] KL(y) = l₁²(R̄ − ν²)²/(8R̄²)",
             source=EXPANSION_SOURCE,
             residual=coefficient - claim,
@@ -392,6 +396,7 @@ def check_fixed_observation_coefficient() -> list[CheckReport]:
         ),
         report_identity(
             name="C2 non-negative by construction",
+            check_id="gap_series.fixed_y_coefficient_is_non_negative",
             claim="the coefficient is a square over 8R̄², and R̄ is declared positive",
             source=EXPANSION_SOURCE,
             residual=coefficient - as_square,
@@ -399,6 +404,7 @@ def check_fixed_observation_coefficient() -> list[CheckReport]:
         ),
         report_condition(
             name="C2 still depends on ν",
+            check_id="gap_series.fixed_y_coefficient_depends_on_nu",
             claim="the y-average has not happened: the coefficient still varies with ν",
             source=EXPANSION_SOURCE,
             holds=sympy.simplify(sympy.diff(coefficient, NU)) != 0,
@@ -421,6 +427,7 @@ def check_innovation_average() -> list[CheckReport]:
     return [
         report_identity(
             name="C3 innovation average",
+            check_id="gap_series.innovation_average",
             claim="E[(ν²/R̄ − 1)²] = 2 under ν ~ N(0, R̄)",
             source=INNOVATION_MOMENT_SOURCE,
             residual=averaged - 2,
@@ -444,6 +451,7 @@ def check_c2_against_the_registration() -> list[CheckReport]:
     return [
         report_identity(
             name="C4 c₂ closed form",
+            check_id="gap_series.c2_closed_form",
             claim="c₂ = l₁²/4, which is (R'(μ)/2R(μ))² since l₁ = R'(μ)/R(μ)",
             source=REGISTRATION_SOURCE,
             residual=coefficient - L1**2 / 4,
@@ -451,6 +459,7 @@ def check_c2_against_the_registration() -> list[CheckReport]:
         ),
         report_condition(
             name="C4 c₂ is free of ν",
+            check_id="gap_series.c2_is_free_of_nu",
             claim="the averaged coefficient carries no innovation",
             source=REGISTRATION_SOURCE,
             holds=NU not in coefficient.free_symbols,
@@ -485,6 +494,7 @@ def check_direction_independence() -> list[CheckReport]:
     return [
         report_identity(
             name="C5 direction independence at σ²",
+            check_id="gap_series.direction_independence_at_sigma2",
             claim="reverse KL = forward KL at σ², so c₂ is direction-free",
             source=CUMULANT_SOURCE,
             residual=difference.coeff(SIGMA, 2),
@@ -492,6 +502,7 @@ def check_direction_independence() -> list[CheckReport]:
         ),
         report_condition(
             name="C5 the directions part at σ⁴",
+            check_id="gap_series.directions_part_at_sigma4",
             claim="reverse and forward KL differ at σ⁴, so c₄ is direction-dependent",
             source=CUMULANT_SOURCE,
             holds=sympy.simplify(difference.coeff(SIGMA, 4)) != 0,
@@ -518,6 +529,7 @@ def check_exact_predictive_is_required() -> list[CheckReport]:
     return [
         report_identity(
             name="C9 predictives agree at σ²",
+            check_id="gap_series.predictives_agree_at_sigma2",
             claim="collapsing the predictive to N(0, R̄) leaves c₂ unchanged",
             source=EXPANSION_SOURCE,
             residual=exact.coeff(SIGMA, 2) - collapsed.coeff(SIGMA, 2),
@@ -525,12 +537,27 @@ def check_exact_predictive_is_required() -> list[CheckReport]:
         ),
         report_condition(
             name="C9 predictives part at σ⁴",
+            check_id="gap_series.predictives_part_at_sigma4",
             claim="the collapsed predictive gives a different c₄, so nesting sets it",
             source=EXPANSION_SOURCE,
             holds=parted != 0,
             shown=f"exact − collapsed = {sympy.factor(parted)}",
         ),
     ]
+
+
+#: A basis term as it prints, and the same term as a key. `check_id` admits letters,
+#: digits and underscores alone, so the primes and the solidus cannot travel into an
+#: id, and deriving one would give punctuation a reader cannot map back to a term.
+_TERM_IDS = {
+    "l''''": "l4",
+    "l'' / R": "l2_over_r",
+    "l'^4": "l1_pow4",
+    "l'^2 l''": "l1_sq_l2",
+    "l''^2": "l2_sq",
+    "l' l'''": "l1_l3",
+    "l'^2 / R": "l1_sq_over_r",
+}
 
 
 def check_quartic_basis() -> list[CheckReport]:
@@ -556,6 +583,7 @@ def check_quartic_basis() -> list[CheckReport]:
     reports = [
         report_identity(
             name="C8 c₄ lies in the declared basis",
+            check_id="gap_series.c4_lies_in_the_declared_basis",
             claim="c₄ is a combination of the seven registered terms, no remainder",
             source=BASIS_SOURCE,
             residual=remainder,
@@ -565,6 +593,7 @@ def check_quartic_basis() -> list[CheckReport]:
     reports += [
         report_identity(
             name=f"C8 predicted zero [{term}]",
+            check_id=f"gap_series.predicted_zero_{_TERM_IDS[term]}",
             claim=f"the {term} coefficient is exactly zero",
             source=EXPANSION_SOURCE,
             residual=found[term],
@@ -575,6 +604,7 @@ def check_quartic_basis() -> list[CheckReport]:
     reports += [
         report_identity(
             name=f"C8 fraction [{term}]",
+            check_id=f"gap_series.fraction_{_TERM_IDS[term]}",
             claim=f"the {term} coefficient is {value}",
             source=EXPANSION_SOURCE,
             residual=found[term] - value,
@@ -586,7 +616,7 @@ def check_quartic_basis() -> list[CheckReport]:
 
 
 def check_scale_covariance(
-    expression: sympy.Expr, name: str, coefficient_order: int = 2
+    expression: sympy.Expr, name: str, slug: str, coefficient_order: int = 2
 ) -> list[CheckReport]:
     """C6: how a coefficient transforms under `R → a·R`, for a free positive `a`.
 
@@ -612,6 +642,8 @@ def check_scale_covariance(
     Args:
         expression: the gap expression to test.
         name: what to call it in the report.
+        slug: the same subject as a key, joined into each report's `check_id`. Supplied
+            rather than derived from `name`, which carries maths glyphs and prose.
         coefficient_order: which power of `σ` to read the coefficient from.
 
     Returns:
@@ -642,6 +674,7 @@ def check_scale_covariance(
     return [
         report_condition(
             name=f"C6 no bare R̄ [{name}]",
+            check_id=f"gap_series.no_bare_r_bar_{slug}",
             claim="every monomial pairs each ν² with at least one 1/R̄",
             source=BASIS_SOURCE,
             holds=max(deficits) <= 0,
@@ -649,6 +682,7 @@ def check_scale_covariance(
         ),
         report_identity(
             name=f"C6 scale covariance [{name}]",
+            check_id=f"gap_series.scale_covariance_{slug}",
             claim="under R → aR with ν → √a·ν each monomial picks up a^(m−k)",
             source=EXPANSION_SOURCE,
             residual=sympy.simplify(scaled - grouped),
@@ -676,6 +710,7 @@ def check_exponential_family() -> list[CheckReport]:
     return [
         report_identity(
             name="C7 exponential family c₂",
+            check_id="gap_series.exponential_family_c2",
             claim="for R = A·e^{bx}, c₂ = b²/4",
             source=BASIS_SOURCE,
             residual=quadratic - rate**2 / 4,
@@ -683,6 +718,7 @@ def check_exponential_family() -> list[CheckReport]:
         ),
         report_identity(
             name="C7 exponential family c₄",
+            check_id="gap_series.exponential_family_c4",
             claim=(
                 "for R = A·e^{bx}, c₄ = 7b⁴/16 − 3b²/(4R̄) under reverse KL, "
                 "exactly two terms"
@@ -711,9 +747,15 @@ def run_checks() -> list[CheckReport]:
         check_exponential_family,
     )
     reports = [report for stage in stages for report in stage()]
-    reports += check_scale_covariance(gap_from_definition(ORDER), "fixed y, σ²")
-    reports += check_scale_covariance(averaged_gap(ORDER), "averaged, σ²")
-    reports += check_scale_covariance(averaged_gap(ORDER), "averaged, σ⁴", 4)
+    reports += check_scale_covariance(
+        gap_from_definition(ORDER), "fixed y, σ²", "fixed_y_sigma2"
+    )
+    reports += check_scale_covariance(
+        averaged_gap(ORDER), "averaged, σ²", "averaged_sigma2"
+    )
+    reports += check_scale_covariance(
+        averaged_gap(ORDER), "averaged, σ⁴", "averaged_sigma4", 4
+    )
     return reports
 
 

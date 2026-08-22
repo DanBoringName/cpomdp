@@ -2596,7 +2596,161 @@ from the marker while naming the same thing.
 - The three pinned suite counts did not move. The provenance renders after `detail`, and
   `check_summary` never reads `detail`.
 
-## ADR-042 — the fourth D3 falsifier, registered on two axes and answered on both
+---
+
+## ADR-042 — a check has a key, and a report has a wire form
+
+**Date:** 2026-08-21
+**Status:** Accepted
+**Extends:** ADR-035 (the warrant vocabulary ships), ADR-038 (it drops its letters),
+ADR-039 (it becomes its own distribution)
+
+### The question
+
+Three strings in `.github/workflows/ci.yml` are what stop the symbolic suites going green
+by asking less:
+
+    run_suite series_kernel    "23 registered, 23 tested here, none fired"
+    run_suite log_ratio_series "18 registered, 18 tested here, none fired"
+    run_suite gap_series       "29 registered, 29 tested here, none fired"
+
+A stage dropped from a module's `run_checks()` removes its checks and fails nothing. The
+count is the only thing in the way, and it is a hand-maintained mirror of whatever the
+suite happens to produce. Editing it reads as housekeeping. It also cannot say which check
+left: 23 becoming 22 names nothing.
+
+A second gap sits beside it. Nothing writes a report anywhere but a terminal.
+`check_summary` renders, CI greps the header back. So no run can be compared with another,
+and every number in `research/*.md` is typed by hand. The figure 70, being 23 plus 18 plus
+29, appears in four documents and is derived in none of them.
+
+Both gaps need one thing that did not exist: a name for a check that survives the prose
+being reworded.
+
+### Decision 1 — the key is declared, never derived
+
+`CheckReport` carries `check_id`, required, validated at construction. Dot-separated
+segments of ASCII letters, digits and underscores. Anything else does not construct.
+
+Deriving it from `name` was the cheap option and is the one to avoid. A slugged key moves
+the moment the prose is improved, and a ledger joining two runs then reads one check as one
+dropped and one added. That is the exact reading a ledger exists to rule out.
+
+This is not a guess about which way the trade goes. Every tool facing the same problem
+landed in the same place. Allure's `@allure.id` exists because the derived `fullName`
+breaks under refactor and abandons a test's history. jamb and pytest-testrail carry an
+external case id on a marker. pytreqt defines ids in a specification file and validates in
+both directions. pytest core declined to supply one, in issue #10460, closed as not
+planned, so there is nothing upstream to wait for.
+
+The character class is spelled out rather than written `\w`. `\w` matches unicode by
+default, and this programme's prose is full of `c₂` and `R̄`. Two ids differing by a
+character a reader cannot tell apart is worse than no id at all.
+
+Required rather than defaulted. A default lets a check ship with no key, and the key is the
+whole point of the field.
+
+`__str__` does not render it. The printed line is for a person, who already has the name.
+The id is for the record.
+
+**The guard reaches the two prose fields beside it.** `name` and `detail` were the only
+text on a report that nothing checked, so a blank one constructed and was written out.
+`detail` is documented as the field that stops a report being a bare outcome, and a blank
+`name` is a summary row nobody can attribute. Both now go through the same readability
+check as the key and the evidence, which is what the shipped schema had already been
+asserting on their behalf.
+
+### Decision 2 — the vocabulary and its wire form are separate modules
+
+`warrantlib` splits into `_vocabulary.py` and `_serialise.py`, with `__init__.py` as a
+façade owning `__all__`. The records and the form they take on disk are different
+responsibilities, and the serialiser cannot live beside the classes it reads without the
+package importing itself.
+
+A test parses both modules with `ast` and asserts `__all__` covers every public name they
+define. Reflection over the imported module cannot tell a definition from an import, so the
+source is what gets read. The test carries its own floor, because a set that comes back
+empty satisfies the comparison by asking nothing.
+
+The split has a cost that is not fixed here. mkdocstrings resolves cross-reference tooltips
+to the canonical path, so a signature table's hover text reads
+`Warrant (warrantlib._vocabulary.Warrant)`. Link text, anchors and `--strict` are all
+correct. Rewriting `__module__` in the façade is the usual repair and it cannot reach
+`Evidence`, which is a union rather than a class, so it would leave behind the
+inconsistency it was applied to remove.
+
+### Decision 3 — reading refuses what it cannot read
+
+`report_from_dict` raises on an unknown schema version, an evidence kind with no class
+behind it, an enum value no member carries, and a missing field. Every field the writer
+emits is required on the way in, with no field read through a default. A record missing
+its `warrant` read back as one carrying none, which is the status change nobody made,
+arriving through the reader rather than through the data.
+
+**A list field is read as a list, never coerced into one.** `tuple` accepts any iterable
+and a bare string is one, so `assumptions: "formal"` became six one-character assumptions.
+Each passed its own blank check, and `SymbolicReduction`'s guard against exactly this
+reads a tuple by the time it looks. Coercion is how a wire form fabricates evidence while
+every precondition reports satisfied.
+
+Guessing has a measured cost in this repository. ADR-038 renamed `Tier.A` to `Tier.EXACT`.
+A reader that mapped an unknown tier onto its nearest neighbour would have read every
+record written before that rename as a tier change, and reported status changes nobody
+made. Refusing to compare is the weaker claim and the true one.
+
+Reading goes through the constructor rather than around it, so every precondition still
+applies on the way in. A record naming `PROVED` with its evidence stripped does not
+construct. A wire form able to bypass the guards would make the guards optional.
+
+A JSON Schema ships beside the code at `warrantlib/report.schema.json`, for a consumer
+reading a ledger without Python. The suite validates the writer's own output against it,
+because a schema nothing checks drifts from the writer silently. `jsonschema` is a
+development dependency of the root project. warrantlib's own dependency list stays empty,
+as ADR-039 requires.
+
+### Decision 4 — `cpomdp.warrant` does not grow
+
+The shim mirrors the nine names cpomdp exported before ADR-039 moved them, and stops there.
+`SCHEMA_VERSION`, `report_to_dict` and `report_from_dict` were never in cpomdp, so no
+import path needs preserving, and carrying them would build a second public surface to
+maintain past 1.0. The test that pinned set equality now pins a subset plus the exact
+nine-name floor, since a subset rule on its own is satisfied by a shim that has lost a name.
+
+### Consequences
+
+- **The pinned CI counts still pass, unchanged.** The three symbolic suites report 23, 18
+  and 29 with none fired. `gap_expansion` reports 54 registered, 38 tested, 7 fired.
+  `predictive_truncation` reports 88, 49 and 6. `check_summary` reads neither the id nor
+  `detail`. Those strings
+  are still what guards the suites. This decision gives a guard something to be built on
+  and does not build it.
+- **Around 86 call sites declare an id**, because the shared constructors in
+  `series_kernel` take the name as a parameter and every caller supplies its own. Five
+  suites produce 232 reports carrying 232 distinct ids. `tests/test_check_ids.py` asserts
+  that, and that every id carries its module's namespace. `gap_series` costs half a minute
+  to derive, so its cases carry the `slow` marker and gate on merge rather than on every
+  pull request.
+- **A cell's id names its `σ` losslessly.** The first slug rounded to three decimals, so
+  `--sigmas 0.0301 0.0302` handed two cells one id. Rounding makes a collision reachable
+  from the command line, which is a defect in the rule rather than in a particular grid,
+  so the slug renders the value at full precision and is one-to-one by construction.
+- **`NoiseFamily` carries a `key`**, duplicating its own entry in `FAMILIES`. The printed
+  `name` is maths notation and cannot be a key. Nothing asserts the two agree, so they can
+  drift.
+- **warrantlib is 0.3.0, and the change is breaking.** cpomdp's floor stays at `>=0.2`
+  deliberately: nothing under `src/cpomdp` constructs a report, and moving the floor
+  re-arms ADR-040's publish-ordering race for no gain. `cpomdp-research` moves to `>=0.3`,
+  and never publishes.
+- **`py.typed` ships**, which it should have done since ADR-039. The distribution carried
+  the `Typing :: Typed` classifier without the marker file, so an installed consumer got
+  no annotations from it.
+- **The manifest, the reconciliation and the pytest collector are not in this decision.**
+  Nothing here replaces a count string. What it removes is the reason one could not be
+  replaced.
+
+
+
+## ADR-043 — the fourth D3 falsifier, registered on two axes and answered on both
 
 **Date:** 2026-08-21
 **Status:** Accepted
@@ -2680,15 +2834,15 @@ not accuracy, so the retraction was about provenance and it is now discharged.
   measured 41,982 policies/s. Deferred on time, not on budget or memory. The registered
   stability test stands for it, so PR-2's merge gate is not yet met.
 
-## ADR-043 — the refinement axis answered at both spacings
+## ADR-044 — the refinement axis answered at both spacings
 
 **Date:** 2026-08-21
 **Status:** Accepted
-**Extends:** ADR-042 (the fourth D3 falsifier, registered on two axes)
+**Extends:** ADR-043 (the fourth D3 falsifier, registered on two axes)
 
 ### What changed
 
-ADR-042 left step-`0.25` outstanding, deferred on wall-clock. It has now run:
+ADR-043 left step-`0.25` outstanding, deferred on wall-clock. It has now run:
 410,338,673 policies at `H = 7` in 2.5 hours at 46,124 policies/s, peak 0.47 GiB,
 certified `PROVED` with every policy visited.
 
