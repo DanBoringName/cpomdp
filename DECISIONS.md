@@ -2747,3 +2747,131 @@ nine-name floor, since a subset rule on its own is satisfied by a shim that has 
 - **The manifest, the reconciliation and the pytest collector are not in this decision.**
   Nothing here replaces a count string. What it removes is the reason one could not be
   replaced.
+
+## ADR-043 — the fourth D3 falsifier, registered on two axes and answered on both
+
+**Date:** 2026-08-21
+**Status:** Accepted
+**Phase:** v0.4.5 (PR-2, R10 hardening)
+**Extends:** ADR-034 (the scorer seam), ADR-036 (the chunked enumerator), ADR-041
+(a claim says where it was registered)
+
+### The question
+
+R10 registered `H* = 7` as an upper bound *because the declared action set clips the
+reach*. That makes stability under a change of action set load-bearing rather than
+precautionary: the release's own qualifier says the number moves if the set moves. Two
+prior answers stood in the tree, and neither had a run behind it in this repository. The
+extension cell `{−4,…,2}` carried a deduced `H* = 6`. The step-`0.5` refinement carried a
+measured-looking "stable under refinement, falsifier 4 not triggered" with no commit
+building the nine-action set.
+
+### Decision
+
+**Two axes, registered separately and not interchangeable.** Extension widens the
+magnitude range at the same spacing. Refinement subdivides the same range. They are
+different operations and a single "action-set stability" claim would blur them.
+
+**Extension takes a directional prediction, refinement a stability test.** `H* ≤ 6` for
+`{−4,…,2}`, argued from geometry: at `−3` the prior-ward branch already covers its `−3` in
+one step, so magnitude `4` buys it nothing, while it cuts the cue-ward return from two
+steps to one. Refinement gets `|ΔH*| ≤ 1` instead, because neither branch's step count
+moves when the largest magnitude does not, so no direction is arguable. Registering a
+stability test as a stability test, rather than dressing it as a prediction, is the whole
+of the difference between the two axes here.
+
+**Budgets are declared in both units, because they disagree.** Policy counts and scored
+steps diverge: the step-`0.5` cell at `H = 7` is 4,782,969 policies, far inside the `9^7`
+line, and 33.5M scored steps against the ledger's `H_max` budget of 17.6M. Declaring one
+unit silently picks the flattering one.
+
+**Registration lands in its own commit, before the measurement.** `86d1f22` carries both
+axes' predictions, and the measurements point back at it through `Provenance`. ADR-041
+records
+why `measured_at` cannot be the commit being written.
+
+### Results
+
+**Extension: `H* = 6`, PASS.** The argmin at `H = 6` is `[+1,−4,0,0,0,0]` — one step to
+the cue, then the single `−4` return the argument was built on. The mechanism the
+prediction rested on is the one that fired.
+
+Two things the prediction got wrong, recorded as such. "Plausibly 5" did not hold: `H = 5`
+stays prior-ward though the walk is feasible there, so feasibility of the shorter return
+is not what sets the crossover. And extension **saturates**: `H* = 6` on `{−3,…,2}` and on
+`{−4,…,2}` alike, so the one-step return is taken without moving the horizon.
+
+The deduced row it replaces reached the right number by a route the measurement
+contradicts, since the winning policy uses `−4` and not `−3`. A row can carry a correct
+number for a false reason, and only the run tells them apart.
+
+**Refinement at step-`0.5`: `H* = 7`, PASS, and the published numbers hold.** Measured
+`364.642964185792` and `425.163110098734` against the write-up's `364.6430` and
+`425.1631`, inside the `5e-5` tolerance registered on 2026-08-21 for exactly this
+comparison. Nothing is retracted. What the write-up lacked was a run in this repository,
+not accuracy, so the retraction was about provenance and it is now discharged.
+
+### Consequences
+
+- **`9^8` is moot, not deferred.** The registration made the `H = 8` cell contingent on
+  `H*` rising under refinement. It did not rise, so the cell answers a question that did
+  not arise.
+- **The memory wall was a front-loaded artifact.** Peak measured at 0.46 GiB on the
+  chunked path, against `enumeration_cost`'s 22.6 GiB for `9^8` and 210 GiB for `17^7`.
+  ADR-036's "block-determined and flat in `|A|^H`" holds, and the cells that looked
+  budget-bound are bound by wall-clock alone.
+- **The measured rows are recorded constants, not a gated re-run.** The cheapest cell is
+  531,441 policies and the dearest 410,338,673, so no gate can afford the set. What separates this from the write-up claim it
+  replaces is that a commit builds the set, each row carries its completeness certificate,
+  the provenance names both refs, and `--refinement` reproduces it. Cheap tests assert the
+  recorded values against the published ones, which is the standing rule discharged
+  without putting minutes on every merge.
+- **Falsifier 4 moved off `NOT_RUN_HERE`.** The demo now reports five falsifiers, four
+  tested. Its pinned count moved with the diff that justified it.
+- **step-`0.25` is outstanding**, at 410,338,673 policies and a projected 2.7 hours at the
+  measured 41,982 policies/s. Deferred on time, not on budget or memory. The registered
+  stability test stands for it, so PR-2's merge gate is not yet met.
+
+## ADR-044 — the refinement axis answered at both spacings
+
+**Date:** 2026-08-21
+**Status:** Accepted
+**Extends:** ADR-043 (the fourth D3 falsifier, registered on two axes)
+
+### What changed
+
+ADR-043 left step-`0.25` outstanding, deferred on wall-clock. It has now run:
+410,338,673 policies at `H = 7` in 2.5 hours at 46,124 policies/s, peak 0.47 GiB,
+certified `PROVED` with every policy visited.
+
+`H* = 7`, so `|ΔH*| = 0` against the registered bar of 1. Both refinement cells pass, both
+axes of the fourth D3 falsifier report an outcome, and PR-2's merge gate is met.
+
+### The finding worth keeping
+
+**The two spacings agree to the digit.** `364.642964185792` at `H = 6` and
+`425.163110098734` at `H = 7`, byte-identical between step-`0.5` and step-`0.25`, across a
+set with twice the actions and 86 times the policies. No quarter-step action reaches
+either argmin, just as no half-step did.
+
+Half of that is expected and worth naming as such: the coarser set is a subset, so where
+the argmin lies in it the scores must match. That half is a code-correctness check riding
+along. The evidential half is that the argmin does lie in it, at both spacings. Refinement
+had two chances to move the optimum toward the cue and took neither.
+
+### Consequences
+
+- **`H* = 7` is robust to how finely the range is sampled, and moves only when the range
+  itself widens.** Extension shifted it to 6 and then saturated. Refinement does not shift
+  it at all. The release's qualifier, that 7 is an upper bound *because the set clips the
+  reach*, is now measured rather than asserted: it is the clipping that matters, not the
+  grid.
+- **The chunked path is what made this answerable.** `enumeration_cost` read 210 GiB for
+  this cell on the front-loaded path against 19 GiB of machine. Measured peak was 0.47
+  GiB, so the cell was never budget-bound, only slow. A registration that had treated the
+  front-loaded figure as the budget would have declared it `VOID` and recorded a
+  non-result.
+- **Neither refinement cell re-enumerates on a gate.** Both are recorded constants
+  carrying their
+  certificates and a provenance, reproducible with `--refinement`. Cheap tests assert the
+  recorded values, including that the two cells agree exactly.

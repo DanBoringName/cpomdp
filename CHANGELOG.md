@@ -37,6 +37,13 @@ an exposure rather than a result.
   nothing, which is every job the field exists for. Every check in `research.checks` and
   in `examples/ffg/crossover.py` now declares one, and `NoiseFamily` carries the `key`
   those ids are built from.
+- The fourth D3 falsifier is pre-registered on both axes and answered on both. Extension:
+  `{−4,…,2}` gives `H* = 6` against a bar of `H* ≤ 6` registered a commit earlier, and
+  extension saturates there. Refinement: `H* = 7` at step-`0.5` and step-`0.25` alike,
+  `|ΔH*| = 0` against a bar of 1, the two cells agreeing to the digit across 86 times the
+  policies. Each row is a `PROVED` report carrying its completeness certificates and a
+  `Provenance` whose ordering git can check. The step-`0.5` cell was a re-measurement: the
+  write-up published it before any commit built the set, and the numbers hold.
 - `Provenance` (warrantlib 0.2.0) — which ref registered a claim and which one measured
   it, plus one line saying what a reviewer will find at the first. A `PROVED` report
   requires one, on the same terms as it requires evidence, and carries them as a tuple
@@ -116,6 +123,12 @@ an exposure rather than a result.
 - `cpomdp-research` requires `warrantlib>=0.3`, for `CheckReport.check_id`. cpomdp's own
   floor stays at `>=0.2`: nothing under `src/cpomdp` constructs a report, and moving the
   floor would re-arm ADR-040's publish-ordering race for no gain.
+- The crossover falsifiers name their action mode. `H* = 7` is an open-loop number: the
+  sweep scores whole length-H sequences with no re-planning, driving neither
+  `RecedingHorizonSelector` nor `OpenLoopSelector`. The same statistic under a
+  receding-horizon driver is a different quantity and is unmeasured. The declaration now
+  travels with the number in the `PROVED` details, in `warrant_numbers.md`, in the ledger
+  and in the README, and a test asserts it so the qualifier cannot be dropped silently.
 - cpomdp requires `warrantlib>=0.2`, up from `>=0.1`. `cpomdp.warrant` re-exports
   `Provenance`, so an installed 0.1 fails at `import cpomdp`. Breaking for anyone pinning
   warrantlib 0.1.

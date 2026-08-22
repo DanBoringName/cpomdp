@@ -181,23 +181,31 @@ step, moves the flip one horizon sooner:
 |---|---|---|
 | `crossover-v1` `{−2,−1,0,1,2}` (registered) | **7** | `[+1,−2,−2,0,0,0,0]` |
 | `{−3,−2,−1,0,1,2}` (contains the one-step reach) | **6** | `[+1,−3,−1,0,0,0]` |
-| `{−4,…,2}` and wider | not measured | see below |
+| `{−4,…,2}` (contains the one-step return) | **6** | `[+1,−4,0,0,0,0]` |
+| wider than `{−4,…,2}` | not measured | see below |
 
 So 7 is the pre-registered number and an upper bound; 6 is the value on the six-action set.
 Both get stated, not one as a footnote to the other.
 
-**What the wider sets do is open, and an earlier version of this table answered it by
+**`{−4,…,2}` has now been measured, and an earlier version of this table answered it by
 deduction.** That row read "`H* = 6`, unchanged (`−3` already optimal)", which was reasoned
-from `−3` reaching the goal in one step rather than measured. No commit in this repo's
-history builds `{−4,…,2}`. The deduction is also not obviously safe: `−3` is the one-step
-reach *from the start*, while the walk arrives at the cue at `x = +1`, from where the goal
-at `x = −3` is a displacement of `−4`. A set containing `−4` therefore offers the walk a
-one-step return that `{−3,…,2}` does not, so a lower `G` at H = 6 is available in
-principle and the horizon may or may not move with it.
+from `−3` reaching the goal in one step rather than measured. The deduction was not safe:
+`−3` is the one-step reach *from the start*, while the walk arrives at the cue at `x = +1`,
+from where the goal at `x = −3` is a displacement of `−4`. A set containing `−4` therefore
+offers the walk a one-step return that `{−3,…,2}` does not.
 
-Registering the extension axis and measuring it under a completeness certificate is PR-2's
-work (issue #65). Until then this cell is unmeasured, which is a weaker claim than the one
-it replaces and the only one the evidence supports.
+**The number was right and the reason was wrong.** `H* = 6` on `{−4,…,2}`, registered at
+`H* ≤ 6` before the run and measured under a completeness certificate
+(`PROVED (set v1-ext, |A|^H = 7^6 = 117649, visited 117649)`). But the argmin at `H = 6` is
+`[+1,−4,0,0,0,0]`, which uses `−4` and not `−3`, so the deduction reached the right value
+along a route the measurement contradicts. A row can carry a correct number for a false
+reason, and only the run tells them apart.
+
+Extension **saturates** here: `H* = 6` on `{−3,…,2}` and on `{−4,…,2}` alike, so the
+one-step return is taken without moving the horizon. Sets wider than `{−4,…,2}` remain
+unmeasured. The registration, the argument and the result are in
+`research/fep_falsification_battery.md` under `PRE-REGISTRATION 2026-08-20` and
+`RESULT 2026-08-20`.
 
 This is distinct from *refinement*. A genuine refinement subdivides the same range: on a
 step-0.5 grid over `[−2, 2]` (`|A|^H·H = 9⁷·7 = 33.5M` at H = 7) the argmin is byte-identical
@@ -205,9 +213,16 @@ to the coarse set at both H = 6 (`Gmin = 364.6430`, prior-ward) and H = 7 (`Gmin
 the same walk). The byte-identity is *expected* — the coarse set is a subset, so if the
 argmin lies in it the scores must match; that half is a code-correctness check riding along.
 The evidential content is the other half: **no intermediate action yields a lower `G`**, so
-subdividing does not move the optimum toward the cue. So H\* is stable under refinement
-(registered falsifier 4, not triggered). A step-0.25 grid was dropped on cost (`17⁷·7 ≈
-1.6B`). The 7 → 6 shift is a range *extension* supplying the omitted one-step reach, a
+subdividing does not move the optimum toward the cue.
+
+**Re-measured 2026-08-21, and the numbers hold.** These values had no in-repo
+reproduction when they were first written, so the reading was withdrawn and the cell
+registered as a re-measurement. It has now run under a completeness certificate:
+`364.642964185792` at H = 6 and `425.163110098734` at H = 7, agreeing with the published
+figures to every printed digit. The step-0.25 grid, dropped on cost at the time
+(`17⁷·7 ≈ 1.6B` scored steps), has also run and returns the identical two numbers across
+86 times the policies. `H* = 7` on both, so falsifier 4 is discharged and carries its
+warrant. The 7 → 6 shift is a range *extension* supplying the omitted one-step reach, a
 different operation from refinement.
 
 ## 4. Why — the mechanism (a decaying gradient, from accumulating ambiguity relief)
@@ -358,8 +373,9 @@ does not fit it.
 
 R10 materialises as an open-loop crossover at H\* = 7 on the pre-registered action set,
 decided by exhaustive enumeration and kernel-verified. A falsifier *fires* when its
-condition obtains and would refute the crossover; none did, so all four survive (consistent
-vocabulary: *not triggered* for the testable three, *not applicable* for the seed one):
+condition obtains and would refute the crossover. None did, so all five survive (consistent
+vocabulary: *not triggered* for the four this run tested, *not applicable* for the seed
+one):
 
 - **Falsifier 1** (no crossover at any feasible H): *not triggered* — a crossover exists at
   H = 7, well inside the declared H_max = 9. (In the *previous* pass, with the sweep capped
@@ -371,14 +387,21 @@ vocabulary: *not triggered* for the testable three, *not applicable* for the see
 - **Falsifier 3** (not reproducible across seeds): *not applicable* — void by construction,
   since the open-loop object carries no observation draw; the enumeration is deterministic
   and recomputes identically.
-- **Falsifier 4** (H\* unstable under a declared refinement): *not triggered* — H\* is
-  byte-identical under a step-0.5 refinement of the same range at H = 6 and H = 7. The
-  7 → 6 shift is a range extension supplying the one-step reach, recorded as such.
+- **Falsifier 4** (H\* unstable under a declared refinement): *not triggered* — measured
+  at two spacings under completeness certificates. `H* = 7` on step-0.5 (`9⁷` policies)
+  and on step-0.25 (`17⁷ = 410,338,673`), against 7 on the coarse set, so `|ΔH*| = 0`
+  inside the registered bar of 1. Both cells return `Gmin = 364.642964185792` and
+  `425.163110098734`, identical to each other and to the figures chapter 4.3 published
+  before any commit built the sets. No sub-step action reaches any argmin.
+- **Falsifier 5** (H\* unstable under a declared extension): *not triggered* — `H* = 6` on
+  `{−4,…,2}`, against a bar of `H* ≤ 6` registered a commit before the run, decided by
+  exhaustive enumeration under a completeness certificate. The 7 → 6 shift is a range
+  extension supplying the one-step reach, and extension saturates at 6.
 
 The result to register:
 
-- **H\* = 7** on `crossover-v1` (upper bound, clipped reach); **H\* = 6** on any set
-  containing the one-step reach `−3`. The pre-registered number is 7.
+- **H\* = 7** on `crossover-v1` (upper bound, clipped reach); **H\* = 6** on `{−3,…,2}` and
+  on `{−4,…,2}`, both measured. The pre-registered number is 7.
 - **Mechanism: a pragmatic gradient decaying below a constant epistemic pull, driven by
   accumulating commit-channel ambiguity relief (~0.67 nats/step); the flip is epistemically
   driven (chapter 4.1).** Not epistemic accumulation, and not "the pull overtaking the
