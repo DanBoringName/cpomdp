@@ -102,7 +102,15 @@ class Suite:
                 f"{failure}. A suite that cannot be imported reports no checks, and a "
                 "reconciliation reads that as every one of them dropped at once."
             ) from failure
-        return list(getattr(module, attribute)())
+        runner = getattr(module, attribute, None)
+        if runner is None:
+            raise ValueError(
+                f"suite {self.name!r} names {attribute!r} in {module_name!r}, which "
+                "has no such attribute. A renamed runner is the same failure as a "
+                "renamed check and is reported the same way, rather than as the "
+                "AttributeError of whoever called it."
+            )
+        return list(runner())
 
 
 @dataclass(frozen=True)
@@ -251,16 +259,26 @@ class Manifest:
                 "manifest declares no suites. A file declaring nothing reconciles "
                 "against anything, which is the state it exists to replace."
             )
-        return cls(
+        manifest = cls(
             suites=tuple(
                 Suite(
                     name=name,
                     entry_point=_field(name, entry, "entry_point"),
-                    checks=tuple(_field(name, entry, "checks")),
+                    checks=_checks(name, entry),
                 )
                 for name, entry in suites.items()
             )
         )
+        declared = manifest.checks
+        shared = sorted({one for one in declared if declared.count(one) > 1})
+        if shared:
+            raise ValueError(
+                f"manifest declares {', '.join(shared)} in more than one suite. "
+                "`reconcile` compares sets, so one report would satisfy both "
+                "declarations, and the two items collide under one name. A key shared "
+                "by two checks is not a key."
+            )
+        return manifest
 
 
 def _quoted(value: str) -> str:
@@ -286,6 +304,32 @@ def _quoted(value: str) -> str:
             "would end the string early or change what it says."
         )
     return value
+
+
+def _checks(suite: str, entry: Any) -> tuple[str, ...]:
+    """Read a suite's declared ids, without coercing what is not a list.
+
+    `tuple` accepts any iterable and a bare string is one, so `checks = "a.one"` would
+    declare five ids of one character each and collect five items to match.
+
+    Args:
+        suite: the suite, as the message names it.
+        entry: its table in the file.
+
+    Returns:
+        The ids.
+
+    Raises:
+        ValueError: if the field is absent or is not a list.
+    """
+    value = _field(suite, entry, "checks")
+    if not isinstance(value, list):
+        raise ValueError(
+            f"suite {suite!r} has checks={value!r}, which is not a list. Converting "
+            "whatever arrives is how a bare string becomes one id per character, each "
+            "of them collected as a check nobody wrote."
+        )
+    return tuple(value)
 
 
 def _field(suite: str, entry: Any, name: str) -> Any:
@@ -344,7 +388,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if arguments.check:
         print(f"{arguments.path}: out of date")
-        print(difference)
+        # The ids can agree while the file is stale, so saying they agree here reads as
+        # a contradiction of the line above it. Name the real reason instead.
+        print(
+            difference
+            if not difference.agrees
+            else "the declared ids are current, and the file's layout is not"
+        )
         return 1
     arguments.path.write_text(wanted_text)
     print(f"{arguments.path}: rewritten, {len(rewritten.checks)} checks declared")

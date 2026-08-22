@@ -35,6 +35,24 @@ if TYPE_CHECKING:
     from _pytest.reports import TestReport
     from _pytest.terminal import TerminalReporter
 
+#: The oldest pytest this plugin runs on. `@pytest.hookimpl(wrapper=True)` arrived in
+#: 8.0 and `Config.get_verbosity` in 7.4, and both are on the ordinary path here.
+#:
+#: The floor is checked rather than only declared. `pytest>=8` sits in the `pytest`
+#: extra, and the `pytest11` entry point is read by any pytest that finds this
+#: distribution installed, extra or not. An older one would load this module and fail
+#: somewhere inside a hook, which reads as a bug in the suite being run.
+_MINIMUM_PYTEST = (8, 0)
+
+if pytest.version_tuple[:2] < _MINIMUM_PYTEST:
+    wanted = ".".join(str(part) for part in _MINIMUM_PYTEST)
+    raise RuntimeError(
+        f"warrantlib's pytest plugin needs pytest {wanted} or newer, and this is "
+        f"{pytest.__version__}. It is loaded through the pytest11 entry point, which "
+        f"every pytest reads, so install `warrantlib[pytest]` to get a version that "
+        f"satisfies it."
+    )
+
 #: The three outcomes pytest itself has. Spelled out so the table below cannot drift
 #: into a fourth, which `junitxml` would write as no row at all.
 _PytestOutcome = Literal["passed", "failed", "skipped"]
@@ -105,7 +123,11 @@ _SUITE_REPORTS: pytest.StashKey[dict[str, list[CheckReport]]] = pytest.StashKey(
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
-    """Declare where the manifest lives.
+    """Declare the detail flag, and where the manifest lives.
+
+    `--warrant-detail` prints every check's own line. `warrant_manifest` is an ini
+    option rather than a flag, because a project's manifest does not move between runs
+    and naming it on every invocation is a step to forget.
 
     Args:
         parser: the option parser.

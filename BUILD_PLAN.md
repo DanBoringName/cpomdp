@@ -227,8 +227,9 @@ order.
       measures the difference symbolically. `predictive_truncation` had already recorded
       why: `p*` is a scale mixture with exponential tails.
 - [x] 70 identities now, up from 53: 23 in `series_kernel`, 18 in `log_ratio_series`,
-      29 in `gap_series`. All `PROVED` at `EXACT` on a `SymbolicReduction`. The CI job
-      pins all three counts.
+      29 in `gap_series`. All `PROVED` at `EXACT` on a `SymbolicReduction`. Each is
+      declared in `research/registered_checks.toml` and reconciled by id, so a dropped
+      one fails by name. The CI job pinned all three counts until ADR-046.
 - [x] The derivation ran before anything registered it, and that is disclosed at the head
       of the registration's section 7 rather than repaired. Rerunning after registering
       would be a rerun by someone who knows the answer.

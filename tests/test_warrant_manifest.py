@@ -188,12 +188,18 @@ class TestRunningASuite:
             suite.run()
 
     def test_a_real_suite_runs(self):
+        # No count asserted. A number here is the pinned-count habit this whole change
+        # removes, and it would need editing every time a check is added.
         suite = Suite(
             name="log_ratio_series",
             entry_point="research.checks.log_ratio_series:run_checks",
             checks=(),
         )
-        assert len(suite.run()) == 18
+        reports = suite.run()
+        assert reports
+        assert all(
+            report.check_id.startswith("log_ratio_series.") for report in reports
+        )
 
 
 class TestTheCommandLine:
@@ -247,10 +253,54 @@ class TestTheCommandLine:
         main([str(path)])
         assert main(["--check", str(path)]) == 0
 
-    def test_a_file_whose_only_drift_is_layout_is_not_current(self, tmp_path):
+    def test_a_file_whose_only_drift_is_layout_is_not_current(self, tmp_path, capsys):
         # The ids agree, so comparing parsed manifests calls this current and the file
-        # keeps a layout the writer no longer produces.
+        # keeps a layout the writer no longer produces. Printing the reconciliation
+        # here says "manifest and run agree" one line under "out of date".
         path = self._seed(tmp_path)
         main([str(path)])
         path.write_text(path.read_text().replace("\n\n[suites.", "\n[suites."))
         assert main(["--check", str(path)]) == 1
+        printed = capsys.readouterr().out
+        assert "out of date" in printed
+        assert "manifest and run agree" not in printed
+        assert "layout" in printed
+
+
+class TestTheManifestRefusesWhatWouldReadAsChecks:
+    """Shapes that parse as TOML and mean something else entirely."""
+
+    def test_a_bare_string_of_checks_is_refused(self):
+        # `tuple("a.one")` is five ids, each a single character, each collected as its
+        # own item. The same coercion `_sequence` exists to stop in the wire form.
+        text = (
+            'schema_version = "1.0"\n\n'
+            '[suites.a]\nentry_point = "x:y"\nchecks = "a.one"\n'
+        )
+        with pytest.raises(ValueError, match="checks"):
+            Manifest.from_toml(text)
+
+    def test_a_suite_that_is_not_a_table_is_refused(self):
+        text = 'schema_version = "1.0"\n\n[suites]\na = "x:y"\n'
+        with pytest.raises(ValueError, match="entry_point"):
+            Manifest.from_toml(text)
+
+    def test_two_suites_declaring_one_id_are_refused(self):
+        # `reconcile` compares sets, so one report satisfies both declarations and the
+        # two items collide by name. A key shared by two checks is not a key.
+        text = (
+            'schema_version = "1.0"\n\n'
+            '[suites.a]\nentry_point = "x:y"\nchecks = [\n  "shared.id",\n]\n\n'
+            '[suites.b]\nentry_point = "x:z"\nchecks = [\n  "shared.id",\n]\n'
+        )
+        with pytest.raises(ValueError, match=r"shared\.id"):
+            Manifest.from_toml(text)
+
+    def test_a_renamed_runner_is_refused_as_the_type_documents(self):
+        suite = Suite(
+            name="s",
+            entry_point="research.checks.log_ratio_series:no_such_runner",
+            checks=(),
+        )
+        with pytest.raises(ValueError, match="no_such_runner"):
+            suite.run()
