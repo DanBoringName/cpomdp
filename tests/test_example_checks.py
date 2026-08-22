@@ -363,6 +363,6 @@ def test_crossover_falsifiers_are_reports():
 def test_crossover_check():
     """The exhaustive argmin flips reach -> two-phase walk at H*=7: the crossover, its
     flat-pull / decaying-gradient mechanism, and the headline number against a NumPy
-    oracle. Enumerates ~370k policies (H=6, H=7), so it is marked slow and deselected on
+    oracle. Enumerates ~325k policies (H=6, H=7), so it is marked slow and deselected on
     PRs; it gates on merge-to-main and release."""
     crossover.check()

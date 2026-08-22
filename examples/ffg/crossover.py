@@ -361,14 +361,6 @@ def refinement_h_star(rows=REFINEMENT_05_ROWS) -> int | None:
     return next((r.horizon for r in rows if r.cue_ward), None)
 
 
-def _ext_certificate(horizon: int) -> CompletenessCertificate:
-    """The completeness certificate for the extension set at one horizon."""
-    backend, _, _, info_block = _setup()
-    return EnumeratedEfeSearch.over_backend(
-        backend, EXT_SET, info_block=info_block, horizon=horizon
-    ).certificate
-
-
 def measure_extension(max_horizon: int = EXT_BAR) -> ExtensionMeasurement:
     """Sweep the extension set for its crossover, with a certificate either way.
 
@@ -380,15 +372,18 @@ def measure_extension(max_horizon: int = EXT_BAR) -> ExtensionMeasurement:
     # set that cannot reach the cue returns "no crossover" for a reason that has nothing
     # to do with the objective, and the outcome for that is NOT APPLICABLE.
     sensed = demo_maze.best_reachable_noise(EXT_SET, 1, max_horizon) <= demo_maze.R_LO
-    sweep = exhaustive_flip(EXT_SET, max_horizon)
-    for horizon, _, _, policy, cue_ward in sweep:
-        if cue_ward:
-            return ExtensionMeasurement(
-                horizon, _ext_certificate(horizon), policy, sensed
-            )
-    return ExtensionMeasurement(
-        None, _ext_certificate(max_horizon), sweep[-1][3], sensed
-    )
+    # One enumeration per horizon, and the certificate comes off that same search. Going
+    # back for it through a second `over_backend` would enumerate the set twice.
+    backend, belief, preference, info_block = _setup()
+    policy = ()
+    for horizon in range(1, max_horizon + 1):
+        search = EnumeratedEfeSearch.over_backend(
+            backend, EXT_SET, info_block=info_block, horizon=horizon
+        )
+        policy = np.asarray(search.evaluate(belief, preference).best_policy).ravel()
+        if _cue_ward(policy):
+            return ExtensionMeasurement(horizon, search.certificate, policy, sensed)
+    return ExtensionMeasurement(None, search.certificate, policy, sensed)
 
 
 def measure_flip(horizon: int) -> FlipMeasurement:
@@ -921,7 +916,7 @@ def check() -> None:
 
     The exhaustive enumerations are scoped to the flip boundary and H* (the horizons the
     assertions bear on), plus the extension sweep's 137,256, so the gate enumerates
-    ~370k policies rather than the full one. The recorded refinement rows are read, not
+    ~325k policies rather than the full one. The recorded refinement rows are read, not
     re-enumerated.
     """
     # 1. Decisive: the exhaustive argmin is a reach at H*-1 and a cue-ward walk at H*.
