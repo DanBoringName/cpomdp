@@ -2875,3 +2875,64 @@ had two chances to move the optimum toward the cue and took neither.
   carrying their
   certificates and a provenance, reproducible with `--refinement`. Cheap tests assert the
   recorded values, including that the two cells agree exactly.
+
+---
+
+## ADR-045 — the floor moves to Python 3.11, and a generated file gets comments
+
+**Date:** 2026-08-22
+**Status:** Accepted
+**Extends:** ADR-039 (the warrant vocabulary becomes its own distribution)
+
+### The question
+
+The check manifest is a generated file whose whole job is to be read in a diff. A stage
+dropped from a suite shows up there as a removed line, and the reviewer seeing that line
+needs to know two things the line cannot say: that the file is generated, and what command
+regenerates it.
+
+JSON cannot carry a comment. TOML can, and `tomllib` reads it from the standard library,
+which is the only library `warrantlib` is allowed to want. It arrived in 3.11.
+
+`warrantlib` declared `>=3.10`, and cpomdp depends on `warrantlib`, so the floor is one
+number for both distributions whether or not they state it separately.
+
+### Decision
+
+**Both distributions require Python 3.11.** `cpomdp`, `warrantlib` and `cpomdp-research`
+move together, the 3.10 classifier goes, the CI matrix drops a rung, and `ruff` and `ty`
+target 3.11.
+
+**The manifest is TOML.** A generated file that explains itself is worth more than one
+that needs a paragraph elsewhere saying what it is. The alternative was a JSON file with a
+`generated_by` field carrying the same sentence as data, which works and reads as a
+workaround.
+
+**A dependency was not the way to get there.** `tomli` would have read TOML on 3.10 and
+`tomli-w` would write it on any version. Either one ends "the standard library is the only
+dependency", which is the property that makes the vocabulary installable next to a check
+suite that wants nothing else. Moving the floor spends a supported version once. Taking a
+dependency spends the property permanently.
+
+**The writer emits a restricted subset by hand**, since `tomllib` reads and does not
+write. The manifest holds table headers, quoted strings and arrays of quoted strings, and
+nothing else: no dates, no floats, no nested inline tables. A round-trip test parses what
+the writer emitted with `tomllib` and compares, so the subset is checked against the real
+parser rather than against the author's reading of the specification.
+
+**3.10's calendar is the reason this is cheap rather than the reason it is right.** It
+reaches end of life in October 2026, two months out. Had it been a year out the trade
+would have gone the other way, and the manifest would have been JSON.
+
+### Consequences
+
+- **A user on 3.10 cannot install either distribution after this.** cpomdp is
+  `Development Status :: 2 - Pre-Alpha` and warrantlib `3 - Alpha`, and neither has a
+  pinned-version audience to strand. The published `warrantlib` 0.2.0 keeps its `>=3.10`
+  metadata, so an existing 3.10 install resolves as it always did.
+- **The CI matrix runs four interpreters rather than five**, which is a saving nobody
+  asked for and should not be read as the motivation.
+- `ruff` targets `py311` and may now rewrite code into syntax 3.10 rejects. That is the
+  point of the target, and it is what stops the floor being nominal.
+- The manifest's writer is ours to maintain. A field whose value is not a string or a
+  list of strings needs the writer extended, and the round-trip test is what says so.

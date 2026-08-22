@@ -150,6 +150,14 @@ an exposure rather than a result.
 
 ### Changed
 
+- **Breaking:** cpomdp and warrantlib require Python 3.11, up from 3.10. The check
+  manifest is TOML so the generated file can say what it is and how to regenerate it, and
+  `tomllib` reads TOML from the standard library only from 3.11. Taking `tomli` instead
+  would have ended warrantlib's "the standard library is the only dependency", which is
+  the property that makes it installable beside a check suite wanting nothing else.
+  Python 3.10 reaches end of life in October 2026, which is what makes the trade cheap
+  rather than what makes it right (ADR-045). The published warrantlib 0.2.0 keeps its
+  `>=3.10` metadata, so an existing 3.10 install resolves as it always did.
 - `cpomdp-research` requires `warrantlib>=0.3`, for `CheckReport.check_id`. cpomdp's own
   floor stays at `>=0.2`: nothing under `src/cpomdp` constructs a report, and moving the
   floor would re-arm ADR-040's publish-ordering race for no gain.

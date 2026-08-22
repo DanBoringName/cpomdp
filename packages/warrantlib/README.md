@@ -9,7 +9,7 @@ keeping that difference in a check suite's output instead of losing it there.
 pip install warrantlib
 ```
 
-Python 3.10 and up. The standard library is the only dependency.
+Python 3.11 and up. The standard library is the only dependency.
 
 ## Warrant
 

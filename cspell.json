@@ -187,6 +187,8 @@
     "testrail",
     "teststatus",
     "textcoords",
+    "tomli",
+    "tomllib",
     "treedef",
     "treedefs",
     "tse",
