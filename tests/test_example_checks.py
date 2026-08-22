@@ -128,6 +128,54 @@ def _extension(h_star=6, *, sensed=True):
     )
 
 
+def _refinement(h_stars=(7, 7), *, gmins=None, policies=None):
+    """Synthetic refinement cells, so the refuting branch is executable.
+
+    The recorded cells only ever describe one result. Feeding a different `H*`, a
+    disagreeing score or a sub-step argmin is what turns each clause of row 4's detail
+    into something a test can hold to.
+    """
+    cells = []
+    for index, (label, h_star) in enumerate(
+        zip(("step-0.5", "step-0.25"), h_stars, strict=True)
+    ):
+        size = 9 if index == 0 else 17
+        rows = []
+        for horizon in (h_star - 1, h_star):
+            gmin = 100.0 + horizon
+            if gmins is not None:
+                gmin = gmins[index][horizon - (h_star - 1)]
+            policy = [-2.0] + [0.0] * (horizon - 1)
+            if horizon == h_star:
+                policy = [1.0, -2.0] + [0.0] * (horizon - 2)
+            if policies is not None and horizon == h_star and policies[index]:
+                policy = policies[index]
+            rows.append(
+                crossover.RefinementRow(
+                    horizon=horizon,
+                    gmin=gmin,
+                    policy=tuple(policy),
+                    cue_ward=horizon == h_star,
+                    certificate=CompletenessCertificate(
+                        expected=size**horizon,
+                        visited=size**horizon,
+                        warrant=Warrant.PROVED,
+                        action_set_size=size,
+                        horizon=horizon,
+                        action_set_version=f"v1-refine-{label}",
+                    ),
+                )
+            )
+        cells.append(
+            crossover.RefinementCell(
+                label=label,
+                rows=tuple(rows),
+                provenance=crossover.REFINEMENT_CELLS[index].provenance,
+            )
+        )
+    return tuple(cells)
+
+
 def _rows(at_prior, at_flip, extension=None):
     """The two measured falsifiers, keyed by name prefix."""
     reports = crossover.falsifiers(at_prior, at_flip, extension or _extension())
@@ -152,6 +200,44 @@ class TestCrossoverFalsifierReporting:
         one, two = _rows(*self._pair())
         assert one.outcome is Outcome.NOT_TRIGGERED
         assert two.outcome is Outcome.NOT_TRIGGERED
+
+    def _row_four(self, **kwargs):
+        return crossover.falsifiers(
+            *self._pair(), extension=_extension(), refinement=_refinement(**kwargs)
+        )[3]
+
+    def test_a_refinement_within_the_bar_survives_row_four(self):
+        # The registered test is |dH*| <= 1, so a cell landing on 6 or 8 PASSES. Strict
+        # equality against 7 reported those as refuting, which is the bar the
+        # pre-registration wrote and not the one the code read.
+        for h_stars in ((7, 7), (6, 7), (7, 8), (6, 8)):
+            row = self._row_four(h_stars=h_stars)
+            assert row.outcome is Outcome.NOT_TRIGGERED, h_stars
+            assert "within the registered bar" in row.detail, h_stars
+
+    def test_a_refinement_past_the_bar_fires_row_four(self):
+        row = self._row_four(h_stars=(9, 7))
+        assert row.outcome is Outcome.FIRED
+        assert "past the registered bar" in row.detail
+        assert "within the registered bar" not in row.detail
+
+    def test_row_four_does_not_claim_a_clean_lattice_when_one_is_not(self):
+        # The "no sub-step action" clause is evidential, so it has to be computed.
+        row = self._row_four(policies=([1.0, -1.5, 0.0, 0.0, 0.0, 0.0, 0.0], None))
+        assert "a sub-step action reaches the argmin" in row.detail
+        assert "no sub-step action" not in row.detail
+
+    def test_row_four_does_not_claim_agreement_when_the_cells_disagree(self):
+        row = self._row_four(gmins=((10.0, 20.0), (10.0, 999.0)))
+        assert "the cells disagree" in row.detail
+        assert "agree to the digit" not in row.detail
+
+    def test_row_four_carries_a_provenance_per_cell(self):
+        # The two cells were measured at different commits, so one ref covering both
+        # would cite a tree that never produced half the rows.
+        row = crossover.falsifiers()[3]
+        assert len(row.provenance) == len(crossover.REFINEMENT_CELLS)
+        assert {p.measured_at for p in row.provenance} == {"3619016", "c37fac3"}
 
     def test_an_extension_past_the_bar_fires_row_five(self):
         # Unreachable from a live run, which only produces H* = 6. Injecting the

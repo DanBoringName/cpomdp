@@ -343,11 +343,54 @@ FLIP_PROVENANCE = Provenance(
     registered="the flip separation bar, derived from the conditioning ceiling",
 )
 
-#: Where the stability test was registered, and the ref whose tree measured it.
-REFINEMENT_PROVENANCE = Provenance(
-    registered_at="86d1f22",
-    measured_at="3619016",
-    registered="refinement stability at |dH*| <= 1 (battery, 2026-08-20)",
+
+class RefinementCell(NamedTuple):
+    """One refined action set, its measured rows, and the ref that measured them.
+
+    Bundled rather than kept as parallel constants so a cell can be injected whole. The
+    falsifier reads its outcome off these, and a refuting cell is what lets the refuting
+    branch be executed by a test instead of only described.
+
+    Attributes:
+        label: the spacing, as the detail line names it.
+        rows: one measured row per horizon.
+        provenance: which ref registered the stability test, and which measured this
+            cell. The two cells were measured at different commits, so the ref belongs
+            here rather than on a single constant covering both.
+    """
+
+    label: str
+    rows: tuple[RefinementRow, ...]
+    provenance: Provenance
+
+
+#: The registered tolerance for the refinement axis: `|dH*| <= 1` is PASS, `>= 2` FAIL
+#: (fep_falsification_battery.md, PRE-REGISTRATION 2026-08-20). The falsifier reads this
+#: rather than testing equality, which would fail a measurement the registration passes.
+REFINEMENT_TOLERANCE = 1
+
+#: The two measured cells. Each names the ref that measured it: step-0.5 ran at
+#: `3619016` and step-0.25 at `c37fac3`, so one provenance covering both would cite a
+#: tree that never produced half the rows.
+REFINEMENT_CELLS = (
+    RefinementCell(
+        label="step-0.5",
+        rows=REFINEMENT_05_ROWS,
+        provenance=Provenance(
+            registered_at="86d1f22",
+            measured_at="3619016",
+            registered="refinement stability at |dH*| <= 1 (battery, 2026-08-20)",
+        ),
+    ),
+    RefinementCell(
+        label="step-0.25",
+        rows=REFINEMENT_025_ROWS,
+        provenance=Provenance(
+            registered_at="86d1f22",
+            measured_at="c37fac3",
+            registered="refinement stability at |dH*| <= 1 (battery, 2026-08-20)",
+        ),
+    ),
 )
 
 #: The published values the re-measurement was checked against, and the tolerance the
@@ -586,6 +629,7 @@ def falsifiers(
     at_prior: FlipMeasurement | None = None,
     at_flip: FlipMeasurement | None = None,
     extension: ExtensionMeasurement | None = None,
+    refinement: tuple[RefinementCell, ...] | None = None,
 ) -> tuple[CheckReport, ...]:
     """The five D3 falsifiers registered for this crossover, one report each.
 
@@ -616,10 +660,13 @@ def falsifiers(
         at_prior: the measurement at ``H*-1``. Enumerated live when omitted.
         at_flip: the measurement at ``H*``. Enumerated live when omitted.
         extension: the extension-axis sweep. Enumerated live when omitted.
+        refinement: the refinement-axis cells. The recorded ones when omitted; a
+            refuting set is what lets this row's FIRED branch be executed.
     """
     at_prior = measure_flip(FLIP_H - 1) if at_prior is None else at_prior
     at_flip = measure_flip(FLIP_H) if at_flip is None else at_flip
     extension = measure_extension() if extension is None else extension
+    refinement = REFINEMENT_CELLS if refinement is None else refinement
 
     def crossover_exists() -> Outcome:
         """Fires when the exhaustive argmin is not cue-ward at H*."""
@@ -686,6 +733,74 @@ def falsifiers(
             f"H* <= {EXT_BAR}, {verdict}. argmin {policy}. {movement}"
         )
 
+    def refinement_deltas():
+        """``(label, h_star, |dH*|)`` per cell, with ``None`` where nothing flipped."""
+        rows = []
+        for cell in refinement:
+            h_star = refinement_h_star(cell.rows)
+            delta = None if h_star is None else abs(h_star - FLIP_H)
+            rows.append((cell.label, h_star, delta))
+        return rows
+
+    def refinement_holds() -> Outcome:
+        """Fires when a cell moves H* past the registered tolerance.
+
+        Reads the registered bar rather than testing equality. `|dH*| <= 1` is the
+        pre-registered PASS, so a cell landing on 6 or 8 survives this falsifier and
+        must not be reported as refuting it.
+        """
+        deltas = [delta for _, _, delta in refinement_deltas()]
+        if any(delta is None for delta in deltas):
+            return Outcome.FIRED
+        return (
+            Outcome.NOT_TRIGGERED
+            if all(delta <= REFINEMENT_TOLERANCE for delta in deltas)
+            else Outcome.FIRED
+        )
+
+    def refinement_detail() -> str:
+        """Every clause computed: the horizons, the spread, the argmins, the scores."""
+        measured = refinement_deltas()
+        per_cell = ", ".join(f"{label} H* = {h_star}" for label, h_star, _ in measured)
+        deltas = [delta for _, _, delta in measured]
+        if any(delta is None for delta in deltas):
+            return (
+                f"{per_cell} against the coarse {FLIP_H}: a cell has no cue-ward "
+                f"argmin at all, so the registered bar of {REFINEMENT_TOLERANCE} "
+                "cannot be met"
+            )
+        worst = max(deltas)
+        verdict = (
+            f"|dH*| = {worst} within the registered bar of {REFINEMENT_TOLERANCE}"
+            if worst <= REFINEMENT_TOLERANCE
+            else f"|dH*| = {worst} past the registered bar of {REFINEMENT_TOLERANCE}"
+        )
+        every_row = [row for cell in refinement for row in cell.rows]
+        sub_step = [
+            row.horizon
+            for row in every_row
+            if any(float(a) != int(a) for a in row.policy)
+        ]
+        lattice = (
+            "no sub-step action reaches any argmin"
+            if not sub_step
+            else f"a sub-step action reaches the argmin at H = {sub_step}"
+        )
+        by_horizon = {}
+        for row in every_row:
+            by_horizon.setdefault(row.horizon, set()).add(row.gmin)
+        agree = all(len(scores) == 1 for scores in by_horizon.values())
+        agreement = (
+            "the cells agree to the digit"
+            if agree
+            else "the cells disagree on at least one score"
+        )
+        return (
+            f"{per_cell} against the coarse {FLIP_H}, so {verdict}. {lattice}, and "
+            f"{agreement}. Recorded from the chunked runs, reproducible with "
+            "--refinement"
+        )
+
     def where(measurement: FlipMeasurement) -> str:
         return "cue-ward" if measurement.cue_ward else "prior-ward"
 
@@ -742,25 +857,11 @@ def falsifiers(
             name="4. H* unstable under refinement",
             check_id="crossover.h_star_unstable_under_refinement",
             warrant=Warrant.PROVED,
-            outcome=(
-                Outcome.NOT_TRIGGERED
-                if refinement_h_star() == FLIP_H
-                and refinement_h_star(REFINEMENT_025_ROWS) == FLIP_H
-                else Outcome.FIRED
-            ),
+            outcome=refinement_holds(),
             tier=Tier.BOUNDED,
-            detail=(
-                f"step-0.5 and step-0.25 over [-2,2]: H* = {refinement_h_star()} on "
-                f"both against the coarse {FLIP_H}, so |dH*| = 0 within the registered "
-                "bar of 1. Every argmin is the coarse one and no sub-step action "
-                "reaches any of them, so subdividing does not move the optimum. The "
-                "two cells agree to the digit across 86x the policies. Recorded from "
-                "the chunked runs, reproducible with --refinement"
-            ),
-            evidence=tuple(
-                row.certificate for row in (*REFINEMENT_05_ROWS, *REFINEMENT_025_ROWS)
-            ),
-            provenance=(REFINEMENT_PROVENANCE,),
+            detail=refinement_detail(),
+            evidence=tuple(row.certificate for cell in refinement for row in cell.rows),
+            provenance=tuple(cell.provenance for cell in refinement),
         ),
         CheckReport(
             name="5. H* unstable under extension",
