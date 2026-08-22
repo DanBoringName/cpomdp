@@ -15,6 +15,14 @@ an exposure rather than a result.
 
 ### Added
 
+- `warrantlib.manifest` (warrantlib 0.3.0) — the checks a suite is registered to report,
+  declared in a generated TOML file and reconciled against what a run actually produced.
+  A count could say a suite got shorter. It could not say which check left, and it was
+  satisfied by a different check arriving in place of the one that went. The manifest
+  names both directions: declared and not reported, reported and not declared. Generate
+  or refresh one with `python -m warrantlib.manifest <path>`, and ask whether it is
+  current with `--check`, which is the form CI runs. The file compares as text rather
+  than as parsed content, so a layout the writer no longer produces counts as stale.
 - A pytest plugin, behind `pip install "warrantlib[pytest]"` (warrantlib 0.3.0). A test
   hands its findings to the run with the `record_check` fixture, and the run reports them
   in the warrant vocabulary: the progress letter separates a void check from one measured
