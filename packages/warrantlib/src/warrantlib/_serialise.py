@@ -69,6 +69,33 @@ def _require(data: Mapping[str, Any], field: str) -> Any:
     return data[field]
 
 
+def _sequence(data: Mapping[str, Any], field: str) -> tuple[Any, ...]:
+    """Read a field the writer emits as a list, without coercing what is not one.
+
+    `tuple` accepts any iterable, and a bare string is one. Coercing turns a sentence
+    into one entry per character, and the constructor's own guard against that reads a
+    tuple by the time it looks, so the record would construct.
+
+    Args:
+        data: the record.
+        field: the field to read.
+
+    Returns:
+        Its entries.
+
+    Raises:
+        ValueError: if the record has no such field, or the field is not a list.
+    """
+    value = _require(data, field)
+    if not isinstance(value, list):
+        raise ValueError(
+            f"record has {field}={value!r}, which is not a list. The writer emits one, "
+            f"and converting whatever arrives instead is how a bare string becomes one "
+            f"entry per character with every entry passing its own checks."
+        )
+    return tuple(value)
+
+
 def _member(enum: type[_EnumT], value: Any, field: str) -> _EnumT:
     """Resolve an enum member from its serialised value.
 
@@ -138,7 +165,7 @@ def _evidence_from_dict(data: Mapping[str, Any]) -> Evidence:
         return CompletenessCertificate(
             expected=_require(data, "expected"),
             visited=_require(data, "visited"),
-            warrant=_member(Warrant, _require(data, "warrant"), "warrant"),
+            warrant=_member(Warrant, _require(data, "warrant"), "evidence warrant"),
             action_set_size=_require(data, "action_set_size"),
             horizon=_require(data, "horizon"),
             action_set_version=_require(data, "action_set_version"),
@@ -147,7 +174,7 @@ def _evidence_from_dict(data: Mapping[str, Any]) -> Evidence:
         return SymbolicReduction(
             claim=_require(data, "claim"),
             correspondence=_require(data, "correspondence"),
-            assumptions=tuple(data.get("assumptions", ())),
+            assumptions=_sequence(data, "assumptions"),
         )
     raise ValueError(
         f"evidence record has kind={kind!r}, which is neither {_CERTIFICATE_KIND!r} "
@@ -224,7 +251,7 @@ def report_from_dict(data: Mapping[str, Any]) -> CheckReport:
             f"Reading it would mean guessing which fields moved, and a differ that "
             f"guesses reports changes nobody made."
         )
-    warrant = data.get("warrant")
+    warrant = _require(data, "warrant")
     return CheckReport(
         name=_require(data, "name"),
         check_id=_require(data, "check_id"),
@@ -232,13 +259,15 @@ def report_from_dict(data: Mapping[str, Any]) -> CheckReport:
         outcome=_member(Outcome, _require(data, "outcome"), "outcome"),
         tier=_member(Tier, _require(data, "tier"), "tier"),
         detail=_require(data, "detail"),
-        evidence=tuple(_evidence_from_dict(item) for item in data.get("evidence", ())),
+        evidence=tuple(
+            _evidence_from_dict(item) for item in _sequence(data, "evidence")
+        ),
         provenance=tuple(
             Provenance(
                 registered_at=_require(item, "registered_at"),
                 measured_at=_require(item, "measured_at"),
                 registered=_require(item, "registered"),
             )
-            for item in data.get("provenance", ())
+            for item in _sequence(data, "provenance")
         ),
     )

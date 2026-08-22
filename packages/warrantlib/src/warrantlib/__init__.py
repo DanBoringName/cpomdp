@@ -16,6 +16,15 @@ nothing, and the summary says so.
 ``PROVED`` report carries, one per decisive prover. ``Provenance`` is the other thing it
 carries: which ref registered the claim, and which one measured it.
 
+A report carries two names. ``name`` is prose and is reworded whenever the wording
+improves. ``check_id`` is the key a manifest declares and two runs are joined on, so it
+is not.
+
+``report_to_dict`` and ``report_from_dict`` are the wire form, at ``SCHEMA_VERSION``.
+Reading goes through the constructor rather than around it, and refuses a record it
+cannot read rather than guessing what moved. A JSON Schema for the record ships beside
+the code.
+
 The standard library is the only dependency.
 """
 

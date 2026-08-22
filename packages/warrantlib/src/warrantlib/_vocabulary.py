@@ -481,6 +481,20 @@ class CheckReport:
         subject = f"check {self.name!r}"
         _reject_unreadable(
             subject,
+            "name",
+            self.name,
+            "A row nobody can attribute is a result with no claim beside it, and it "
+            "reads in the summary as a blank where the check should be.",
+        )
+        _reject_unreadable(
+            subject,
+            "detail",
+            self.detail,
+            "A report with no reason is the bare outcome this field exists to stop, "
+            "and the outcome alone says what happened without saying what was found.",
+        )
+        _reject_unreadable(
+            subject,
             "check_id",
             self.check_id,
             "The id is what a manifest declares and what joins one run's report to "

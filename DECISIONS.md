@@ -2653,6 +2653,13 @@ whole point of the field.
 `__str__` does not render it. The printed line is for a person, who already has the name.
 The id is for the record.
 
+**The guard reaches the two prose fields beside it.** `name` and `detail` were the only
+text on a report that nothing checked, so a blank one constructed and was written out.
+`detail` is documented as the field that stops a report being a bare outcome, and a blank
+`name` is a summary row nobody can attribute. Both now go through the same readability
+check as the key and the evidence, which is what the shipped schema had already been
+asserting on their behalf.
+
 ### Decision 2 — the vocabulary and its wire form are separate modules
 
 `warrantlib` splits into `_vocabulary.py` and `_serialise.py`, with `__init__.py` as a
@@ -2675,7 +2682,16 @@ inconsistency it was applied to remove.
 ### Decision 3 — reading refuses what it cannot read
 
 `report_from_dict` raises on an unknown schema version, an evidence kind with no class
-behind it, an enum value no member carries, and a missing field.
+behind it, an enum value no member carries, and a missing field. Every field the writer
+emits is required on the way in, with no field read through a default. A record missing
+its `warrant` read back as one carrying none, which is the status change nobody made,
+arriving through the reader rather than through the data.
+
+**A list field is read as a list, never coerced into one.** `tuple` accepts any iterable
+and a bare string is one, so `assumptions: "formal"` became six one-character assumptions.
+Each passed its own blank check, and `SymbolicReduction`'s guard against exactly this
+reads a tuple by the time it looks. Coercion is how a wire form fabricates evidence while
+every precondition reports satisfied.
 
 Guessing has a measured cost in this repository. ADR-038 renamed `Tier.A` to `Tier.EXACT`.
 A reader that mapped an unknown tier onto its nearest neighbour would have read every
@@ -2710,8 +2726,14 @@ nine-name floor, since a subset rule on its own is satisfied by a shim that has 
   and does not build it.
 - **Around 86 call sites declare an id**, because the shared constructors in
   `series_kernel` take the name as a parameter and every caller supplies its own. Five
-  suites produce 232 reports carrying 232 distinct ids. That uniqueness was checked once,
-  by hand, and nothing enforces it yet.
+  suites produce 232 reports carrying 232 distinct ids. `tests/test_check_ids.py` asserts
+  that, and that every id carries its module's namespace. `gap_series` costs half a minute
+  to derive, so its cases carry the `slow` marker and gate on merge rather than on every
+  pull request.
+- **A cell's id names its `σ` losslessly.** The first slug rounded to three decimals, so
+  `--sigmas 0.0301 0.0302` handed two cells one id. Rounding makes a collision reachable
+  from the command line, which is a defect in the rule rather than in a particular grid,
+  so the slug renders the value at full precision and is one-to-one by construction.
 - **`NoiseFamily` carries a `key`**, duplicating its own entry in `FAMILIES`. The printed
   `name` is maths notation and cannot be a key. Nothing asserts the two agree, so they can
   drift.

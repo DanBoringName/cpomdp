@@ -131,6 +131,13 @@ class TestTheWireForm:
         # and pin nothing. It is written by hand and stays written by hand.
         assert report_to_dict(_golden_report()) == GOLDEN_RECORD
 
+    def test_the_key_order_is_the_golden_order(self):
+        # Comparing mappings ignores order, so the fixed order the writer documents
+        # would go unpinned and reordering the return literal would stay green. The
+        # promise is that two runs of one suite produce the same bytes, so bytes are
+        # what this compares.
+        assert json.dumps(report_to_dict(_golden_report())) == json.dumps(GOLDEN_RECORD)
+
     def test_the_record_is_json(self):
         # A tuple or an enum survives equality against a literal and then fails at the
         # point the record is written, which is after the run that produced it.
@@ -154,7 +161,7 @@ class TestRoundTrip:
     def test_every_outcome_round_trips(self, outcome):
         warrant = (
             Warrant.CORROBORATED
-            if outcome.name.startswith(("NOT_TRIGGERED", "FIRED", "NOT_RESOLVED"))
+            if outcome in {Outcome.NOT_TRIGGERED, Outcome.FIRED, Outcome.NOT_RESOLVED}
             else None
         )
         report = _bare_report(outcome=outcome, warrant=warrant)
@@ -233,6 +240,83 @@ class TestReadingRefuses:
     def test_an_unknown_tier_is_refused(self):
         record = {**GOLDEN_RECORD, "tier": "A"}
         with pytest.raises(ValueError, match="tier"):
+            report_from_dict(record)
+
+    @pytest.mark.parametrize(
+        "field",
+        [
+            "schema_version",
+            "check_id",
+            "name",
+            "warrant",
+            "outcome",
+            "tier",
+            "detail",
+            "evidence",
+            "provenance",
+        ],
+    )
+    def test_every_field_the_writer_emits_is_required_on_the_way_in(self, field):
+        # `.get` on any of these reads a truncated record as a real one. A record with
+        # no `warrant` key would come back `None`, and a differ would report the
+        # `PROVED` it used to carry as a status change nobody made.
+        record = {key: value for key, value in GOLDEN_RECORD.items() if key != field}
+        with pytest.raises(ValueError, match=field):
+            report_from_dict(record)
+
+    @pytest.mark.parametrize("field", ["evidence", "provenance"])
+    def test_a_list_field_that_is_not_a_list_is_refused(self, field):
+        with pytest.raises(ValueError, match=field):
+            report_from_dict({**GOLDEN_RECORD, field: "one item"})
+
+    def test_a_bare_string_of_assumptions_is_refused(self):
+        # `tuple("formal")` is six one-character assumptions, and each one passes the
+        # blank check. `SymbolicReduction` refuses a bare string for exactly this
+        # reason, and it reads a tuple by the time it looks.
+        record = {
+            **GOLDEN_RECORD,
+            "evidence": [
+                {
+                    "kind": "symbolic_reduction",
+                    "claim": "a claim",
+                    "correspondence": "a derivation",
+                    "assumptions": "the expansion is formal",
+                }
+            ],
+        }
+        with pytest.raises(ValueError, match="assumptions"):
+            report_from_dict(record)
+
+    def test_a_reduction_with_no_assumptions_field_is_refused(self):
+        record = {
+            **GOLDEN_RECORD,
+            "evidence": [
+                {
+                    "kind": "symbolic_reduction",
+                    "claim": "a claim",
+                    "correspondence": "a derivation",
+                }
+            ],
+        }
+        with pytest.raises(ValueError, match="assumptions"):
+            report_from_dict(record)
+
+    def test_a_certificate_names_which_warrant_is_wrong(self):
+        record = {
+            **GOLDEN_RECORD,
+            "evidence": [
+                {
+                    "kind": "completeness_certificate",
+                    "expected": 81,
+                    "visited": 81,
+                    "warrant": "PROBABLY",
+                    "action_set_size": 3,
+                    "horizon": 4,
+                    "action_set_version": "crossover-v1",
+                }
+            ],
+        }
+        with pytest.raises(ValueError, match="evidence warrant"):
             report_from_dict(record)
 
     def test_a_missing_field_is_refused(self):

@@ -16,6 +16,7 @@ path a caller may already be using is exercised by every case below.
 """
 
 import dataclasses
+from typing import Any
 
 import pytest
 
@@ -345,6 +346,43 @@ class TestCheckId:
         message = str(raised.value)
         assert "check_id" in message
         assert "flip-decided" in message  # which check, so a run names the offender
+
+
+class TestNameAndDetailAreReadableToo:
+    """The two prose fields are held to the rule the other text fields already are.
+
+    A blank name is a summary row nobody can attribute and a blank detail is the bare
+    outcome the `detail` field exists to prevent. Both used to construct, so the shipped
+    schema refused records the constructor had already accepted.
+    """
+
+    def _report(self, *, name: Any = "flip-decided", detail: Any = "sampled, no bar"):
+        return CheckReport(
+            name=name,
+            check_id="crossover.flip_not_clean_at_h_star",
+            warrant=Warrant.CORROBORATED,
+            outcome=Outcome.NOT_TRIGGERED,
+            tier=Tier.COMPUTED,
+            detail=detail,
+        )
+
+    @pytest.mark.parametrize("field", ["name", "detail"])
+    @pytest.mark.parametrize("blank", ["", "   ", "\u200b", "\ufeff"])
+    def test_a_blank_field_does_not_construct(self, field, blank):
+        with pytest.raises(ValueError, match=field):
+            self._report(**{field: blank})
+
+    @pytest.mark.parametrize("field", ["name", "detail"])
+    def test_a_line_break_does_not_construct(self, field):
+        # Both render on one line beside the check, so a second line arrives in the
+        # middle of a summary row.
+        with pytest.raises(ValueError, match=field):
+            self._report(**{field: "first\nsecond"})
+
+    @pytest.mark.parametrize("field", ["name", "detail"])
+    def test_a_field_that_is_not_text_does_not_construct(self, field):
+        with pytest.raises(ValueError, match=field):
+            self._report(**{field: None})
 
 
 class TestChecksThatNeverRanCarryNoWarrant:

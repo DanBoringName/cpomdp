@@ -51,6 +51,7 @@ __all__ = [
     "plugin_noise_of",
     "plugin_posterior",
     "predictive_sd",
+    "sigma_slug",
 ]
 
 #: How far past the grid edge a tail integral runs, in absolute `y` units.
@@ -144,16 +145,23 @@ def sigma_slug(sigma: float) -> str:
     """`σ` as a key fragment, for a check id that names the cell it measured.
 
     A check id admits letters, digits and underscores, so the decimal point cannot
-    travel into one. Rendering it as ``p`` keeps the number readable in the id rather
-    than replacing it with a cell index nothing else uses.
+    travel into one. The value is rendered at full precision rather than rounded: two
+    cells one part in ten thousand apart are two cells, and a rounded slug hands them
+    one id. A ledger joining on a duplicated key is the failure the id exists to stop,
+    and `--sigmas` takes whatever floats a caller passes.
+
+    `repr` of a float round-trips by construction, so distinct values give distinct
+    slugs. The exponent's sign is always written, so dropping `+` cannot collide with
+    anything.
 
     Args:
         sigma: σ — the prior standard deviation.
 
     Returns:
-        The value to three decimals, with the point as ``p``: ``0.15`` gives ``0p150``.
+        The value with the point as ``p`` and a minus as ``m``: ``0.15`` gives ``0p15``
+        and ``1e-05`` gives ``1em05``.
     """
-    return f"{sigma:.3f}".replace(".", "p")
+    return repr(float(sigma)).replace(".", "p").replace("-", "m").replace("+", "")
 
 
 def _d4_crossover(prior_variance: float) -> float:

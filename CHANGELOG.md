@@ -113,6 +113,9 @@ an exposure rather than a result.
 
 ### Changed
 
+- `cpomdp-research` requires `warrantlib>=0.3`, for `CheckReport.check_id`. cpomdp's own
+  floor stays at `>=0.2`: nothing under `src/cpomdp` constructs a report, and moving the
+  floor would re-arm ADR-040's publish-ordering race for no gain.
 - cpomdp requires `warrantlib>=0.2`, up from `>=0.1`. `cpomdp.warrant` re-exports
   `Provenance`, so an installed 0.1 fails at `import cpomdp`. Breaking for anyone pinning
   warrantlib 0.1.

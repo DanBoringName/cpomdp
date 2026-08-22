@@ -86,6 +86,19 @@ The type compares refs. It cannot order them, so a registration written after th
 still renders without a marker. That is a `git merge-base --is-ancestor` away, which is
 why the refs are refs.
 
+## Two names per check
+
+A report carries prose and a key, and they do different jobs.
+
+`name` reads in a summary line, so it is reworded whenever the wording improves.
+`check_id` is what a manifest declares before a run and what joins one run's report to
+the next: dot-separated segments of letters, digits and underscores, refused at
+construction if anything else appears in it.
+
+Deriving the key from the prose ties the two together, and the first reworded name then
+reads as one check dropped and one added, which is the reading a comparison exists to
+rule out.
+
 ## Use
 
 ```python
@@ -126,6 +139,32 @@ print(check_summary([report]))
 
 Registering four falsifiers and testing two is a different claim from testing four, and
 one number cannot carry both. The header separates them.
+
+## Writing a run down
+
+A run that prints and exits leaves nothing to compare against. `report_to_dict` writes
+one report as a JSON-ready mapping, and `report_from_dict` reads one back.
+
+```python
+from warrantlib import SCHEMA_VERSION, report_from_dict, report_to_dict
+
+record = report_to_dict(report)
+assert report_from_dict(record) == report
+```
+
+Key order is fixed rather than taken from the input, so two runs of one suite produce
+the same bytes and a diff shows what changed rather than what moved. Enums travel as
+their values, which is why those values are words.
+
+Reading goes through the constructor rather than around it, so every precondition still
+applies. A record naming `PROVED` with its evidence stripped does not construct. A
+record from a schema version this one does not know, an evidence kind with no class
+behind it, or an enum value no member carries is refused rather than resolved to
+whatever fits.
+
+Nothing here touches a filesystem. The caller decides where the bytes go. A JSON Schema
+for the record ships beside the code at `warrantlib/report.schema.json`, for a consumer
+reading a ledger without Python.
 
 ## Where it comes from
 
