@@ -17,6 +17,7 @@ from functools import cache
 
 import crossover  # examples/ffg, on the path via the root conftest
 import pytest
+import surge_margin  # examples/, on the same path
 
 from research.checks import gap_series, log_ratio_series, series_kernel
 from research.checks.gap_kernel import SIGMAS, sigma_slug
@@ -55,6 +56,16 @@ def _ids(module: str) -> tuple[str, ...]:
     return tuple(report.check_id for report in _SUITES[module]())
 
 
+@cache
+def _surge_margin_ids() -> tuple[str, ...]:
+    """Every id the applied demo declares, computed once for the whole session.
+
+    Its `falsifiers()` runs ten action sweeps, so the three assertions below share one
+    run rather than paying for three.
+    """
+    return tuple(report.check_id for report in surge_margin.falsifiers())
+
+
 class TestTheSuitesDeclareDistinctKeys:
     @pytest.mark.parametrize("module", _SUITE_CASES)
     def test_no_two_checks_share_a_key(self, module):
@@ -78,6 +89,24 @@ class TestTheSuitesDeclareDistinctKeys:
     def test_the_crossover_falsifiers_declare_distinct_keys(self):
         ids = [report.check_id for report in crossover.falsifiers()]
         assert len(set(ids)) == len(ids) == 4
+
+    def test_the_surge_margin_falsifiers_declare_distinct_keys(self):
+        # Sweeps rather than enumerations, so this one is seconds and stays on the
+        # pull-request path where the crossover equivalent cannot.
+        ids = _surge_margin_ids()
+        assert len(set(ids)) == len(ids) == 6
+
+    def test_every_surge_margin_key_is_namespaced_to_its_module(self):
+        ids = _surge_margin_ids()
+        assert all(check_id.startswith("surge_margin.") for check_id in ids)
+
+    @pytest.mark.slow
+    def test_the_example_falsifiers_do_not_share_keys_with_each_other(self):
+        # Two demos declaring one key read as one check to anything joining on it, and
+        # neither module can see the other's namespace.
+        seen = [report.check_id for report in crossover.falsifiers()]
+        seen += _surge_margin_ids()
+        assert len(set(seen)) == len(seen)
 
 
 class TestTheSigmaSlug:
