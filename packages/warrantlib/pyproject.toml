@@ -25,6 +25,19 @@ classifiers = [
 # Empty on purpose.
 dependencies = []
 
+# The pytest plugin, which is the only part of this distribution that imports anything
+# outside the standard library. Optional, so `pip install warrantlib` is unchanged, and
+# `import warrantlib` still pulls in no pytest: the plugin module is reached through the
+# entry point below and never from `__init__`.
+[project.optional-dependencies]
+pytest = ["pytest>=8"]
+
+# pytest reads this group from every installed distribution, so the plugin is active
+# wherever both are present and needs no `-p` flag. Nothing reads it when pytest is
+# absent, because there is no pytest to do the reading.
+[project.entry-points.pytest11]
+warrant = "warrantlib.pytest_plugin"
+
 [project.urls]
 Homepage = "https://github.com/inferogenesis/cpomdp"
 Repository = "https://github.com/inferogenesis/cpomdp"

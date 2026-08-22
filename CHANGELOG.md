@@ -15,6 +15,19 @@ an exposure rather than a result.
 
 ### Added
 
+- A pytest plugin, behind `pip install "warrantlib[pytest]"` (warrantlib 0.3.0). A test
+  hands its findings to the run with the `record_check` fixture, and the run reports them
+  in the warrant vocabulary: the progress letter separates a void check from one measured
+  elsewhere, `-v` prints `NOT TRIGGERED` where it would have printed `PASSED`, and the run
+  closes with the registered / tested here / fired accounting rather than a count of dots.
+  A fired check fails its test, and so does an unresolved one, because a falsifier that
+  ran and could not decide has not left the claim standing. The pytest outcome underneath
+  stays one of pytest's own three: `junitxml` branches on that and nothing else, so a
+  fourth value would write the row as no row at all. Categories stay standard too, so
+  `N passed` still counts what it always did and `assert_outcomes` still sees it. Loaded
+  through the `pytest11` entry point, so no configuration is needed; `dependencies` stays
+  empty and importing `warrantlib` still pulls in no pytest, which a test asserts in a
+  clean interpreter.
 - `report_to_dict` / `report_from_dict` / `SCHEMA_VERSION` (warrantlib 0.3.0) — a
   report as a machine record and back. Every value is JSON-ready and the key order is
   fixed, so two runs of one suite produce the same bytes and a diff shows what changed

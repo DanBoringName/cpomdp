@@ -16,6 +16,12 @@ import os
 import sys
 from pathlib import Path
 
+# `pytester` runs a pytest inside this one, which is the only way to assert on what a
+# run *reports* rather than on what its checks returned. warrantlib's plugin is loaded
+# through an entry point, so it is active in the inner run too. Declared here because
+# pytest reads `pytest_plugins` from the rootdir conftest alone.
+pytest_plugins = ["pytester"]
+
 _examples = Path(__file__).parent / "examples"
 sys.path.insert(0, str(_examples))
 sys.path.insert(0, str(_examples / "ffg"))

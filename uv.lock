@@ -2660,6 +2660,15 @@ name = "warrantlib"
 version = "0.3.0"
 source = { editable = "packages/warrantlib" }
 
+[package.optional-dependencies]
+pytest = [
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "pytest", marker = "extra == 'pytest'", specifier = ">=8" }]
+provides-extras = ["pytest"]
+
 [[package]]
 name = "watchdog"
 version = "6.0.0"
