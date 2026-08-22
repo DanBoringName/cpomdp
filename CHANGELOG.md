@@ -23,6 +23,9 @@ an exposure rather than a result.
   or refresh one with `python -m warrantlib.manifest <path>`, and ask whether it is
   current with `--check`, which is the form CI runs. The file compares as text rather
   than as parsed content, so a layout the writer no longer produces counts as stale.
+  The pytest plugin collects the manifest, turning every declared check into an item.
+  The item exists because the check was declared, so a check that stops reporting still
+  has a row and the row fails naming it.
 - A pytest plugin, behind `pip install "warrantlib[pytest]"` (warrantlib 0.3.0). A test
   hands its findings to the run with the `record_check` fixture, and the run reports them
   in the warrant vocabulary: the progress letter separates a void check from one measured
@@ -158,6 +161,13 @@ an exposure rather than a result.
 
 ### Changed
 
+- The `symbolic` CI job reconciles the three symbolic suites against
+  `research/registered_checks.toml` instead of comparing three hand-typed strings. The
+  strings said `23 registered, 23 tested here, none fired` and two more like it. They
+  could report that a suite got shorter. They could not say which check left, and a check
+  renamed or swapped for another left the count untouched, so the gate passed. Every one
+  of the 70 checks is now an item that fails by name, in both directions: declared and
+  not reported, reported and not declared.
 - **Breaking:** cpomdp and warrantlib require Python 3.11, up from 3.10. The check
   manifest is TOML so the generated file can say what it is and how to regenerate it, and
   `tomllib` reads TOML from the standard library only from 3.11. Taking `tomli` instead

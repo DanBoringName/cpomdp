@@ -279,3 +279,143 @@ def test_it(record_check):
         result = pytester.runpytest()
         result.assert_outcomes(failed=1)
         result.stdout.fnmatch_lines(["*record_check was given a str*"])
+
+
+#: A suite the inner run can import, writing whichever ids the case needs. The reports
+#: it returns are real `CheckReport`s, since the collector reads `check_id` off them.
+_SUITE = """
+from warrantlib import CheckReport, Outcome, Tier, Warrant
+
+REPORTED = {ids}
+
+def run_checks():
+    return [
+        CheckReport(
+            name="a check",
+            check_id=check_id,
+            warrant=Warrant.CORROBORATED,
+            outcome=Outcome.NOT_TRIGGERED,
+            tier=Tier.COMPUTED,
+            detail="why it reports what it reports",
+        )
+        for check_id in REPORTED
+    ]
+"""
+
+
+def _manifest_suite(pytester, *, declared, reported):
+    """Write a suite reporting `reported` and a manifest declaring `declared`."""
+    pytester.makepyfile(a_suite=_SUITE.format(ids=list(reported)))
+    checks = "".join(f'  "{check}",\n' for check in declared)
+    pytester.makefile(
+        ".toml",
+        registered_checks=(
+            'schema_version = "1.0"\n\n'
+            "[suites.a_suite]\n"
+            'entry_point = "a_suite:run_checks"\n'
+            f"checks = [\n{checks}]\n"
+        ),
+    )
+    # `pythonpath` so the inner run can import the suite the entry point names. In a
+    # real project the suite is an installed package and this is already true.
+    pytester.makeini(
+        "[pytest]\nwarrant_manifest = registered_checks.toml\npythonpath = .\n"
+    )
+    return "registered_checks.toml"
+
+
+class TestTheManifestBecomesItems:
+    """A declared check is an item because it was declared, not because it ran."""
+
+    def test_every_declared_check_is_collected(self, pytester):
+        path = _manifest_suite(
+            pytester, declared=["a.one", "a.two"], reported=["a.one", "a.two"]
+        )
+        result = pytester.runpytest(path, "--collect-only", "-q")
+        result.stdout.fnmatch_lines(
+            ["*::a.one", "*::a.two", "*::a_suite::undeclared"], consecutive=False
+        )
+
+    def test_a_run_reporting_what_it_declared_passes(self, pytester):
+        path = _manifest_suite(
+            pytester, declared=["a.one", "a.two"], reported=["a.one", "a.two"]
+        )
+        result = pytester.runpytest(path)
+        result.assert_outcomes(passed=3)
+        result.stdout.fnmatch_lines(["*2 registered, 2 tested here, none fired*"])
+
+    def test_a_dropped_check_fails_and_names_itself(self, pytester):
+        # The failure the pinned counts existed to catch, and could only count.
+        path = _manifest_suite(
+            pytester, declared=["a.one", "a.two"], reported=["a.one"]
+        )
+        result = pytester.runpytest(path)
+        result.assert_outcomes(passed=2, failed=1)
+        result.stdout.fnmatch_lines(["*a.two is registered in the manifest*"])
+
+    def test_a_check_nobody_declared_fails_and_names_itself(self, pytester):
+        path = _manifest_suite(
+            pytester, declared=["a.one"], reported=["a.one", "a.new"]
+        )
+        result = pytester.runpytest(path)
+        result.assert_outcomes(passed=1, failed=1)
+        result.stdout.fnmatch_lines(["*does not declare: a.new*"])
+
+    def test_a_rename_reads_as_a_drop_and_an_addition(self, pytester):
+        # The case a count cannot see at all: same number of checks, different checks.
+        path = _manifest_suite(pytester, declared=["a.one"], reported=["a.one_renamed"])
+        result = pytester.runpytest(path)
+        result.assert_outcomes(failed=2)
+        output = result.stdout.str()
+        assert "a.one is registered in the manifest" in output
+        assert "does not declare: a.one_renamed" in output
+
+    def test_a_suite_that_does_not_import_fails_rather_than_reporting_nothing(
+        self, pytester
+    ):
+        path = _manifest_suite(pytester, declared=["a.one"], reported=["a.one"])
+        pytester.path.joinpath("a_suite.py").unlink()
+        result = pytester.runpytest(path)
+        result.assert_outcomes(failed=2)
+        result.stdout.fnmatch_lines(["*does not import*"])
+
+    def test_the_suite_runs_once_however_many_checks_it_declares(self, pytester):
+        # Front-loading the repo requires: a suite deriving a coefficient symbolically
+        # costs tens of seconds, and one run per declared check multiplies that.
+        pytester.makepyfile(
+            a_suite=_SUITE.format(ids=["a.one", "a.two", "a.three"]) + "\nRUNS = []\n"
+            "_original = run_checks\n"
+            "def run_checks():\n"
+            "    RUNS.append(1)\n"
+            "    return _original()\n"
+        )
+        checks = "".join(f'  "a.{n}",\n' for n in ("one", "two", "three"))
+        pytester.makefile(
+            ".toml",
+            registered_checks=(
+                'schema_version = "1.0"\n\n[suites.a_suite]\n'
+                'entry_point = "a_suite:run_checks"\n'
+                f"checks = [\n{checks}]\n"
+            ),
+        )
+        pytester.makeini(
+            "[pytest]\nwarrant_manifest = registered_checks.toml\npythonpath = .\n"
+        )
+        pytester.makeconftest(
+            "def pytest_sessionfinish(session):\n"
+            "    import a_suite\n"
+            "    assert len(a_suite.RUNS) == 1, a_suite.RUNS\n"
+        )
+        pytester.runpytest("registered_checks.toml").assert_outcomes(passed=4)
+
+    def test_a_manifest_nothing_points_at_is_left_alone(self, pytester):
+        # The ini option is unset, so the file is ordinary and pytest ignores it.
+        pytester.makefile(".toml", registered_checks='schema_version = "1.0"\n')
+        _suite(
+            pytester,
+            """
+def test_it():
+    assert True
+""",
+        )
+        pytester.runpytest().assert_outcomes(passed=1)

@@ -21,13 +21,15 @@ does not import pytest.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Generator
-from typing import TYPE_CHECKING, Literal
+from collections.abc import Callable, Generator, Iterator
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Literal
 
 import pytest
 
 from warrantlib._serialise import report_from_dict, report_to_dict
 from warrantlib._vocabulary import CheckReport, Outcome, check_summary
+from warrantlib.manifest import Manifest, Suite
 
 if TYPE_CHECKING:
     from _pytest.reports import TestReport
@@ -91,13 +93,177 @@ _REPORT_ATTRIBUTE = "warrant_records"
 _STATUS_ATTRIBUTE = "warrant_status"
 
 
+#: Every suite's reports, run once per session and read by each of its items. Front
+#: loaded on purpose: a suite deriving a coefficient symbolically costs tens of seconds,
+#: and running it once per declared check would multiply that by the number of checks.
+_SUITE_REPORTS: pytest.StashKey[dict[str, list[CheckReport]]] = pytest.StashKey()
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    """Declare where the manifest lives.
+
+    Args:
+        parser: the option parser.
+    """
+    parser.addini(
+        "warrant_manifest",
+        help=(
+            "path to a warrant check manifest, relative to the rootdir. The file has "
+            "to reach collection as well, so name it in testpaths or on the command "
+            "line."
+        ),
+        default="",
+    )
+
+
 def pytest_configure(config: pytest.Config) -> None:
     """Register the run's collector, which needs config and the report stream both.
 
     Args:
         config: the run's configuration.
     """
+    config.stash[_SUITE_REPORTS] = {}
     config.pluginmanager.register(_WarrantRun(), "warrant-run")
+
+
+def pytest_collect_file(
+    file_path: Path, parent: pytest.Collector
+) -> pytest.Collector | None:
+    """Collect the manifest itself, one item per check it declares.
+
+    The items exist because the manifest declares them, not because a suite reported
+    them. That is the whole point: a check that stops reporting still has an item, and
+    the item fails naming it. A count could only get smaller.
+
+    Args:
+        file_path: the file pytest is considering.
+        parent: its collector.
+
+    Returns:
+        The manifest's collector, or ``None`` for any other file.
+    """
+    declared = parent.config.getini("warrant_manifest")
+    if not declared or file_path != parent.config.rootpath / declared:
+        return None
+    return _ManifestFile.from_parent(parent, path=file_path)
+
+
+class _ManifestFile(pytest.File):
+    """The manifest as a collectable file: its suites, and the checks each declares."""
+
+    def collect(self) -> Iterator[pytest.Item]:
+        """Yield an item per declared check, and one per suite for the other direction.
+
+        Yields:
+            The items.
+        """
+        manifest = Manifest.from_toml(self.path.read_text())
+        for suite in manifest.suites:
+            for check_id in suite.checks:
+                yield _CheckItem.from_parent(
+                    self, name=check_id, suite=suite, check_id=check_id
+                )
+            yield _UndeclaredItem.from_parent(
+                self, name=f"{suite.name}::undeclared", suite=suite
+            )
+
+
+def _reports_of(item: pytest.Item, suite: Suite) -> dict[str, CheckReport]:
+    """Run a suite once per session and index what it reported by id.
+
+    Args:
+        item: the item asking, for the session stash.
+        suite: the suite to run.
+
+    Returns:
+        Its reports, by check id.
+    """
+    cache = item.config.stash[_SUITE_REPORTS]
+    if suite.name not in cache:
+        cache[suite.name] = suite.run()
+    return {report.check_id: report for report in cache[suite.name]}
+
+
+class _CheckItem(pytest.Item):
+    """One declared check, which the suite either reported or did not."""
+
+    def __init__(self, *, suite: Suite, check_id: str, **kwargs: Any) -> None:
+        """Remember which check of which suite this is.
+
+        Args:
+            suite: the suite that declares it.
+            check_id: the check.
+            **kwargs: what `from_parent` supplies.
+        """
+        super().__init__(**kwargs)
+        self.suite = suite
+        self.check_id = check_id
+
+    def runtest(self) -> None:
+        """Look the check up in what the suite reported, and record it.
+
+        Raises:
+            Failed: if the manifest declares it and the suite did not report it.
+        """
+        reported = _reports_of(self, self.suite)
+        report = reported.get(self.check_id)
+        if report is None:
+            pytest.fail(
+                f"{self.check_id} is registered in the manifest and this run did not "
+                f"report it. Either the check was dropped from "
+                f"{self.suite.entry_point}, or it was renamed without the manifest "
+                f"being rewritten. A suite that reports fewer checks than it declares "
+                f"is asking less than it registered to ask.",
+                pytrace=False,
+            )
+        self.stash[_RECORDS] = [report]
+
+    def reportinfo(self) -> tuple[Path, int, str]:
+        """Where a failure points, which is the manifest that declared the check.
+
+        Returns:
+            The manifest, its first line, and the check's id.
+        """
+        return self.path, 0, self.check_id
+
+
+class _UndeclaredItem(pytest.Item):
+    """The other direction: a check the suite reported that nobody declared."""
+
+    def __init__(self, *, suite: Suite, **kwargs: Any) -> None:
+        """Remember which suite this reconciles.
+
+        Args:
+            suite: the suite.
+            **kwargs: what `from_parent` supplies.
+        """
+        super().__init__(**kwargs)
+        self.suite = suite
+
+    def runtest(self) -> None:
+        """Fail if the suite reported an id the manifest does not carry.
+
+        Raises:
+            Failed: naming every undeclared id.
+        """
+        reported = set(_reports_of(self, self.suite))
+        undeclared = sorted(reported - set(self.suite.checks))
+        if undeclared:
+            pytest.fail(
+                f"{self.suite.name} reported checks the manifest does not declare: "
+                f"{', '.join(undeclared)}. A new check is registered by rewriting the "
+                f"manifest, so that the run before it and the run after it can be told "
+                f"apart. A misspelled id arrives here too.",
+                pytrace=False,
+            )
+
+    def reportinfo(self) -> tuple[Path, int, str]:
+        """Where a failure points, which is the manifest that declared the suite.
+
+        Returns:
+            The manifest, its first line, and what this item asks.
+        """
+        return self.path, 0, f"{self.suite.name}: nothing undeclared"
 
 
 @pytest.fixture

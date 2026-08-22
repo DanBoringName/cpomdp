@@ -162,6 +162,12 @@ include = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# warrantlib's plugin turns every check this manifest declares into an item, so a check
+# dropped from a suite fails by name instead of shrinking a count nobody is obliged to
+# notice. Deliberately not in `testpaths`: the symbolic suites cost half a minute and
+# have always run in their own CI job. Run them with
+# `pytest research/registered_checks.toml`.
+warrant_manifest = "research/registered_checks.toml"
 addopts = "-ra"
 markers = [
     "rxinfer: tests that require the RxInfer/Julia backend (deselect with '-m \"not rxinfer\"')",
