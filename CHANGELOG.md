@@ -92,6 +92,18 @@ an exposure rather than a result.
   bar is derived from a ceiling `tests/test_rollout_hygiene.py` already enforces rather
   than invented for the claim. `warrant_numbers.md` records the derivation, that it was
   written after the measurement, and why a stricter guard cannot rescue a failing result.
+- A **References** page rendering the whole bibliography, `docs/references.md`.
+  `mkdocs-bibtex` only emits the keys a page cites, so eleven entries in
+  `docs/references.bib` were invisible on the site. Four sources join them: the ASME
+  paper the applied surge work reads against (GT2024-124905), Greitzer 1976 for the
+  compressor dynamics that notes disclaim modelling, and ISO 5167 parts 1 and 2, where
+  flow-rate uncertainty for a differential-pressure element is standardised and where
+  pulsating flow is explicitly excluded.
+- Koudahl, Kouw and de Vries (2021) is cited wherever the fixed-sensor collapse is
+  claimed, rather than ADR-003 alone. An ADR records a decision. The proof that expected
+  free energy reduces to KL control under a fixed linear-Gaussian sensor is theirs, and
+  the README, both example galleries and two API pages asserted it without saying so.
+  Friston et al. (2015) gets the same treatment where the T-maze is named.
 
 ### Fixed
 
@@ -117,6 +129,11 @@ an exposure rather than a result.
   read `complete = False`, a certificate recording its own shortfall with the contradiction
   one attribute access away. It now raises. The honest label for a partial enumeration is
   `CORROBORATED`.
+- Citations rendered as literal `[^key]` on the published site. `mkdocs-bibtex` rewrites
+  `[@key]` into footnote syntax, and `footnotes` was missing from `markdown_extensions`,
+  so four API pages shipped a raw key where a reference should have been and no page
+  carried a bibliography at all. Enabling the extension fixes every citation in the tree
+  at once. No prose contained `[^` beforehand, so nothing existing changes meaning.
 
 ### Changed
 

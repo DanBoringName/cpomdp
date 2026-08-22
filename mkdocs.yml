@@ -29,6 +29,7 @@ theme:
 
 markdown_extensions:
   - admonition
+  - footnotes
   - md_in_html
   - toc:
       permalink: true
@@ -83,4 +84,5 @@ nav:
       - Diagnostics: api/diagnostics.md
       - Warrant: api/warrant.md
       - Control (internal): api/control.md
+  - References: references.md
   - Changelog: changelog.md
