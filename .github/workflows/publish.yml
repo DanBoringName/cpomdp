@@ -46,8 +46,17 @@ jobs:
           enable-cache: true
           python-version: "3.12"
       - run: uv sync --locked
+      - name: jax compilation cache
+        uses: actions/cache/restore@v5
+        with:
+          path: .jax-cache
+          restore-keys: jax-cache-${{ runner.os }}-py3.12-
+          key: jax-cache-${{ runner.os }}-py3.12-${{ github.run_id }}
       # Don't ship a red build.
-      - run: uv run pytest -m "not rxinfer"
+      - run: uv run --no-sync pytest -m "not rxinfer" -n auto --dist worksteal
+        env:
+          JAX_COMPILATION_CACHE_DIR: ${{ github.workspace }}/.jax-cache
+          JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS: "0"
       # Each distribution gets its own directory. A Trusted Publisher token is scoped
       # to one project, so the two uploads are two jobs and cannot share a `dist/`.
       - if: github.event_name == 'release'

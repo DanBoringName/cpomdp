@@ -24,6 +24,8 @@ A registered falsifier does not pass. It fires or it does not, and `PASS` is abs
 
 `Tier` says what the check was measured against, and cuts across the other two rather than ranking them. An `EXACT` closed-form reference can be sampled, and an exhaustive enumeration can produce a `COMPUTED` number.
 
+A report carries two names. `name` is prose and reads in a summary line, so it is reworded whenever the wording improves. `check_id` is the key: dot-separated segments of letters, digits and underscores, refused at construction if anything else appears in it. The separation is what lets a manifest declare a check before the run and a later run be joined to an earlier one. Deriving the key from the prose would tie the two together, and the first reworded name would read as one check dropped and one added.
+
 A check that never ran carries no warrant. `CORROBORATED` means sampling-grade evidence was obtained, so attributing it to a falsifier that sampled nothing claims evidence that does not exist. The warrant is `None` there and prints as `—`, enforced at construction.
 
 A `PROVED` report needs evidence, enforced at construction. There are two kinds, one per decisive prover. `CompletenessCertificate` backs an exhaustive enumeration over a finite domain. `SymbolicReduction` backs a theorem or a symbolic identity (Provers 1 and 2), which decide by argument and enumerate nothing, so a certificate is the wrong evidence for them rather than a missing one. The weaker levels need none, because a bound and a sample carry their story in `detail`. Report `PROVED` with nothing behind it and the constructor raises.
@@ -82,3 +84,41 @@ Registering four falsifiers and testing two is a different claim from testing fo
 ```
 
 ::: warrantlib.check_summary
+
+## Writing a run down
+
+A run that prints and exits leaves nothing to compare against. Two questions need the
+record on disk: whether a registered check quietly stopped reporting, and whether one
+changed status between two versions of the work. Both are joins on `check_id`, and
+both fail if the form the record takes moves underneath them.
+
+`report_to_dict` writes one report as a JSON-ready mapping. Every value is a string, an
+integer, a list, a mapping or `None`, and the key order is fixed rather than taken from
+the input, so two runs of one suite produce the same bytes and a diff shows what
+changed rather than what moved. Enums travel as their values, which is why those values
+are words.
+
+`report_from_dict` reads one back through the constructor rather than around it. Every
+precondition still applies: a record naming `PROVED` with its evidence stripped does not
+construct. A wire form that could bypass the guard would make the guard optional.
+
+Reading refuses what it cannot read. A record from a schema version this one does not
+know, an evidence kind with no class behind it, an enum value that has since been
+renamed: each raises rather than resolving to the nearest thing that fits. `Tier.A`
+became `Tier.EXACT` once already, and a reader that had guessed its way through that
+rename would have reported a status change nobody made.
+
+Nothing here touches a filesystem. The caller decides where the bytes go.
+
+::: warrantlib.SCHEMA_VERSION
+
+::: warrantlib.report_to_dict
+
+::: warrantlib.report_from_dict
+
+A JSON Schema for the record ships beside the code, at `warrantlib/report.schema.json`.
+It is there for a consumer reading a ledger without Python, so it states what it can of
+the preconditions the constructor enforces: the key's shape, that a `PROVED` record
+carries evidence and a registration, and that a check which never ran carries no
+warrant. The test suite validates the writer's own output against it, since a schema
+nothing checks drifts from the writer without saying so.

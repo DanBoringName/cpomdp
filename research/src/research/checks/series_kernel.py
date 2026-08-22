@@ -644,11 +644,14 @@ def _reduction(claim: str, source: Source) -> SymbolicReduction:
     )
 
 
-def _proved(name: str, claim: str, source: Source, shown: str) -> CheckReport:
+def _proved(
+    name: str, check_id: str, claim: str, source: Source, shown: str
+) -> CheckReport:
     """A holding identity, reported at the warrant symbolic computation earns.
 
     Args:
         name: the check's label.
+        check_id: the check's key, as a manifest and a ledger name it.
         claim: what the identity is, in words.
         source: where it was hand derived, and its refs.
         shown: the symbolic result, printed whether or not it held.
@@ -658,6 +661,7 @@ def _proved(name: str, claim: str, source: Source, shown: str) -> CheckReport:
     """
     return CheckReport(
         name=name,
+        check_id=check_id,
         warrant=Warrant.PROVED,
         outcome=Outcome.NOT_TRIGGERED,
         tier=Tier.EXACT,
@@ -668,7 +672,7 @@ def _proved(name: str, claim: str, source: Source, shown: str) -> CheckReport:
 
 
 def _refuted(
-    name: str, claim: str, shown: str, residual: str | None = None
+    name: str, check_id: str, claim: str, shown: str, residual: str | None = None
 ) -> CheckReport:
     """A failed identity. The refutation is the result, and it is corroborative.
 
@@ -680,6 +684,7 @@ def _refuted(
 
     Args:
         name: the check's label.
+        check_id: the check's key, as a manifest and a ledger name it.
         claim: what the identity was claimed to be.
         shown: what the symbolic computation actually returned.
         residual: the difference that failed to vanish, where there was one. Most
@@ -694,6 +699,7 @@ def _refuted(
         detail += f". residual: {residual}"
     return CheckReport(
         name=name,
+        check_id=check_id,
         warrant=Warrant.CORROBORATED,
         outcome=Outcome.FIRED,
         tier=Tier.EXACT,
@@ -703,6 +709,7 @@ def _refuted(
 
 def report_identity(
     name: str,
+    check_id: str,
     claim: str,
     source: Source,
     residual: sympy.Expr,
@@ -716,6 +723,7 @@ def report_identity(
 
     Args:
         name: the check's label.
+        check_id: the check's key, as a manifest and a ledger name it.
         claim: what the identity is, in words.
         source: where it was hand derived, and its refs.
         residual: the difference that must be identically zero.
@@ -726,12 +734,13 @@ def report_identity(
     """
     reduced = sympy.simplify(residual)
     if reduced == 0:
-        return _proved(name, claim, source, str(shown))
-    return _refuted(name, claim, str(shown), str(reduced))
+        return _proved(name, check_id, claim, source, str(shown))
+    return _refuted(name, check_id, claim, str(shown), str(reduced))
 
 
 def report_condition(
     name: str,
+    check_id: str,
     claim: str,
     source: Source,
     holds: bool,
@@ -744,6 +753,7 @@ def report_condition(
 
     Args:
         name: the check's label.
+        check_id: the check's key, as a manifest and a ledger name it.
         claim: what the property is, in words.
         source: where it was hand derived, and its refs.
         holds: whether the property obtained.
@@ -753,8 +763,8 @@ def report_condition(
         A `PROVED` report when the property holds, a refutation when it does not.
     """
     if holds:
-        return _proved(name, claim, source, str(shown))
-    return _refuted(name, claim, str(shown))
+        return _proved(name, check_id, claim, source, str(shown))
+    return _refuted(name, check_id, claim, str(shown))
 
 
 def check_moment_table() -> list[CheckReport]:
@@ -776,6 +786,7 @@ def check_moment_table() -> list[CheckReport]:
         reports.append(
             report_identity(
                 name=f"K1 moment z^{order}",
+                check_id=f"series_kernel.moment_z{order}",
                 claim=f"E[z^{order}] = {claimed}",
                 source=MOMENT_SOURCE,
                 residual=integrated - claimed,
@@ -803,6 +814,7 @@ def check_truncation() -> list[CheckReport]:
     return [
         report_identity(
             name="K2 truncate is idempotent",
+            check_id="series_kernel.truncate_is_idempotent",
             claim="truncating twice at the same order changes nothing",
             source=source,
             residual=truncate(truncate(probe, 3), 3) - truncate(probe, 3),
@@ -810,6 +822,7 @@ def check_truncation() -> list[CheckReport]:
         ),
         report_identity(
             name="K2 truncate composes downward",
+            check_id="series_kernel.truncate_composes_downward",
             claim="truncating at 4 then at 2 equals truncating at 2",
             source=source,
             residual=truncate(truncate(probe, 4), 2) - truncate(probe, 2),
@@ -817,6 +830,7 @@ def check_truncation() -> list[CheckReport]:
         ),
         report_identity(
             name="K2 truncate keeps what is below the cut",
+            check_id="series_kernel.truncate_keeps_below_the_cut",
             claim=(
                 "the kept coefficients are the original ones, "
                 "and nothing above the cut stays"
@@ -858,6 +872,7 @@ def check_primitive_series() -> list[CheckReport]:
     return [
         report_identity(
             name="K3 gain expansion",
+            check_id="series_kernel.gain_expansion",
             claim="the geometric expansion of K matches series(K) to σ⁶",
             source=source,
             residual=gain_series(6) - truncate(gain, 6),
@@ -865,6 +880,7 @@ def check_primitive_series() -> list[CheckReport]:
         ),
         report_identity(
             name="K3 width expansion",
+            check_id="series_kernel.width_expansion",
             claim="the binomial expansion of √v_q matches series(√v_q) to σ⁵",
             source=source,
             residual=posterior_sd_series(5) - truncate(width, 5),
@@ -872,6 +888,7 @@ def check_primitive_series() -> list[CheckReport]:
         ),
         report_identity(
             name="K3 exponential expansion",
+            check_id="series_kernel.exponential_expansion",
             claim="e^{−δ} built by the exponential series matches series(exp) to σ³",
             source=source,
             residual=(
@@ -926,6 +943,7 @@ def check_assembled_against_series() -> list[CheckReport]:
         reports.append(
             report_identity(
                 name=f"K4 assembled W to σ^{inclusive}",
+                check_id=f"series_kernel.assembled_w_to_sigma{inclusive}",
                 claim=(
                     f"the truncation path equals series(W) through σ^{inclusive}, "
                     "term for term"
@@ -960,6 +978,7 @@ def check_cumulants() -> list[CheckReport]:
     return [
         report_identity(
             name="K5 first cumulant is the mean",
+            check_id="series_kernel.first_cumulant_is_the_mean",
             claim="κ₁ = E[W]",
             source=source,
             residual=found[1] - mean,
@@ -967,6 +986,7 @@ def check_cumulants() -> list[CheckReport]:
         ),
         report_identity(
             name="K5 second cumulant is the variance",
+            check_id="series_kernel.second_cumulant_is_the_variance",
             claim="κ₂ = E[W²] − E[W]²",
             source=source,
             residual=found[2] - variance,

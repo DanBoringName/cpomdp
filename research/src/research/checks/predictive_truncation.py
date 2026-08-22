@@ -69,6 +69,7 @@ from research.checks.gap_kernel import (
     log_predictive,
     plugin_noise_of,
     predictive_sd,
+    sigma_slug,
 )
 from warrantlib import CheckReport, Outcome, Tier, Warrant, check_summary
 
@@ -237,19 +238,24 @@ def _same_to_sig_figs(measured: float, reference: float, figures: int) -> bool:
     return abs(math.log10(measured / reference)) < 10.0 ** (1 - figures) / math.log(10)
 
 
-def _check_truncation(report: TruncationReport) -> CheckReport:
+def _check_truncation(family: NoiseFamily, report: TruncationReport) -> CheckReport:
     """C1: the truncation against the disclosed floor, at one cell.
 
     Args:
+        family: the declared `R` the cell was measured on.
         report: the measured cell.
 
     Returns:
         The check's report.
     """
     name = f"C1 truncation [{report.family}, σ={report.sigma:.2f}]"
+    check_id = (
+        f"predictive_truncation.truncation_{family.key}_sigma{sigma_slug(report.sigma)}"
+    )
     if report.void_reason is not None:
         return CheckReport(
             name=name,
+            check_id=check_id,
             warrant=None,
             outcome=Outcome.NOT_APPLICABLE,
             tier=Tier.BOUNDED,
@@ -258,6 +264,7 @@ def _check_truncation(report: TruncationReport) -> CheckReport:
     verdict = "FAIL" if report.outcome is Outcome.FIRED else "PASS"
     return CheckReport(
         name=name,
+        check_id=check_id,
         warrant=Warrant.CORROBORATED,
         outcome=report.outcome,
         tier=Tier.BOUNDED,
@@ -283,11 +290,16 @@ def _check_reference(family: NoiseFamily, report: TruncationReport) -> CheckRepo
         The check's report.
     """
     name = f"ref agreement [{report.family}, σ={report.sigma:.2f}]"
+    check_id = (
+        f"predictive_truncation.ref_agreement_{family.key}"
+        f"_sigma{sigma_slug(report.sigma)}"
+    )
     table = family.reference or {}
     reference = table.get(round(report.sigma, 2))
     if reference is None or report.void_reason is not None:
         return CheckReport(
             name=name,
+            check_id=check_id,
             warrant=None,
             outcome=Outcome.NOT_APPLICABLE,
             tier=Tier.BOUNDED,
@@ -298,6 +310,7 @@ def _check_reference(family: NoiseFamily, report: TruncationReport) -> CheckRepo
     )
     return CheckReport(
         name=name,
+        check_id=check_id,
         warrant=Warrant.CORROBORATED,
         outcome=Outcome.NOT_TRIGGERED if agrees else Outcome.FIRED,
         tier=Tier.BOUNDED,
@@ -328,6 +341,7 @@ def _check_tail_shape(
         The check's report.
     """
     name = f"C2 tail shape [{family.name}, σ={sigma:.2f}]"
+    check_id = f"predictive_truncation.tail_shape_{family.key}_sigma{sigma_slug(sigma)}"
     offsets = np.array([6.0, 10.0, 14.0, 20.0, 28.0, 40.0])
     log_density = np.array(
         [
@@ -338,6 +352,7 @@ def _check_tail_shape(
     if not np.all(np.isfinite(log_density)):
         return CheckReport(
             name=name,
+            check_id=check_id,
             warrant=None,
             outcome=Outcome.NOT_APPLICABLE,
             tier=Tier.BOUNDED,
@@ -358,6 +373,7 @@ def _check_tail_shape(
     shape = "linear" if linear_wins else "Gaussian"
     return CheckReport(
         name=name,
+        check_id=check_id,
         warrant=Warrant.CORROBORATED,
         outcome=Outcome.FIRED if fired else Outcome.NOT_TRIGGERED,
         tier=Tier.BOUNDED,
@@ -387,13 +403,14 @@ def _check_family_class(
         The check's report.
     """
     name = f"C3 family class [{family.name}]"
+    check_id = f"predictive_truncation.family_class_{family.key}"
     if family.unbounded:
-        return _exposed_family_report(name, reports)
-    return _bounded_family_report(name, reports)
+        return _exposed_family_report(name, check_id, reports)
+    return _bounded_family_report(name, check_id, reports)
 
 
 def _bounded_family_report(
-    name: str, reports: Sequence[TruncationReport]
+    name: str, check_id: str, reports: Sequence[TruncationReport]
 ) -> CheckReport:
     """C3 for a family whose `R` is bounded, where the tail should not resolve at all.
 
@@ -404,6 +421,7 @@ def _bounded_family_report(
 
     Args:
         name: the check's name.
+        check_id: the check's key, as a manifest and a ledger name it.
         reports: that family's cells across the `σ` grid.
 
     Returns:
@@ -418,6 +436,7 @@ def _bounded_family_report(
     clean = len(unresolved) == len(reports)
     return CheckReport(
         name=name,
+        check_id=check_id,
         warrant=Warrant.CORROBORATED,
         outcome=Outcome.NOT_TRIGGERED if clean else Outcome.FIRED,
         tier=Tier.BOUNDED,
@@ -430,12 +449,13 @@ def _bounded_family_report(
 
 
 def _exposed_family_report(
-    name: str, reports: Sequence[TruncationReport]
+    name: str, check_id: str, reports: Sequence[TruncationReport]
 ) -> CheckReport:
     """C3 for a family whose `R` grows without bound, where the tail is exponential.
 
     Args:
         name: the check's name.
+        check_id: the check's key, as a manifest and a ledger name it.
         reports: that family's cells across the `σ` grid.
 
     Returns:
@@ -445,6 +465,7 @@ def _exposed_family_report(
     worst = max((report.relative_truncation for report in reports), default=math.nan)
     return CheckReport(
         name=name,
+        check_id=check_id,
         warrant=Warrant.CORROBORATED,
         outcome=Outcome.FIRED if fired else Outcome.NOT_TRIGGERED,
         tier=Tier.BOUNDED,
@@ -473,9 +494,14 @@ def _check_materiality(
         The check's report.
     """
     name = f"C4 materiality [{report.family}, σ={report.sigma:.2f}]"
+    check_id = (
+        f"predictive_truncation.materiality_{family.key}"
+        f"_sigma{sigma_slug(report.sigma)}"
+    )
     if report.void_reason is not None:
         return CheckReport(
             name=name,
+            check_id=check_id,
             warrant=None,
             outcome=Outcome.NOT_APPLICABLE,
             tier=Tier.BOUNDED,
@@ -488,6 +514,7 @@ def _check_materiality(
     bar = _MATERIALITY_MARGIN * _EXTRACTION_SPREAD
     return CheckReport(
         name=name,
+        check_id=check_id,
         warrant=Warrant.CORROBORATED,
         outcome=Outcome.FIRED if ratio >= bar else Outcome.NOT_TRIGGERED,
         tier=Tier.BOUNDED,
@@ -517,9 +544,14 @@ def _check_convergence(
         The check's report.
     """
     name = f"C5 convergence [{report.family}, σ={report.sigma:.2f}]"
+    check_id = (
+        f"predictive_truncation.convergence_{family.key}"
+        f"_sigma{sigma_slug(report.sigma)}"
+    )
     if report.void_reason is VoidReason.NON_POSITIVE_NOISE:
         return CheckReport(
             name=name,
+            check_id=check_id,
             warrant=None,
             outcome=Outcome.NOT_APPLICABLE,
             tier=Tier.BOUNDED,
@@ -532,6 +564,7 @@ def _check_convergence(
     if refined <= QUADRATURE_FLOOR or report.relative_truncation <= QUADRATURE_FLOOR:
         return CheckReport(
             name=name,
+            check_id=check_id,
             warrant=None,
             outcome=Outcome.NOT_APPLICABLE,
             tier=Tier.BOUNDED,
@@ -543,6 +576,7 @@ def _check_convergence(
     moved = abs(refined - report.relative_truncation) / report.relative_truncation
     return CheckReport(
         name=name,
+        check_id=check_id,
         warrant=Warrant.CORROBORATED,
         outcome=Outcome.FIRED if moved >= CONVERGENCE_BAR else Outcome.NOT_TRIGGERED,
         tier=Tier.BOUNDED,
@@ -580,7 +614,7 @@ def run_checks(
             for sigma in sigmas
         ]
         measured[family.name] = cells
-        reports += [_check_truncation(cell) for cell in cells]
+        reports += [_check_truncation(family, cell) for cell in cells]
         if family.reference:
             reports += [_check_reference(family, cell) for cell in cells]
 
