@@ -159,3 +159,54 @@ own derivation.
 
 Nor does it settle `σ_max`. Redefining the upper edge against `c₆` is one of two options
 the registration holds open, and the choice is registered there rather than here.
+
+## AMENDMENT 2026-08-23: the cumulant table was wrong about `κ₅`, and the corrected rule is general
+
+Written after the suite computed `c₆`, and recorded rather than folded into the table
+above, so a reader can see what was claimed before the measurement and what replaced it.
+
+The table predicted `κ₅` contributes at `σ⁶` and `κ₆` does not. **The first half is
+false.** The suite reports the `σ⁶` coefficient of `κ₅/5!` as identically zero, alongside
+`κ₆/6!`. Only `κ₂`, `κ₃` and `κ₄` are live.
+
+The argument given for `κ₅` was that four Gaussian arguments do not force a joint
+cumulant to vanish when the fifth is not Gaussian. True as stated and beside the point,
+because it never counted what the diagram needs.
+
+**The correct argument.** For polynomials in jointly Gaussian variables, a joint cumulant
+of `m` factors is the sum over *connected* pairings. A factor of Gaussian-degree `d`
+contributes `d` legs, pairings use two legs each, and connecting `m` vertices needs at
+least `m − 1` edges. So a joint cumulant of factors with degrees `d₁ … d_m` vanishes
+unless
+
+```text
+Σ dᵢ  ≥  2m − 2
+```
+
+In this expansion `W = σW₁ + σ²W₂ + …` has `W_k` of Gaussian-degree at most `k`, so a
+contribution to `σ^N` from `κ_m` carries `Σ dᵢ ≤ N`, and
+
+```text
+κ_m reaches σ^N  only if  m ≤ N/2 + 1
+```
+
+Checked against both orders:
+
+| | live | dead |
+| --- | --- | --- |
+| `σ⁴`, `m ≤ 3` | `κ₂`, `κ₃` | `κ₄` and above |
+| `σ⁶`, `m ≤ 4` | `κ₂`, `κ₃`, `κ₄` | `κ₅`, `κ₆` |
+
+The `σ⁴` row is what `research.checks.gap_series` already documents from the separate
+observation that `κ₄`'s leading term is `κ₄(W₁)` and `W₁` is Gaussian. The rule
+reproduces it without being told, and gets `σ⁶` right where the ad hoc argument did not.
+
+**`κ₆` is dead for a simpler reason than the one given.** The gap is `Σ_{n≥2} κ_n/n!`
+and carries no `κ₁`, and `l₆` enters `W` only linearly, in the `h⁶` term of the
+increment. A linear appearance at `σ⁶` reaches `κ₁` and nothing else at that order, so
+`l₆` cannot reach the gap at `σ⁶` at all. Its basis coefficient is therefore zero before
+any cumulant argument is made.
+
+That prediction held. The resolution reports `l₆`'s coefficient as exactly zero, along
+with `l₄/R̄` and `l₂/R̄²`, which nothing here predicted and which are reported rather than
+explained.
