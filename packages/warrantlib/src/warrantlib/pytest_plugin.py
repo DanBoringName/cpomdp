@@ -1,5 +1,25 @@
 """The warrant vocabulary in a pytest run, instead of a column of dots.
 
+Two halves, and they are independent.
+
+**A test reports its checks.** The `record_check` fixture takes `CheckReport`s, and the
+run reports them in the vocabulary the check used rather than as a pass or a skip::
+
+    def test_the_coefficient_is_closed_form(record_check):
+        record_check(measure_c2())
+
+**A manifest declares what a suite owes.** Set the `warrant_manifest` ini option and
+give pytest the file to collect. Every id the manifest declares becomes an item because
+the manifest declares it, so a check that stops reporting still has a row and the row
+fails naming it, and a check nobody declared fails too::
+
+    pytest research/registered_checks.toml
+
+`--warrant-detail`, or `-vv`, adds each check's own line: its warrant, its tier, the
+reason it gives and the refs it was registered at.
+
+The rest of this is why it is built the way it is.
+
 pytest has three outcomes and a check has five. Collapsing the five loses the two the
 vocabulary exists to keep apart: a falsifier void by construction and one measured
 elsewhere both read as a skip, and a run that survived everything without deciding
@@ -488,9 +508,14 @@ class _WarrantRun:
             exitstatus: the run's status, unused.
             config: the run's configuration, unused.
         """
-        if not self.records:
+        # A reconciliation with no checks behind it still ran and still counts, which
+        # is the case a suite is in between being declared by hand and being rewritten.
+        # Returning on the records alone would print nothing at all for it.
+        if not self.records and not self.reconciled:
             return
-        if config.getoption("warrant_detail") or config.get_verbosity() >= 2:
+        if self.records and (
+            config.getoption("warrant_detail") or config.get_verbosity() >= 2
+        ):
             # What a suite prints when it is run on its own. A row's outcome reaches
             # the terminal without this and the reason the check gives does not, so a
             # run replacing those suites would keep the verdicts and lose the record.
@@ -501,11 +526,14 @@ class _WarrantRun:
         for line in check_summary(self.records).splitlines():
             terminalreporter.write_line(line)
         if self.reconciled:
-            # These are not checks and carry no warrant, so they are absent from the
-            # counts above. Named here because pytest counts them and a reader
-            # otherwise has to work out why its total is larger.
-            suites = len(set(self.reconciled))
+            # Named rather than counted. These are not checks and carry no warrant, so
+            # they are absent from the rows above while pytest counts them, and a
+            # reader given only a number is left working out which items they were.
+            suites = sorted(set(self.reconciled))
             terminalreporter.write_line(
-                f"{suites} suite{'s' if suites != 1 else ''} reconciled against the "
-                "manifest, which pytest counts and the rows above do not"
+                f"reconciled against the manifest: {', '.join(suites)}"
+            )
+            terminalreporter.write_line(
+                f"   {len(suites)} item{'s' if len(suites) != 1 else ''}, which pytest "
+                "counts and the rows above do not"
             )

@@ -118,21 +118,28 @@ uv run pre-commit run --all-files
 
 The symbolic suites are deliberately not in `testpaths`. `gap_series` derives `c₂` and
 `c₄` symbolically and costs about half a minute, which nobody wants on every run. They
-have their own command, and their own CI job:
+have their own commands, and their own CI job. Two of them read and change nothing,
+and those are what CI runs:
 
 ```bash
-uv run pytest research/registered_checks.toml   # every registered check, reconciled
-uv run pytest research/registered_checks.toml --warrant-detail  # + each check's reason (or -vv)
+uv run pytest research/registered_checks.toml                   # reconcile the run
+uv run pytest research/registered_checks.toml --warrant-detail  # + each reason (or -vv)
 uv run python -m warrantlib.manifest --check research/registered_checks.toml
 ```
 
-The first turns each check the manifest declares into an item, so a check that stops
-reporting fails by name. The second says whether the manifest itself is current. Rewrite
-it after adding or renaming a check:
+`pytest` turns each check the manifest declares into an item, so a check that stops
+reporting fails by name and a check nobody declared fails too. `--check` says whether
+the manifest itself is current, and exits non-zero when it is not.
+
+One writes. Run it after adding or renaming a check, once the new ids are the ids you
+meant, and let the diff be the review:
 
 ```bash
 uv run python -m warrantlib.manifest research/registered_checks.toml
 ```
+
+Reaching for that one in place of `--check` makes the manifest agree with whatever the
+suites currently report, which is the drift it exists to catch.
 
 The new ids land in the diff, which is where they get reviewed. Each suite is also still
 runnable on its own, printing its summary and exiting non-zero if a check fires:

@@ -145,7 +145,7 @@ and the run closes with the registered / tested here / fired accounting.
 The pytest outcome underneath is one of pytest's own three, and so is the counting
 category. `junitxml` branches on the outcome and reads nothing else, so a fourth value
 writes the row as no row at all. A fresh category would move every check out of
-`N passed` into a name no existing tool reads. The vocabulary is worth carrying; a broken
+`N passed` into a name no existing tool reads. The vocabulary is worth carrying. A broken
 tally is not the price to pay for it.
 
 ## Declaring what a suite is registered to report

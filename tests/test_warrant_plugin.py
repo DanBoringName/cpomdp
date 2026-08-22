@@ -431,17 +431,51 @@ def test_it():
         result.stdout.fnmatch_lines(
             [
                 "*2 registered, 2 tested here, none fired*",
-                "*1 suite reconciled against the manifest, which pytest counts and "
-                "the rows above do not*",
+                "*reconciled against the manifest: a_suite*",
+                "*1 item, which pytest counts and the rows above do not*",
             ],
             consecutive=False,
         )
 
-    def test_a_suite_recording_no_checks_still_names_its_reconciliation(self, pytester):
-        # The plural, and the case where the vocabulary block would otherwise be silent.
-        path = _manifest_suite(pytester, declared=["a.one"], reported=["a.one"])
-        pytester.runpytest(path).stdout.fnmatch_lines(
-            ["*1 suite reconciled against the manifest, which pytest counts*"]
+    def test_a_suite_declaring_no_checks_still_names_its_reconciliation(self, pytester):
+        # The state a suite is in between being declared by hand and being rewritten.
+        # Nothing records a check, so a summary keyed on the records alone prints
+        # nothing at all, and the one item pytest counted is left unexplained.
+        path = _manifest_suite(pytester, declared=[], reported=[])
+        result = pytester.runpytest(path)
+        result.assert_outcomes(passed=1)
+        result.stdout.fnmatch_lines(
+            [
+                "*warrant summary*",
+                "*0 registered, 0 tested here, none fired*",
+                "*reconciled against the manifest: a_suite*",
+            ],
+            consecutive=False,
+        )
+
+    def test_the_reconciled_suites_are_named_not_counted(self, pytester):
+        # A bare count leaves the reader working out which items they were.
+        pytester.makepyfile(a_suite=_SUITE.format(ids=["a.one"]))
+        pytester.makepyfile(b_suite=_SUITE.format(ids=["b.one"]))
+        pytester.makefile(
+            ".toml",
+            registered_checks=(
+                'schema_version = "1.0"\n\n'
+                '[suites.a_suite]\nentry_point = "a_suite:run_checks"\n'
+                'checks = [\n  "a.one",\n]\n\n'
+                '[suites.b_suite]\nentry_point = "b_suite:run_checks"\n'
+                'checks = [\n  "b.one",\n]\n'
+            ),
+        )
+        pytester.makeini(
+            "[pytest]\nwarrant_manifest = registered_checks.toml\npythonpath = .\n"
+        )
+        result = pytester.runpytest("registered_checks.toml")
+        # Two checks and two reconciliations. Asserting the outcomes as well, or the
+        # line below passes just as well on a run where something failed.
+        result.assert_outcomes(passed=4)
+        result.stdout.fnmatch_lines(
+            ["*reconciled against the manifest: a_suite, b_suite*"]
         )
 
 
