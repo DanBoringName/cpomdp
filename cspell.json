@@ -179,6 +179,7 @@
     "scipy",
     "serialiser",
     "seval",
+    "setflags",
     "shalom",
     "slogdet",
     "smoothstep",
