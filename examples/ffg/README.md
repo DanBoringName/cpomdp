@@ -47,7 +47,7 @@ cue = (CallableGaussianObservation(observation_matrix, cue_noise, params)  # B: 
 B's `R(x)` is sharp only at the cue, so `R(μ⁺)` moves with the action (the dual effect,
 ADR-019). Its epistemic term is live: B detours to read the cue, resolves the hidden
 `CONTEXT` through the branch, and crosses to the right arm. A's fixed sensor gives a constant
-epistemic term (Koudahl–Kouw–de Vries 2021, ADR-003), so it falls back to the LQR choice and
+epistemic term ([Koudahl–Kouw–de Vries 2021](https://doi.org/10.3390/e23121565), ADR-003), so it falls back to the LQR choice and
 stays at the wrong arm. Same maze, same goal; B's final belief about which arm pays is ≈11x
 tighter. A control statement, not biology (ADR-020).
 
