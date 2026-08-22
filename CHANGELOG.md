@@ -13,6 +13,17 @@ the NumPy oracle the headline `H* = 7` is checked against.
 The `H = 7` numbers did not move. They are bit-identical across the guard, so it corrected
 an exposure rather than a result.
 
+A world and an agent that cannot reach one another. `cpomdp.harness` separates the process
+that produces observations from the model an agent filters with, so how wrong that model
+is about the process becomes measurable rather than zero by construction. Actions arrive
+from a declared sequence. The agents do not choose them, which is what leaves several of
+them comparable under one trajectory and what cuts the control loop, and every run carries
+that second fact rather than leaving it to a comment.
+
+`cpomdp.constructors` declares the two axes a model can be wrong along, one for what its
+parameters get wrong and one for what its filter does. Both are versioned, so a cell added
+after results are seen shows up in the diff.
+
 ### Added
 
 - `cpomdp.harness` — a world and an agent held apart, so what an agent's model gets wrong

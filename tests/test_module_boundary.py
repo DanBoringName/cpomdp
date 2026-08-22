@@ -76,9 +76,9 @@ def test_the_walk_finds_a_direct_import():
 
 
 def test_the_walk_follows_an_import_of_an_import():
-    # _validation is the second hop: harness imports backends.kalman, and kalman is what
-    # names _validation. harness does not, so finding it is what proves the walk carried
-    # on past the imports written in the file it started from.
+    # _validation is the second hop. harness imports cpomdp.types, and types is what
+    # names _validation. harness does not, so finding it proves the walk carried on past
+    # the imports written in the file it started from.
     harness = _path_of("harness")
     assert harness is not None
     assert "_validation" not in _imports_of(harness)
