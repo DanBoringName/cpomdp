@@ -58,8 +58,9 @@ noise_fn(x, p) = beacon_noise(x[:2], p)  # R(x): still keyed on agent_xy only
 Same four-regime structure as the v0.3 demo, same single real knob (the goal precision
 Λ): classic LQR and a sharp Λ both beeline toward the current food estimate and never
 detour — with LQR's effort cost set to ≈0 to match the EFE selection (which has none),
-the two are the *same* controller here, ADR-003's fixed-sensor collapse (EFE reduces to
-LQR) made visible; a balanced Λ detours to the beacon, learns where food really is,
+the two are the *same* controller here, the fixed-sensor collapse
+([Koudahl, Kouw and de Vries 2021](https://doi.org/10.3390/e23121565), ADR-003)
+made visible; a balanced Λ detours to the beacon, learns where food really is,
 *then* heads there with confidence; a weak Λ is so over-curious it parks at the beacon
 and never eats. Each panel carries its own `t=` step counter and border, which
 turn green and freeze the moment that regime first settles near the food, so the GIF

@@ -29,6 +29,7 @@ theme:
 
 markdown_extensions:
   - admonition
+  - footnotes
   - md_in_html
   - toc:
       permalink: true
