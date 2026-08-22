@@ -368,11 +368,11 @@ passes at both spacings.
 **The step-`0.5` cell already has published numbers, and no run behind them.**
 `research/r10_open_loop_crossover.md` reports the argmin byte-identical to the coarse set
 at `H = 6` (`Gmin = 364.6430`) and `H = 7` (`Gmin = 425.1631`), and reads falsifier 4 as
-not triggered. No commit in this repository builds a nine-action step-`0.5` set, so those
-numbers have no in-repo reproduction, and `examples/ffg/crossover.py` reports the same
-falsifier `NOT_RUN_HERE` with no warrant. The two disagree. The registered work on this
-cell is therefore a re-measurement under a completeness certificate against `364.6430` and
-`425.1631`, not a first measurement.
+not triggered. When that was written no commit in this repository built a nine-action step-`0.5` set,
+so the numbers had no in-repo reproduction and the check suite reported the falsifier
+`NOT_RUN_HERE`. Both are now false: `crossover.py` builds the set, the cell was
+re-measured under a completeness certificate against `364.6430` and `425.1631`, and the
+falsifier carries `PROVED`. The re-measurement is recorded above.
 
 #### Measured 2026-08-20: extension `{−4,…,2}` → `H* = 6`, **PASS**
 

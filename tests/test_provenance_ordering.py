@@ -88,8 +88,14 @@ pytestmark = pytest.mark.skipif(
 
 def test_the_suites_declare_sources():
     # Guards the collection above. A rename that stops `_sources` finding anything
-    # would turn every case below into a silent pass.
-    assert len(_sources()) >= 8
+    # would turn every case below into a silent pass. Floored per source rather than in
+    # total: the check suites alone clear 8, so a total-only floor would let the whole
+    # demo half vanish and still pass.
+    names = {name for name, _ in _sources()}
+    assert len(names) >= 11
+    from_checks = {n for n in names if n.endswith("_SOURCE")}
+    assert len(from_checks) >= 9, from_checks
+    assert len(names - from_checks) >= 2, names - from_checks
 
 
 @pytest.mark.parametrize(

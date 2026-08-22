@@ -182,6 +182,24 @@ class TestCrossoverFalsifierReporting:
             == crossover.FLIP_H
         )
 
+    def test_every_declared_set_can_land_on_the_cue(self):
+        # `warrant_numbers.md` states the void guard returns R_LO on all four sets. It
+        # is cheap because it enumerates reachable *positions*, not policies, so the
+        # claim is computed here rather than asserted in prose.
+        import cue_maze
+
+        sets = (
+            crossover.ACTION_SET,
+            crossover.EXT_SET,
+            crossover.REFINE_05_SET,
+            crossover.REFINE_025_SET,
+        )
+        for action_set in sets:
+            sharpest = cue_maze.best_reachable_noise(action_set, 1, crossover.FLIP_H)
+            assert sharpest <= cue_maze.R_LO, (
+                f"{action_set.version} cannot reach the cue: {sharpest}"
+            )
+
     def test_the_two_refinement_cells_agree_exactly(self):
         # 86x the policies and twice the actions, and the scores do not move a digit.
         # Byte-identity is expected where the argmin lies in the coarser set, which is
@@ -339,6 +357,6 @@ def test_crossover_falsifiers_are_reports():
 def test_crossover_check():
     """The exhaustive argmin flips reach -> two-phase walk at H*=7: the crossover, its
     flat-pull / decaying-gradient mechanism, and the headline number against a NumPy
-    oracle. Enumerates ~150k policies (H=6, H=7), so it is marked slow and deselected on
+    oracle. Enumerates ~370k policies (H=6, H=7), so it is marked slow and deselected on
     PRs; it gates on merge-to-main and release."""
     crossover.check()

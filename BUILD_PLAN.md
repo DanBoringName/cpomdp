@@ -410,10 +410,11 @@ Gate-independent. Paper 3's G9 inherits the qualifier this produces.
         never worth the detour", which is pure geometry and not a result.
   - [x] Carry the `slow` marker. This runs on merge-to-main, not on pull requests.
         **Discharged differently, and the difference is the point.** Nothing carries the
-        marker, because nothing re-enumerates on any gate. The measured rows are recorded
+        marker, because no *refinement* cell re-enumerates on any gate. The measured rows are
+        recorded
         constants with their certificates and a provenance, and `--refinement` is the
         reproduction route, off both the test path and `--check`. Cheap tests assert the
-        recorded values against the published ones. Slow-marking a 4.8M-policy sweep
+        recorded values against the published ones. Slow-marking the sweep
         would have put two minutes on every merge to re-derive a number that cannot
         drift, since a recorded constant changes only when someone edits it.
 - [x] Carry the post-selection disclosure into the paper. The mechanism split in

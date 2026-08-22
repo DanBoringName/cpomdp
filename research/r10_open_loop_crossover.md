@@ -374,8 +374,8 @@ does not fit it.
 R10 materialises as an open-loop crossover at H\* = 7 on the pre-registered action set,
 decided by exhaustive enumeration and kernel-verified. A falsifier *fires* when its
 condition obtains and would refute the crossover. None did, so all five survive (consistent
-vocabulary: *not triggered* for the ones this run tested, *not applicable* for the seed one,
-*not run here* for the refinement axis):
+vocabulary: *not triggered* for the four this run tested, *not applicable* for the seed
+one):
 
 - **Falsifier 1** (no crossover at any feasible H): *not triggered* — a crossover exists at
   H = 7, well inside the declared H_max = 9. (In the *previous* pass, with the sweep capped

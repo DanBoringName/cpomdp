@@ -2669,7 +2669,7 @@ not accuracy, so the retraction was about provenance and it is now discharged.
   ADR-036's "block-determined and flat in `|A|^H`" holds, and the cells that looked
   budget-bound are bound by wall-clock alone.
 - **The measured rows are recorded constants, not a gated re-run.** The cheapest cell is
-  4.8M policies, so no gate can afford it. What separates this from the write-up claim it
+  531,441 policies and the dearest 410,338,673, so no gate can afford the set. What separates this from the write-up claim it
   replaces is that a commit builds the set, each row carries its completeness certificate,
   the provenance names both refs, and `--refinement` reproduces it. Cheap tests assert the
   recorded values against the published ones, which is the standing rule discharged
@@ -2719,6 +2719,7 @@ had two chances to move the optimum toward the cue and took neither.
   GiB, so the cell was never budget-bound, only slow. A registration that had treated the
   front-loaded figure as the budget would have declared it `VOID` and recorded a
   non-result.
-- **Nothing re-enumerates on a gate.** Both cells are recorded constants carrying their
+- **Neither refinement cell re-enumerates on a gate.** Both are recorded constants
+  carrying their
   certificates and a provenance, reproducible with `--refinement`. Cheap tests assert the
   recorded values, including that the two cells agree exactly.
