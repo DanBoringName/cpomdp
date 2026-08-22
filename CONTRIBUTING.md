@@ -57,7 +57,7 @@ it, open its `.code-workspace`, and it resolves against that worktree's venv.
 ## How the rules are enforced
 
 There's one source of truth for style and linting: the `[tool.ruff]` section of
-`pyproject.toml`. Nothing depends on which editor you use — `.vscode/settings.json`
+`pyproject.toml`. Nothing depends on which editor you use. `.vscode/settings.json`
 is gitignored, and `cpomdp.code-workspace` is a convenience, not a gate. The config is
 enforced in two places that both read it:
 
@@ -65,26 +65,26 @@ enforced in two places that both read it:
 - **CI**, on every push and PR, running the exact same hooks.
 
 So if it's green locally, it's green in CI. If you want your editor to format on
-save, point it at ruff yourself; just don't rely on it, the hooks are what count.
+save, point it at ruff yourself. Just don't rely on it. The hooks are what count.
 
 ## What the hooks check
 
 - **ruff** lints and formats the code. Line length is 88. Formatting isn't a
   matter of taste here, ruff decides and that's that.
 - **markdown** is linted by [markdownlint-cli2](https://github.com/DavidAnson/markdownlint-cli2)
-  (config in `.markdownlint-cli2.yaml`). It auto-fixes the mechanical stuff —
-  blank lines around headings, fenced blocks and lists — so most of the time it
+  (config in `.markdownlint-cli2.yaml`). It auto-fixes the mechanical stuff:
+  blank lines around headings, fenced blocks and lists. So most of the time it
   just tidies your edit and asks you to re-stage. The only things it can't fix for
   you are ones it can't guess, like naming a code fence's language. Prose lines
   aren't wrapped, so line length isn't checked.
 - **spelling** in markdown and in `src/` docstrings is checked by
   [cspell](https://cspell.org) (`cspell.json`). It's British English and seeded
-  with the project's vocabulary (cpomdp, Kalman, pytree, ...); if it flags a real
+  with the project's vocabulary (cpomdp, Kalman, pytree, ...). If it flags a real
   term it doesn't know yet, add it to the `words` list in that file rather than
   working around it. It splits `snake_case`/`camelCase` into real words, so it
   reads your docstrings without choking on most identifiers.
 - **docstrings** are required on public modules, classes, functions and methods in
-  `src/` (Google style). Tests are exempt; their names are the documentation.
+  `src/` (Google style). Tests are exempt, because their names are the documentation.
   Constructors can be documented at the class level instead of in `__init__`.
 - **commit messages** follow [Conventional Commits](https://www.conventionalcommits.org):
   `feat:`, `fix:`, `docs:`, `test:`, `chore:`, and so on. The commit-msg hook will
@@ -103,7 +103,7 @@ build time and repoints the relative links, so one file reads correctly in both
 places. The stubs are excluded from markdownlint and cspell.
 
 ```bash
-uv run --group docs mkdocs build --strict # how to build mkdocs; what CI runs; fails on a bad link
+uv run --group docs mkdocs build --strict # what CI runs, and it fails on a bad link
 uv run --group docs mkdocs serve          # live preview at localhost:8000
 ```
 

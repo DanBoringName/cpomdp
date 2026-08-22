@@ -21,7 +21,7 @@ Full documentation, including API reference and guides, lives at [cpomdp.inferog
 
 **Exact continuous perception.** Linear mean dynamics and Gaussian noise make the filter an exact Kalman filter, closed form, nothing sampled. Under fixed noise there is no variational gap. The same code path runs whether you are tracking or acting.
 
-**Action that reaches the posterior covariance.** cpomdp lets the observation noise depend on the state, `R(x)` (Corva 2026), or the process noise, `Q(x)`. The mean stays linear. Because the covariance now responds to what the agent does, the epistemic term of expected free energy differs across policies and information-seeking behaviour becomes available. Under a *fixed* linear-Gaussian sensor that term is identical for every policy (Koudahl, Kouw & de Vries 2021); state-dependent noise is the smallest deviation from that model which escapes the result.
+**Action that reaches the posterior covariance.** cpomdp lets the observation noise depend on the state, `R(x)` (Corva 2026), or the process noise, `Q(x)`. The mean stays linear. Because the covariance now responds to what the agent does, the epistemic term of expected free energy differs across policies and information-seeking behaviour becomes available. Under a *fixed* linear-Gaussian sensor that term is identical for every policy (Koudahl, Kouw & de Vries 2021). State-dependent noise is the smallest deviation from that model which escapes the result.
 
 **One knob between exploiting and exploring.** `StateGoal` and `ObservationGoal` carry a precision Λ. The pragmatic term scales with Λ and the epistemic term does not, so Λ alone decides whether an agent beelines for the goal or detours to sharpen its belief first. The four bacilli above differ in that number and nothing else.
 
@@ -31,11 +31,15 @@ Full documentation, including API reference and guides, lives at [cpomdp.inferog
 
 **What is not here.** The mean stays linear. Genuinely nonlinear sensors, a curved `g(x)` needing a second-order moment match, are the next step rather than a current feature.
 
-Horizon length decides whether the epistemic machinery pays off. With `R(x)` alive a short-horizon agent still walks past the information; stretch the horizon and it detours to collect it. Curiosity needs the term and the lookahead together.
+Horizon length decides whether the epistemic machinery pays off. With `R(x)` alive a short-horizon agent still walks past the information. Stretch the horizon and it detours to collect it. Curiosity needs the term and the lookahead together.
 
 ## Example
 
-Four bacilli seeking food in the same world — the continuous-state answer to pymdp's mouse-seeking-cheese, now with an **epistemic** term. The twist: the food's position is **hidden**, and a **beacon** marks where the agent can *see* it. Visiting the beacon doesn't sharpen where the agent thinks *it* is — it sharpens where it thinks the *food* is, which it can't act on directly. That makes the information genuinely **instrumental**: resolving it changes where the agent then heads. Each body sits at its **true** hidden state; the blue `+` is where it believes it is, the diamond is where it believes the food is (both with their uncertainty ellipses), and the star is the food's true, hidden location. The four differ in **one number only** — the **goal precision Λ** each is built with. They all minimise the same Expected Free Energy `G = pragmatic − epistemic`; because the pragmatic (goal) term scales with Λ while the epistemic (information) term doesn't, Λ alone tips the balance: **classic LQR** and a **sharp Λ** beeline to the agent's current food guess and never detour; a **balanced Λ** detours to the beacon, learns where the food really is, *then* heads there with confidence; a **weak Λ** is so over-curious it parks at the beacon and never eats. One real knob — the precision you'd actually pass — four behaviours.
+Four bacilli seeking food in the same world. The continuous-state answer to pymdp's mouse-seeking-cheese, now with an **epistemic** term. The twist: the food's position is **hidden**, and a **beacon** marks where the agent can *see* it. Visiting the beacon doesn't sharpen where the agent thinks *it* is. It sharpens where it thinks the *food* is, which it can't act on directly. That makes the information genuinely **instrumental**: resolving it changes where the agent then heads.
+
+Each body sits at its **true** hidden state. The blue `+` is where it believes it is, the diamond is where it believes the food is (both with their uncertainty ellipses), and the star is the food's true, hidden location.
+
+The four differ in **one number only**, the **goal precision Λ** each is built with. They all minimise the same Expected Free Energy `G = pragmatic − epistemic`. The pragmatic (goal) term scales with Λ and the epistemic (information) term does not, so Λ alone tips the balance. **Classic LQR** and a **sharp Λ** beeline to the agent's current food guess and never detour. A **balanced Λ** detours to the beacon, learns where the food really is, *then* heads there with confidence. A **weak Λ** is so over-curious it parks at the beacon and never eats. One real knob, the precision you'd actually pass. Four behaviours.
 
 ![Four bacilli learning where the food is, under different goal precisions Λ, via continuous active inference](docs/assets/bacillus_uncertain_food.gif)
 
@@ -55,7 +59,7 @@ Reproduce it with [`examples/crossover_horizon_figure.py`](https://github.com/in
 
 **Why the horizon is the question.** [State-dependent observation noise reintroduces epistemic value in linear-Gaussian active inference](https://arxiv.org/abs/2607.20306) (Corva 2026) establishes that `R(x)` makes the epistemic term non-constant, so a linear-Gaussian agent can be curious at all. Non-constant is not the same as decision-changing. The horizon at which curiosity starts changing which plan an agent picks is a separate question, and it has a measured answer.
 
-**The answer is one-dimensional, and it is proven.** On the corridor cue task, `H* = 7`: the first horizon whose *open-loop* argmin is a two-phase sense-then-commit walk rather than a direct reach. Open-loop means whole action sequences are scored with no re-planning between steps; the same statistic under a receding-horizon driver is a different quantity and is unmeasured. That comes from enumerating every sequence in the declared action set `{0, ±1, ±2}` to depth `H`, so it decides the flip rather than sampling for it, and the search returns a `CompletenessCertificate` saying how many policies it was obliged to visit and how many it did. Zero the epistemic term and the crossing moves out to `H ≈ 10`, which is what makes the pull load-bearing rather than incidental. The numbers are registered in [`warrant_numbers.md`](https://github.com/inferogenesis/cpomdp/blob/main/warrant_numbers.md), the model is [`examples/ffg/crossover.py`](https://github.com/inferogenesis/cpomdp/blob/main/examples/ffg/crossover.py), and `tests/test_example_checks.py::test_crossover_check` asserts it on every merge and release. The `7` is an upper bound, because the declared set clips the reach at `−2` while reaching the goal from the start takes `−3`. On the wider `{−3…2}` the flip is at 6. Both wider sets are now certified: `{−3,…,2}` and `{−4,…,2}` each flip at 6, each under a completeness certificate, so extension saturates there. Refinement leaves `H* = 7` unmoved at two spacings, `0.5` and `0.25`, the two agreeing to the digit.
+**The answer is one-dimensional, and it is proven.** On the corridor cue task, `H* = 7`: the first horizon whose *open-loop* argmin is a two-phase sense-then-commit walk rather than a direct reach. Open-loop means whole action sequences are scored with no re-planning between steps. The same statistic under a receding-horizon driver is a different quantity and is unmeasured. That comes from enumerating every sequence in the declared action set `{0, ±1, ±2}` to depth `H`, so it decides the flip rather than sampling for it, and the search returns a `CompletenessCertificate` saying how many policies it was obliged to visit and how many it did. Zero the epistemic term and the crossing moves out to `H ≈ 10`, which is what makes the pull load-bearing rather than incidental. The numbers are registered in [`warrant_numbers.md`](https://github.com/inferogenesis/cpomdp/blob/main/warrant_numbers.md), the model is [`examples/ffg/crossover.py`](https://github.com/inferogenesis/cpomdp/blob/main/examples/ffg/crossover.py), and `tests/test_example_checks.py::test_crossover_check` asserts it on every merge and release. The `7` is an upper bound, because the declared set clips the reach at `−2` while reaching the goal from the start takes `−3`. On the wider `{−3…2}` the flip is at 6. Both wider sets are now certified: `{−3,…,2}` and `{−4,…,2}` each flip at 6, each under a completeness certificate, so extension saturates there. Refinement leaves `H* = 7` unmoved at two spacings, `0.5` and `0.25`, the two agreeing to the digit.
 
 **The plane above is the readable version, not the proof.** It contrasts two named plans instead of searching, so its crossing is an exact statement about those two plans and says nothing about the argmin over all plans. Its `H = 7` and the corridor's `H* = 7` are different quantities on different models that happen to coincide.
 
@@ -122,7 +126,7 @@ If you've used pymdp, the loop is the same and most of the names are too. Four c
 
 > `Agent` · `qs` · `infer_states` · `sample_action`
 
-(`qs` is a read-only alias for `belief`, cpomdp's canonical name — so `agent.qs` and `agent.belief` are the same posterior. Use whichever your fingers reach for.)
+(`qs` is a read-only alias for `belief`, cpomdp's canonical name, so `agent.qs` and `agent.belief` are the same posterior. Use whichever your fingers reach for.)
 
 Only two things are spelled differently:
 
@@ -135,7 +139,7 @@ One honest difference in behaviour. `sample_action` here is deterministic, not a
 
 ## Just want to track, not act?
 
-A model with no `control_matrix` is a pure tracker. Drop the goal and `infer_states` still folds in observations and sharpens the belief, while `sample_action` stops you — there's nothing to steer toward, and nothing to steer with.
+A model with no `control_matrix` is a pure tracker. Drop the goal and `infer_states` still folds in observations and sharpens the belief, while `sample_action` stops you. There's nothing to steer toward, and nothing to steer with.
 
 ```python
 tracker = LinearGaussianModel(        # no control matrix -> pure tracking
@@ -175,7 +179,23 @@ The state-dependence is in the *noise*. The mean stays linear. Genuinely **nonli
 
 Most toolboxes let you build an agent and stop there. cpomdp also labels how well each of your results is established, so you do not have to invent a warrant scheme of your own before you can report one honestly.
 
-Every check the suite runs carries three labels. A **warrant** says what established the claim: `PROVED` for a theorem, a symbolic identity, or a finite domain exhausted under a completeness certificate; `CERTIFIED` for validated numerics over a compact domain; `CORROBORATED` for a sample of a continuum, which settles existence and refutes a universal by counterexample and decides no universal at any sample count. A **tier** says how well the number itself is known: `EXACT`, `BOUNDED`, or `COMPUTED`. An **outcome** says what the falsifier did, and a falsifier does not pass — it fires or it does not. `PROVED` with nothing behind it does not construct.
+Every check the suite runs carries three labels. A **warrant** says what established the claim. `PROVED` covers a theorem, a symbolic identity, or a finite domain exhausted under a completeness certificate. `CERTIFIED` covers validated numerics over a compact domain. `CORROBORATED` covers a sample of a continuum, which settles existence and refutes a universal by counterexample and decides no universal at any sample count. A **tier** says how well the number itself is known: `EXACT`, `BOUNDED`, or `COMPUTED`. An **outcome** says what the falsifier did, and a falsifier does not pass. It fires or it does not. `PROVED` with nothing behind it does not construct.
+
+Those labels reach a test run. `pip install "warrantlib[pytest]"` adds a plugin, and a test hands its findings over with the `record_check` fixture. A fired check fails, so does an unresolved one, and the two that never ran here skip with the progress letters keeping them apart: `v` for void by construction, `e` for measured elsewhere. Under `-v` a row reads `NOT TRIGGERED` where it would have read `PASSED`. The run closes with the accounting a reader needs first.
+
+```text
+70 registered, 70 tested here, none fired
+   PROVED        NOT TRIGGERED   70
+```
+
+Registering seventy falsifiers and testing two is a different claim from testing seventy, and one number cannot carry both.
+
+A count is still the weaker guard, though, and this repository used to lean on three of them. [research/registered_checks.toml](research/registered_checks.toml) declares every check each suite is registered to report, generated by `python -m warrantlib.manifest`. Each declared id becomes a pytest item because the manifest declares it, not because a suite reported it, so a check that stops reporting still has a row and the row fails naming it. A second item per suite catches the other direction. A renamed check therefore reports as one drop and one addition, where a count of them would have stayed at seventy and passed.
+
+```bash
+uv run pytest research/registered_checks.toml --warrant-detail
+uv run python -m warrantlib.manifest --check research/registered_checks.toml
+```
 
 [research/warrant_ledger.md](research/warrant_ledger.md) is the canonical table, and every other document points at it. [warrant_numbers.md](warrant_numbers.md) records the declared numbers those claims are measured against. The vocabulary itself is [packages/warrantlib](packages/warrantlib), published separately and re-exported as `cpomdp.warrant`, documented at [cpomdp.inferogenesis.com/api/warrant](https://cpomdp.inferogenesis.com/api/warrant/).
 
@@ -183,7 +203,7 @@ Treat this as experimental. It may move out of cpomdp into a standalone inferoge
 
 ## Swappable backends
 
-You can swap the inference engine if you want to. `KalmanBackend` is the default and does the real work; `RxInferBackend` re-derives the same answers through Julia and exists mainly so the fast path has something independent to check itself against. Both sit behind the `InferenceBackend` protocol, so you can write your own.
+You can swap the inference engine if you want to. `KalmanBackend` is the default and does the real work. `RxInferBackend` re-derives the same answers through Julia and exists mainly so the fast path has something independent to check itself against. Both sit behind the `InferenceBackend` protocol, so you can write your own.
 
 ## Status
 
@@ -191,7 +211,7 @@ Still pre-1.0. v0.4 secures the public API around the factor-graph backend and t
 
 ## Development
 
-I designed and built cpomdp — the architecture, the conditionally-linear-Gaussian formulation, the API, and every decision in [DECISIONS.md](https://github.com/inferogenesis/cpomdp/blob/main/DECISIONS.md) are mine. The design draws on my day-to-day work as a full-time software engineer and on hands-on expertise integrating and developing large machine-learning models at scale using event-driven microservice architecture.
+I designed and built cpomdp. The architecture, the conditionally-linear-Gaussian formulation, the API, and every decision in [DECISIONS.md](https://github.com/inferogenesis/cpomdp/blob/main/DECISIONS.md) are mine. The design draws on my day-to-day work as a full-time software engineer and on hands-on expertise integrating and developing large machine-learning models at scale using event-driven microservice architecture.
 
 I used AI coding assistants (Claude Opus 4.8, and Opus 5 from v0.4) as tools under close review: to draft docstrings, probe for edge cases and candidate bugs, and expand the test suite, including adversarial ones. Everything they produced I read, checked, and approved before it landed. None of it is taken on trust. The numbers are validated independently against the RxInfer (Julia) and analytic NumPy oracles described above. Correctness rests on those checks, not on the tools that helped write the code.
 
