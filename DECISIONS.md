@@ -3014,3 +3014,107 @@ work that would bring them in.
 - `conftest.py` exempts manifest items from the slow-marker report. They are not on the
   pull-request path, so the marker has nothing to move them off, and the cost belongs to
   the suite rather than to whichever check happened to run first.
+
+## ADR-047 — the world and the agent, separated and driven from outside
+
+**Date:** 2026-08-22
+**Status:** Accepted
+
+### The seam
+
+`World` owns the process that produces observations. `ScoredAgent` owns the model it
+filters with. Neither reaches the other's parameters: `World` has no accessor returning
+its model or a parameter of it, and `ScoredAgent` has no constructor slot for a `World`.
+
+Without this the misspecification term is unmeasurable rather than small. One model
+object serving as both the process and the agent's belief about it makes the two
+identical by construction, which is why `research/warrant_ledger.md` pins p and p\*
+separately "with a type seam making circularity impossible rather than discouraged".
+That separation is what lets a defect found with p = p\* be ruled out as
+misspecification.
+
+The test asserts a negative, so the detector is tested first. Five cases plant a
+reference to the world in each way one can be held (attribute, container, bound method,
+closure cell) and require an object-graph walk to find it. Growing `World` a `model`
+accessor fails the exposure tests. Without those probes the seam tests would pass just
+as well on a broken walk.
+
+### `ScoredAgent` composes a backend rather than subclassing `Agent`
+
+Subclassing was considered and rejected on two grounds.
+
+`Agent.infer_states` documents that the agent supplies its own last sampled action to
+the predict step. A `ScoredAgent` takes the action from outside, so it would override
+that method against its stated contract.
+
+The second ground decided it. Inheriting publishes `sample_action`. An agent free to act
+faces observations of its own making, the driven sequence stops being common across the
+arms, and both divergences are then wrong with nothing raised. Composition makes the
+method absent rather than present and merely unreachable.
+
+Drift between the two was the argument for inheriting, and `InferenceBackend` already
+answers it. `Agent.infer_states` is three lines of bookkeeping over a backend that holds
+the filter arithmetic, so there is little there to drift.
+
+### Degradation is wrapped, never a mismatched model
+
+The inference axis needs a filter reading numbers the model does not declare, and
+`ScoredAgent` refuses a backend built from a different model. Rather than relax that,
+the degraded backends keep `model` pointing at the model being scored and hold the
+substitution internally. `WrongFixedRBackend` builds its own filter over a modified
+model and never exposes it. `DiagonalCovarianceBackend` wraps any backend and reports
+the wrapped one's model.
+
+Every degradation therefore carries a name rather than arriving as an anonymous
+mismatch, and `backend.model` keeps one meaning.
+
+On a fixed-noise model `WrongFixedR` at magnitude zero reproduces exact inference. On a
+model carrying `R(x)` it does not, because the substitution replaces varying noise with
+a constant. Magnitude zero is already a degradation there, and that is the correct
+reading of "wrong *fixed* R".
+
+### Both axes are data, and versioned
+
+`Perturbation` and `InferenceRule` are frozen records rather than callables: a name and
+what it changes, with a single magnitude. A declared set holding functions is a set
+nobody can diff. Standing rule 7 asks for versioning, and both sets carry a version and
+refuse a duplicate name.
+
+Each set also refuses to be built without the cell the others are measured against.
+`ConstructorSet` requires an unperturbed member, `InferenceSet` an exact one. A cross
+missing either produces cells with nothing to compare against.
+
+### The severed control loop is carried on the result
+
+Driving a common exogenous sequence is what makes the entropy of the true process a
+shared constant that cancels, leaving two divergences computable with no entropy
+estimate anywhere. It also cuts the control loop. Under `R(x)` an agent choosing its own
+actions steers toward low-noise regions and so changes its own inference gap, which
+means a gap measured here can misrepresent the closed-loop one.
+
+`DrivenRun.control_loop` holds that as a `ModellingChoice` with no default, so a run
+cannot return trajectories without it. One field states what was chosen. A second states
+where the choice is contestable.
+
+### `World` refuses state-dependent noise, and that is registered as open
+
+Sampling `R(x)` or `Q(x)` in the world needs an evaluation point. The filter reads both
+at the predicted mean. A process that knows its own state exactly has two candidates,
+the departed state and the arrived-at one, and they give different trajectories.
+
+`World` raises rather than choosing. The choice moves every number measured under `R(x)`,
+and no such number exists yet, so a decision taken now cannot be fitted to an answer. It
+is settled in its own change before the scoring harness needs a world under `R(x)`.
+
+### Consequences
+
+- **PR-3's merge gate is met.** The no-read-path test passes, the import test holds, and
+  the constructor set round-trips through the model spec.
+- **Nothing is exported at the top level.** The import paths are `cpomdp.harness` and
+  `cpomdp.constructors`, so no `docs/api/` page is owed until a consumer needs one.
+- **The module boundary is a test rather than a convention.**
+  `tests/test_module_boundary.py` walks the transitive first-party import closure of the
+  seam and refuses `cpomdp.scoring`, the evaluator's module, named there before it
+  exists. It refuses `cpomdp.selection` and `cpomdp.enumeration` on the same terms.
+- **A world under `R(x)` is the next thing needed and it is small.** It blocks nothing in
+  PR-4, whose constructor cross is fixed-`R` throughout.
