@@ -101,8 +101,10 @@ def test_the_seam_does_not_reach_the_evaluator(module):
 
 
 def test_the_seam_does_not_reach_an_action_selector():
-    # A ScoredAgent is driven, never choosing. Reaching selection from here would put
-    # the machinery for it one import away from an object that must not have it.
+    # A ScoredAgent is driven, never choosing. This is a source-level claim about what
+    # the seam depends on, not about what a process has loaded: `cpomdp/__init__.py`
+    # imports the selectors for its public surface, so `import cpomdp.harness` executes
+    # them either way.
     assert "selection" not in _closure(*SEAM)
     assert "enumeration" not in _closure(*SEAM)
 

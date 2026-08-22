@@ -3118,3 +3118,10 @@ is settled in its own change before the scoring harness needs a world under `R(x
   exists. It refuses `cpomdp.selection` and `cpomdp.enumeration` on the same terms.
 - **A world under `R(x)` is the next thing needed and it is small.** It blocks nothing in
   PR-4, whose constructor cross is fixed-`R` throughout.
+- **A perturbation the filter would not read is refused rather than built.** A
+  state-dependent sensor supplies its own `(C, R)` and a state-dependent process noise
+  its own `Q`, so scaling the matrix either stands in for reaches nothing: the cell
+  builds what `CORRECT` builds and reports a name saying otherwise. `ModelSpec.build`
+  raises on that combination, on the same grounds as `InferenceRule.build` refusing an
+  unhandled kind. Scaling a state-dependent model's own parameters is a separate
+  question and is not answered here.

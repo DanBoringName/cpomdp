@@ -1,8 +1,11 @@
+import jax.numpy as jnp
 import numpy as np
 import pytest
 from numpy.typing import ArrayLike
 
 from cpomdp.constructors import CORRECT, ConstructorSet, ModelSpec, Perturbation
+from cpomdp.dynamics import CallableProcessNoise
+from cpomdp.observation import CallableSensor, FixedSensor
 from cpomdp.types import LinearGaussianModel
 
 DT = 0.1
@@ -13,6 +16,8 @@ def _spec(
     *,
     control_matrix: ArrayLike | None = CONTROL,
     version: str = "spec-v1",
+    observation_model=None,
+    dynamics_noise_model=None,
 ) -> ModelSpec:
     return ModelSpec(
         dynamics_matrix=[[1.0, DT], [0.0, 1.0]],
@@ -22,6 +27,8 @@ def _spec(
         prior_mean=[0.0, 0.0],
         prior_cov=[[1.0, 0.0], [0.0, 1.0]],
         control_matrix=control_matrix,
+        observation_model=observation_model,
+        dynamics_noise_model=dynamics_noise_model,
         version=version,
     )
 
@@ -202,3 +209,79 @@ def test_every_model_a_set_builds_is_its_own_object():
     left, right = (model for _, model in declared.build_all(_spec()))
     assert left is not right
     assert not _leaves(left) & _leaves(right)
+
+
+# --- a scale the filter would not read is refused, not built ------------------------
+#
+# A state-dependent sensor supplies its own (C, R) and a state-dependent process noise
+# its own Q, so scaling the matrix each stands in for reaches nothing. Left unguarded
+# the cell builds what CORRECT builds and reports a label saying otherwise.
+
+
+def _noise_at(mean, params):
+    return jnp.array([[1e-2]]) * (1.0 + jnp.sum(jnp.asarray(mean) ** 2))
+
+
+def _process_at(x, params):
+    return jnp.eye(2) * 1e-3 * (1.0 + jnp.sum(jnp.asarray(x) ** 2))
+
+
+class _FixedProcessNoise:
+    """A DynamicsNoise that does not vary; nothing shipped implements the fixed case."""
+
+    is_fixed = True
+
+    def noise_at(self, x):
+        return jnp.eye(2) * 1e-3
+
+
+@pytest.mark.parametrize("parameter", ["observation_matrix", "observation_noise"])
+def test_a_scale_the_state_dependent_sensor_shadows_is_refused(parameter):
+    spec = _spec(observation_model=CallableSensor([[1.0, 0.0]], _noise_at, ()))
+    with pytest.raises(ValueError, match="does not read on this spec"):
+        spec.build(Perturbation("shadowed", parameter, -0.5))
+
+
+def test_a_scale_the_state_dependent_process_noise_shadows_is_refused():
+    spec = _spec(dynamics_noise_model=CallableProcessNoise(_process_at, ()))
+    with pytest.raises(ValueError, match="does not read on this spec"):
+        spec.build(Perturbation("shadowed", "dynamics_noise", -0.5))
+
+
+@pytest.mark.parametrize("parameter", ["dynamics_matrix", "control_matrix"])
+def test_a_parameter_the_filter_still_reads_is_not_refused(parameter):
+    spec = _spec(observation_model=CallableSensor([[1.0, 0.0]], _noise_at, ()))
+    built = spec.build(Perturbation("read", parameter, -0.5))
+    assert np.allclose(
+        np.asarray(getattr(built, parameter)),
+        np.asarray(getattr(_spec(), parameter)) * 0.5,
+    )
+
+
+def test_correct_still_builds_on_a_state_dependent_spec():
+    spec = _spec(observation_model=CallableSensor([[1.0, 0.0]], _noise_at, ()))
+    assert spec.build(CORRECT).observation_model is spec.observation_model
+
+
+@pytest.mark.parametrize("parameter", ["observation_matrix", "observation_noise"])
+def test_a_fixed_sensor_shadows_nothing(parameter):
+    sensor = FixedSensor([[1.0, 0.0]], observation_noise=[[1e-2]])
+    spec = _spec(observation_model=sensor)
+    assert spec.build(Perturbation("read", parameter, -0.5)) is not None
+
+
+def test_a_fixed_process_noise_shadows_nothing():
+    spec = _spec(dynamics_noise_model=_FixedProcessNoise())
+    assert spec.build(Perturbation("read", "dynamics_noise", -0.5)) is not None
+
+
+# --- the spec compares and hashes rather than raising -------------------------------
+
+
+def test_two_specs_compare_without_raising():
+    assert (_spec() == _spec()) is False
+    assert _spec() != _spec()
+
+
+def test_a_spec_is_hashable():
+    assert len({_spec(), _spec()}) == 2

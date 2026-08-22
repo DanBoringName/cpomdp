@@ -125,6 +125,10 @@ def test_world_exposes_no_generative_model():
 def test_world_exposes_no_generative_parameter():
     truth = _model()
     world = World(truth)
+    # One step first. An unstepped world's `state` *is* the prior's mean, so leaving the
+    # prior out of the set below would be the only way to pass, and a `prior_cov`
+    # accessor would then go unnoticed.
+    world.step([1.0], jax.random.PRNGKey(0))
     parameters = {
         id(truth.dynamics_matrix),
         id(truth.observation_matrix),
@@ -132,6 +136,8 @@ def test_world_exposes_no_generative_parameter():
         id(truth.observation_noise),
         id(truth.control_matrix),
         id(truth.prior),
+        id(truth.prior.mean),
+        id(truth.prior.cov),
     }
     exposed = {
         id(getattr(world, name)) for name in dir(world) if not name.startswith("_")

@@ -51,6 +51,14 @@ _UNVERSIONED = (
 # The parameters a perturbation may scale. The prior is not among them: it is a
 # ``Belief`` rather than a matrix, and scaling a mean of zeros changes nothing while
 # scaling a covariance changes the filter's transient rather than its model.
+# What the filter reads in place of a declared matrix, when the spec carries the
+# state-dependent model beside it. Scaling the matrix then reaches nothing.
+_SHADOWED = {
+    "observation_matrix": "observation_model",
+    "observation_noise": "observation_model",
+    "dynamics_noise": "dynamics_noise_model",
+}
+
 PERTURBABLE = (
     "dynamics_matrix",
     "observation_matrix",
@@ -101,7 +109,7 @@ CORRECT = Perturbation(name="correct", parameter=None, magnitude=0.0)
 """The cell that changes nothing, where a built model matches the spec exactly."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class ModelSpec:
     """The declared parameters a model is built from, and the version they carry.
 
@@ -176,6 +184,27 @@ class ModelSpec:
         if not isinstance(version, str) or not version:
             raise ValueError(_UNVERSIONED.format(subject="spec"))
 
+    def _reject_shadowed(self, perturbation: Perturbation) -> None:
+        """Refuse a scale the filter would not read, given what this spec carries.
+
+        A state-dependent sensor supplies its own ``(C, R)`` and a state-dependent
+        process noise its own ``Q``, so the matrices they stand in for are never read.
+        Scaling one of those would build a model no different from ``CORRECT``, under a
+        name saying otherwise.
+        """
+        shadow = _SHADOWED.get(perturbation.parameter or "")
+        if shadow is None:
+            return
+        carried = getattr(self, shadow)
+        if carried is None or carried.is_fixed:
+            return
+        raise ValueError(
+            f"{perturbation.name!r} scales {perturbation.parameter}, which the filter "
+            f"does not read on this spec: {shadow} is state-dependent and is read "
+            f"instead, so the cell would build the model CORRECT builds. Name a "
+            f"parameter the filter reads, or declare the spec without {shadow}."
+        )
+
     def build(self, perturbation: Perturbation = CORRECT) -> LinearGaussianModel:
         """A model built from these parameters, with ``perturbation`` applied.
 
@@ -200,6 +229,7 @@ class ModelSpec:
                 f"{perturbation.name!r} perturbs control_matrix, and this spec "
                 f"declares no control_matrix to perturb"
             )
+        self._reject_shadowed(perturbation)
         scale = 1.0 + perturbation.magnitude
 
         def value(name: str) -> np.ndarray | None:
@@ -332,8 +362,9 @@ class InferenceRule:
             An inference backend.
 
         Raises:
-            ValueError: If the kind cannot be built over this model — a frozen gain on
-                state-dependent noise, or a magnitude leaving no valid covariance.
+            ValueError: If the kind cannot be built over this model, as a frozen gain on
+                state-dependent noise is, or a magnitude leaving no valid covariance.
+            RuntimeError: If a frozen gain's steady-state recursion does not converge.
         """
         if self.kind is InferenceKind.EXACT:
             return KalmanBackend(model)

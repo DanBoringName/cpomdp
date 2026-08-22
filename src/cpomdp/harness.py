@@ -79,7 +79,10 @@ class World:
                 "filter reads it at the predicted mean, and a world that knows its "
                 "own state exactly does not. Pass a fixed observation_noise."
             )
-        if model.dynamics_noise_model is not None:
+        if (
+            model.dynamics_noise_model is not None
+            and not model.dynamics_noise_model.is_fixed
+        ):
             raise NotImplementedError(
                 "a state-dependent Q(x) has no settled evaluation point here: the "
                 "departed state and the arrived-at state give different trajectories. "
@@ -353,6 +356,7 @@ def drive(
     Args:
         world: The process the run is against. Advanced in place.
         agents: The agents to drive, keyed by the name their results are reported under.
+            Advanced in place too, so each holds its final belief when this returns.
             May be empty, which produces the trajectory alone.
         sequence: The actions to drive, one per step.
         key: A JAX PRNG key, split once per step.
