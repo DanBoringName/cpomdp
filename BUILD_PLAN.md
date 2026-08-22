@@ -439,30 +439,60 @@ out moot rather than deferred.
 ## PR-3 — World/Agent seam, exogenous action, constructors
 
 `serves: 2, 3` · `blocked by: PR-1` · `alias: P2-1a (B)` · `size: L` · `tag: v0.4.5` ·
-`ADR: on landing`
+`ADR-047` · issue #66
 
 The foundation, and the fan-out point. Paper 3 reuses the seam, the exogenous action mode
 and the constructors without modification, which is why the module boundary below is a
 test rather than a convention.
 
-- [ ] `World` owns p\*. `ScoredAgent` owns p. **No code path lets the agent read the
+- [x] `World` owns p\*. `ScoredAgent` owns p. **No code path lets the agent read the
       world's parameters**, enforced at the type level in the spirit of
       `IncompatibleLinearizationError`. A test asserts the absence of the path, not
       merely that it is unused.
-- [ ] `ExogenousActionSequence`: one common control sequence `u_{1:k}` driven into every
+      Landed in `cpomdp.harness`. `World` has no accessor returning its model or a
+      parameter of it, and `ScoredAgent` has no constructor slot for a `World`. The
+      absence is tested by an object-graph walk that follows attributes, containers,
+      bound methods and closure cells. Seven tests probe the walk itself first, because
+      a negative assertion passes just as well on a broken detector.
+      `ScoredAgent` composes a backend rather than subclassing `Agent`: inheriting would
+      publish `sample_action`, and an agent free to act breaks the comparison the driven
+      sequence exists to support. ADR-047 carries the reasoning.
+- [x] `ExogenousActionSequence`: one common control sequence `u_{1:k}` driven into every
       agent under comparison. This is what makes `H(p*)` a shared constant that cancels.
       It also severs the control loop. Record that on the result object as a declared,
       contestable modelling choice, not in a comment.
-- [ ] Constructors, declared as a versioned set in the same discipline as
+      `drive` advances the world once per step and folds one reading into every agent, so
+      the arms stay comparable. `DrivenRun.control_loop` carries a `ModellingChoice` with
+      no default: one field states what was chosen, a second states where it is
+      contestable.
+- [x] Constructors, declared as a versioned set in the same discipline as
       `FiniteActionSet`. Model axis
       `{correct, perturb_parameters(axis, magnitude) × declared magnitudes}`. Inference
       axis `{exact, FrozenGain, WrongFixedR, DiagonalCovarianceOnly}`.
-- [ ] **Keep the module boundary the nineteen-PR plan bought with a PR split.** Nothing
+      Both axes are frozen records rather than callables, so a declared set can be
+      diffed. `ModelSpec.build` copies, so two models built from one spec share no array.
+      Each set refuses a duplicate name and refuses to be built without the cell the
+      others are measured against. The declared magnitudes themselves are a research
+      declaration and are not fixed here.
+- [x] **Keep the module boundary the nineteen-PR plan bought with a PR split.** Nothing
       in this seam may import PR-4's three-term evaluator, because Paper 3 explicitly
       does not import it. Assert it with an import test. A test outlives a PR boundary.
+      `tests/test_module_boundary.py` walks the transitive first-party import closure and
+      refuses `cpomdp.scoring`, named before it exists, along with `cpomdp.selection` and
+      `cpomdp.enumeration`. Probed at one hop and at two.
 
 **Merge gate:** the no-read-path test passes. The import test holds. The constructor set
-round-trips through the model spec and shows up in a diff when extended. **ADR on landing.**
+round-trips through the model spec and shows up in a diff when extended. **ADR-047.**
+
+**Met 2026-08-22.** All three conditions hold. Nothing is exported at the top level, so
+no `docs/api/` page is owed yet.
+
+**Registered as open, and it blocks nothing here.** `World` refuses a state-dependent
+`R(x)` or `Q(x)` rather than choosing an evaluation point, since the departed state and
+the arrived-at one give different trajectories and the filter's own convention is not
+available to a process that knows its state exactly. It is settled in its own change
+before PR-4, which is fixed-`R` throughout. Writing it now is what keeps it from being
+fitted to a gap figure that does not yet exist.
 
 ## PR-4 — Paper 2 scoring: evaluator, separation cells, error bars
 

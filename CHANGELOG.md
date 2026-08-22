@@ -13,7 +13,41 @@ the NumPy oracle the headline `H* = 7` is checked against.
 The `H = 7` numbers did not move. They are bit-identical across the guard, so it corrected
 an exposure rather than a result.
 
+A world and an agent that cannot reach one another. `cpomdp.harness` separates the process
+that produces observations from the model an agent filters with, so how wrong that model
+is about the process becomes measurable rather than zero by construction. Actions arrive
+from a declared sequence. The agents do not choose them, which is what leaves several of
+them comparable under one trajectory and what cuts the control loop, and every run carries
+that second fact rather than leaving it to a comment.
+
+`cpomdp.constructors` declares the two axes a model can be wrong along, one for what its
+parameters get wrong and one for what its filter does. Both are versioned, so a cell added
+after results are seen shows up in the diff.
+
 ### Added
+
+- `cpomdp.harness` — a world and an agent held apart, so what an agent's model gets wrong
+  about the process is a measurable quantity rather than zero by construction. `World`
+  runs the process and hands out observations, exposing no accessor that returns its
+  model or a parameter of it. `ScoredAgent` runs its own model and has no constructor
+  slot for a `World`. `drive` advances one world per step and folds the same reading into
+  every agent, over an `ExogenousActionSequence` declared before the run. Imposing the
+  actions is what makes the entropy of the true process cancel between agents, and it
+  cuts the control loop: `DrivenRun.control_loop` carries that as a `ModellingChoice`
+  with no default, saying what was chosen and where the choice is contestable. A
+  state-dependent `R(x)` or `Q(x)` is refused rather than sampled at an evaluation point
+  nothing has decided yet.
+- `cpomdp.constructors` — the two axes a model can be wrong along, each declared and
+  versioned. `ModelSpec` holds parameters and builds a fresh model per call, sharing no
+  array between builds, so two models that agree do so by value rather than by pointing
+  at one object. `Perturbation` names a parameter and scales it. `InferenceRule` names
+  one of four ways to infer. Both are records rather than functions, so a declared set
+  can be read in a diff. A scale the filter would not read is refused rather than built,
+  since the cell would otherwise report a label for a model identical to the correct one.
+- `cpomdp.backends.degraded` — `WrongFixedRBackend` and `DiagonalCovarianceBackend`, two
+  filters that infer worse than the model they are built for and name how. Each keeps
+  `model` pointing at the model being scored, so a degradation is never an anonymous
+  mismatch between two models.
 
 - `warrantlib.manifest` (warrantlib 0.3.0) — the checks a suite is registered to report,
   declared in a generated TOML file and reconciled against what a run actually produced.
