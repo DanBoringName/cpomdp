@@ -29,11 +29,16 @@ _SUITES = {
     "gap_series": gap_series.run_checks,
 }
 
-#: `gap_series` derives `c₂` and `c₄` symbolically and costs about half a minute, past
-#: the threshold `conftest.SLOW_TEST_SECONDS` sets, so its cases gate on merge rather
-#: than on every pull request. The other two run in seconds and stay on the PR path.
+#: Reading a suite's check ids runs it. `gap_series` derives `c₂`, `c₄` and `c₆`
+#: symbolically and costs minutes, and `series_kernel` checks its expansion against
+#: `sympy.series` through `σ⁶` and costs minutes too, both far past the threshold
+#: `conftest.SLOW_TEST_SECONDS` sets. `log_ratio_series` stops at first order in `σ` and
+#: costs under a second, so it is what keeps the uniqueness guard on the PR path.
 _SUITE_CASES = [
-    "series_kernel",
+    # Marked per suite, not per test: log_ratio_series runs in well under a second and
+    # is what keeps the uniqueness guard on the pull-request path at all. The other two
+    # carry the sextic expansion and cost minutes.
+    pytest.param("series_kernel", marks=pytest.mark.slow),
     "log_ratio_series",
     pytest.param("gap_series", marks=pytest.mark.slow),
 ]
@@ -56,9 +61,6 @@ def _ids(module: str) -> tuple[str, ...]:
 
 
 class TestTheSuitesDeclareDistinctKeys:
-    # Slow since the sextic landed: reading a suite's ids runs it, and gap_series now
-    # carries the σ⁶ expansion. Its two siblings below were already marked.
-    @pytest.mark.slow
     @pytest.mark.parametrize("module", _SUITE_CASES)
     def test_no_two_checks_share_a_key(self, module):
         ids = _ids(module)
@@ -66,7 +68,6 @@ class TestTheSuitesDeclareDistinctKeys:
             check_id for check_id in set(ids) if ids.count(check_id) > 1
         )
 
-    @pytest.mark.slow
     @pytest.mark.parametrize("module", _SUITE_CASES)
     def test_every_key_is_namespaced_to_its_module(self, module):
         ids = _ids(module)
