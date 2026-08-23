@@ -3317,3 +3317,40 @@ true, which is the shape of the failure the standing rule on prose already names
 - **It does not make an exploration authoritative.** No warrant, no manifest entry, no
   citation from a check. `research/d2_noise_model_exploration.md` puts a registered term
   in question and settles nothing, which is what an exploration is for.
+
+## ADR-051 — ADR-048 supersedes ADR-047 on state-dependent noise, and says so
+
+**Date:** 2026-08-23
+**Status:** Accepted
+**Supersedes:** the **Extends** header on ADR-048, and ADR-047's section "`World` refuses
+state-dependent noise, and that is registered as open"
+
+### What was wrong with the labelling
+
+ADR-048 decided that `World` reads a state-dependent `R(x)` and `Q(x)` rather than
+refusing them. ADR-047 had decided it refuses them. That is a reversal, and this record
+keeps **Supersedes** for a reversal and **Extends** for a decision that adds to one still
+standing. ADR-048 carried **Extends**.
+
+The cost is not cosmetic. ADR-047's section reads as current, so the two records state
+opposite rules with nothing between them saying which holds. The same sentence reached
+`CHANGELOG.md`, where it shipped in the Unreleased notes describing behaviour the same
+cycle had already reversed, and is corrected there separately.
+
+### The decision
+
+ADR-048 supersedes ADR-047 on this point and only this point. Everything else in ADR-047
+— the seam between world and agent, the exogenous action sequence, the cut control loop —
+stands unchanged, which is why this is recorded here rather than by retiring ADR-047.
+
+Both are left in place with their original text, per the rule that a decision record is
+appended to and not edited. This entry is the pointer a reader following either one
+arrives at.
+
+### Consequences
+
+- **A reader of ADR-047's refusal section needs this entry to know it is dead.** That is
+  the cost of append-only, and it is paid here rather than by a silent edit.
+- **The convention is now stated where it can be checked**: reversal is *Supersedes*,
+  accumulation is *Extends*. ADR-048's own header is left as written and corrected by
+  this record.

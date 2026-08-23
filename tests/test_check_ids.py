@@ -6,9 +6,11 @@ dropped check reads as a rename. Neither shows up in a count, which is what the 
 CI strings compare today.
 
 So the suites are run here and their ids are checked as a set. `research/` is not on
-`pytest`'s `testpaths`, and the two measured suites are far too slow for the
-pull-request path, so this covers the three symbolic modules and the crossover
-falsifiers. The measured suites' ids are built by the same helper, and that helper is
+`pytest`'s `testpaths`, so this is where the three symbolic modules and the crossover
+falsifiers are covered at all. Only `log_ratio_series` is covered on the pull-request
+path: `series_kernel` and `gap_series` both carry the sextic expansion, both are marked
+`slow`, and the PR job deselects that marker, so their ids are compared on the merge and
+release runs. The measured suites' ids are built by the same helper, and that helper is
 pinned below on its own.
 """
 

@@ -93,6 +93,13 @@ it once the answer is visible.
 
 ## What would make any of this registrable
 
+> **Note, 2026-08-23.** The first sentence below is superseded.
+> `research/d2_noise_model_exploration.md`, added alongside this file, finds that
+> the registration's four published `σ_p` values are all reproduced by *unweighted*
+> OLS at one `N ≈ 60`, while the weighted fit has no solution for the fourth. The
+> heteroscedastic propagation is therefore not what produced them, so it is not the
+> thing to recover. The rest of this section still stands.
+
 Recover the heteroscedastic propagation the registration used, with `N` declared.
 Reproduce `D* = 0.520`, `f* = 0.0488` and `σ_p = 0.0359` from it rather than to ten
 percent. Only then re-run the sextic optimisation, and register the result as an

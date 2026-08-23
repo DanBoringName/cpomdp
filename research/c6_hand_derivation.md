@@ -46,6 +46,10 @@ the fifth is not one of them. `κ₆` reaches `σ⁶` only through `(1,1,1,1,1,1
 
 So five cumulants are live at `σ⁶` and one is not:
 
+> **Superseded.** The `κ₅` row below is wrong, and the argument for it with it.
+> The AMENDMENT of 2026-08-23 at the foot of this document carries the
+> connectivity bound `m ≤ N/2 + 1` that replaces this table. Read that first.
+
 | cumulant | lowest order | contributes at `σ⁶` |
 | --- | --- | --- |
 | `κ₂` | `σ²` | yes |

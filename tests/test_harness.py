@@ -474,8 +474,11 @@ def _disagreeing_sensor_model() -> LinearGaussianModel:
 
 
 def test_a_sensor_disagreeing_with_the_model_does_not_construct():
+    # The refusal is the model's, not the world's, and it fires while the argument
+    # to World is still being built. Asserting it around the World call read as a
+    # check on World and would have passed with no World in the line at all.
     with pytest.raises(ValueError, match="observation_matrix"):
-        World(_disagreeing_sensor_model())
+        _disagreeing_sensor_model()
 
 
 def test_a_sensor_noise_that_is_not_positive_definite_is_refused_not_drawn():

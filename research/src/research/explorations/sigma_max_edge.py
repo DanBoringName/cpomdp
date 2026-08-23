@@ -19,15 +19,13 @@ c₂ =  κ/4        c₄ = 3κ(κ − 2)/16        c₆ = −κ(7κ + 9)(13κ �
 
 import numpy as np
 
+from research.explorations.operating_point import KAPPA_MIN
+
 __all__ = [
-    "KAPPA_MIN",
     "binding_kappa",
     "quartic_window_factor",
     "sextic_window_factor",
 ]
-
-#: The declared floor of the sweep, from the DECLARATION of 2026-08-23.
-KAPPA_MIN = 0.1
 
 #: Where each coefficient vanishes on the ridge, so neither edge is defined there.
 QUARTIC_ZERO = 2.0

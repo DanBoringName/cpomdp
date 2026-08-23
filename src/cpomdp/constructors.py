@@ -205,11 +205,21 @@ class ModelSpec:
                 f"two disagreeing, so the cell cannot build. Declare the spec without "
                 f"{shadow}, or perturb something it does not restate."
             )
+        # The two noises and observation_matrix are shadowed differently. A
+        # state-dependent sensor's R is read in place of the field, so the cell would
+        # build what CORRECT builds. Its C is not: the model requires a linearized C to
+        # equal observation_matrix whether or not the sensor is fixed, so scaling the
+        # field makes the two disagree and nothing builds at all.
+        consequence = (
+            "the model refuses the two disagreeing, so the cell cannot build"
+            if perturbation.parameter == "observation_matrix"
+            else "the cell would build the model CORRECT builds"
+        )
         raise ValueError(
             f"{perturbation.name!r} scales {perturbation.parameter}, which the filter "
             f"does not read on this spec: {shadow} is state-dependent and is read "
-            f"instead, so the cell would build the model CORRECT builds. Name a "
-            f"parameter the filter reads, or declare the spec without {shadow}."
+            f"instead, so {consequence}. Name a parameter the filter reads, or declare "
+            f"the spec without {shadow}."
         )
 
     def build(self, perturbation: Perturbation = CORRECT) -> LinearGaussianModel:

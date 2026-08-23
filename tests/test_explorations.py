@@ -15,7 +15,7 @@ def test_the_window_exploration_runs_and_its_assertions_hold(capsys):
     assert "D moves by a factor of 0.895" in printed
 
 
-@pytest.mark.parametrize("module", [window, noise, edge])
+@pytest.mark.parametrize("module", [window, noise, edge, point])
 def test_no_exploration_reports_a_warrant(module):
     # The invariant is the package's, stated in explorations/__init__.py, so it is
     # checked over the package rather than over whichever module was written first.

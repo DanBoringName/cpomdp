@@ -171,9 +171,9 @@ class World:
         else:
             # linearize is exact here rather than approximate: the observation mean is
             # linear in this regime, so the Jacobian it returns is the map itself. The
-            # model refuses at construction any sensor whose Jacobian differs from its
-            # declared observation_matrix, so a nonlinear-mean sensor (issue #21) is
-            # kept out rather than silently mis-sampled through its local slope.
+            # model probes the sensor's Jacobian against its declared
+            # observation_matrix once, at prior.mean, so a nonlinear-mean sensor
+            # (issue #21) is kept out at construction rather than at every state.
             observation_matrix, observation_noise = sensor.linearize(self._state)
             # A sensor noise is only probed at construction, at one state. Where it
             # loses definiteness at a state the walk reaches, the cholesky draw below
@@ -182,7 +182,7 @@ class World:
             # noiseless direction is legal there. This one is not legal anywhere.
             validate_covariance(
                 observation_noise,
-                f"observation_model.linearize(x)[1] at x = {self._state}",
+                "observation_model.linearize(x)[1]",
                 require_definite=True,
             )
         return jax.random.multivariate_normal(

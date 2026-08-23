@@ -7,9 +7,11 @@ would apply to does not exist yet.
 ## The code
 
 `research/src/research/explorations/noise_model.py`, run with
-`python -m research.explorations.noise_model`. It prints every number below, checks the
-covariance integral against an actual least-squares fit that shares no code with it, and
-asserts both.
+`python -m research.explorations.noise_model`. It checks the covariance integral against
+an actual least-squares fit that shares no code with it, and asserts both. It prints the
+integral's own budget shares, 139% and 210%; the 133% and 217% in the table below are
+the fitted values, and the two are reconciled at the end of "The check" rather than being
+the same numbers twice.
 
 ## The question
 
