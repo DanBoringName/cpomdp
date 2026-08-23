@@ -1299,3 +1299,56 @@ the cumulant-moment recursion and the innovation moments are each stated and che
 one commit. Their two refs are identical and the render says the ordering is not
 established by history, which is the same reservation the 2026-08-17 table states in prose
 for its own same-hash rows.
+
+### RESULT 2026-08-23: `c₆` in closed form, and the edge it bounds where `c₄` does not
+
+Derived symbolically on free `l₁..l₆` and a symbolic `R̄`, by the same pipeline that
+produced `c₄` and against the same two arms. `research/c6_hand_derivation.md` registers
+the basis and the cumulant reach at `018ccc7`, before the suite computed either.
+
+**The basis holds.** `c₆` resolves onto the eighteen-term dimensional basis with
+remainder exactly zero, fifteen coefficients non-zero. The counting rule behind it,
+`Σ_{k<n} p(2n − 2k)`, reproduces `c₄`'s registered seven and `c₂`'s two without being
+told them. Three coefficients come out zero: `l₆`, `l₄/R̄` and `l₂/R̄²`. The first was
+predicted, the other two were not and are reported rather than explained.
+
+**Two arms agree.** The generating-function route and the cumulant recursion, neither
+calling the other, agree at `σ²`, `σ⁴` and `σ⁶`. Separately the truncation path agrees
+with `sympy.series` term for term through `σ⁶`, two orders further than before. The
+`EXACT` licence is that agreement, not a tolerance.
+
+**On the ridge of `d4-family-v1`**, with `μ* = √(R₀/κ)` and `R̄ = 2R₀`:
+
+```text
+c₂ =  κ / (4R₀)
+c₄ =  3κ(κ − 2) / (16R₀²)
+c₆ = −κ(7κ + 9)(13κ − 3) / (48R₀³)
+```
+
+`c₅ = 0`, and `σ³` carries nothing either. The gap is even in `σ` through `σ⁶`.
+
+**The κ = 2 problem is real and `c₆` answers it.** `c₄` is identically zero at `κ = 2`,
+where `σ_max = √(f·c₂/|c₄|)` diverges and the quartic bounds nothing. `c₆` there is
+`−529/24`. Its only positive root is `κ = 3/13`, where `c₄` is not zero, so the two never
+vanish together and an edge taken against whichever term binds is defined across the
+whole positive axis.
+
+**`c₂²/|c₄|` is monotone increasing on `(0, 2)`**, so the rule evaluating `T` at the `κ`
+minimising the window width selects the sweep's lower edge whatever that edge is. No
+lower edge is declared. Over `κ ∈ [0.05, 1]` the factor on `T` is 39. That is a
+declaration this document still owes, and it is independent of everything above.
+
+### DISCLOSURE 2026-08-23: the `σ_max` choice is now being made with the numbers visible
+
+The 2026-08-07 entry left `σ_max` open between redefining the edge against `c₆` and
+keeping `f` as a bound that subtraction makes slack, on the grounds that "choosing now is
+choosing with the refit's outcome in view".
+
+That condition has not improved. It has worsened: `c₆` is now in closed form on the
+ridge, so both branches can be priced exactly before either is chosen. Whoever takes the
+decision takes it with more of the answer in view than the entry was written to avoid,
+and no ordering of commits changes that.
+
+Recorded rather than repaired. The alternative was to take the decision quietly inside
+the work that produced the coefficient, which is the failure mode the whole registration
+exists to make visible.
