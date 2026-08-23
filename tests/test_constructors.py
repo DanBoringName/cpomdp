@@ -264,22 +264,26 @@ def test_correct_still_builds_on_a_state_dependent_spec():
 
 
 @pytest.mark.parametrize("parameter", ["observation_matrix", "observation_noise"])
-def test_a_fixed_sensor_shadows_nothing(parameter):
+def test_a_scale_a_fixed_sensor_restates_is_refused(parameter):
+    # A fixed sensor restates the plain fields and the model refuses the two
+    # disagreeing, so the scaled cell could never build. Refusing at the spec names
+    # the situation instead of failing deep inside LinearGaussianModel.
     sensor = FixedSensor([[1.0, 0.0]], observation_noise=[[1e-2]])
     spec = _spec(observation_model=sensor)
-    built = spec.build(Perturbation("read", parameter, -0.5))
-    assert np.allclose(
-        np.asarray(getattr(built, parameter)),
-        np.asarray(getattr(_spec(), parameter)) * 0.5,
-    )
+    with pytest.raises(ValueError, match="restating"):
+        spec.build(Perturbation("read", parameter, -0.5))
 
 
-def test_a_fixed_process_noise_shadows_nothing():
+def test_a_scale_a_fixed_process_noise_restates_is_refused():
     spec = _spec(dynamics_noise_model=_FixedProcessNoise())
-    built = spec.build(Perturbation("read", "dynamics_noise", -0.5))
-    assert np.allclose(
-        np.asarray(built.dynamics_noise), np.asarray(_spec().dynamics_noise) * 0.5
-    )
+    with pytest.raises(ValueError, match="restating"):
+        spec.build(Perturbation("read", "dynamics_noise", -0.5))
+
+
+def test_correct_still_builds_with_an_agreeing_fixed_sensor():
+    sensor = FixedSensor([[1.0, 0.0]], observation_noise=[[1e-2]])
+    spec = _spec(observation_model=sensor)
+    assert spec.build(CORRECT).observation_model is sensor
 
 
 # --- the spec compares and hashes rather than raising -------------------------------

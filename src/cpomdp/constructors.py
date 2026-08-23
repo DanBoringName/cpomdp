@@ -196,8 +196,15 @@ class ModelSpec:
         if shadow is None:
             return
         carried = getattr(self, shadow)
-        if carried is None or carried.is_fixed:
+        if carried is None:
             return
+        if carried.is_fixed:
+            raise ValueError(
+                f"{perturbation.name!r} scales {perturbation.parameter}, and this "
+                f"spec carries a fixed {shadow} restating it. The model refuses the "
+                f"two disagreeing, so the cell cannot build. Declare the spec without "
+                f"{shadow}, or perturb something it does not restate."
+            )
         raise ValueError(
             f"{perturbation.name!r} scales {perturbation.parameter}, which the filter "
             f"does not read on this spec: {shadow} is state-dependent and is read "

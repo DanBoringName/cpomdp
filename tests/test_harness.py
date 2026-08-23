@@ -450,3 +450,60 @@ def test_the_fixed_path_is_unmoved_by_the_state_dependent_one():
     world = World(_model(), initial_state=[1.0, 1.0])
     observation = world.step([1.0], jax.random.PRNGKey(5))
     assert float(observation[0]) == 1.0105588758439044
+
+
+# --- a sensor the world cannot draw from is refused, not turned into NaN ------------
+
+
+def _disagreeing_sensor_model() -> LinearGaussianModel:
+    """A model whose sensor reads a different observation dimension from its matrix."""
+    wide = np.array([[1.0, 0.0], [0.0, 1.0]])
+
+    def noise_at(mean, params):
+        return jnp.eye(2) * 1e-2
+
+    return LinearGaussianModel(
+        dynamics_matrix=DYNAMICS,
+        observation_matrix=SENSOR,  # (1, 2): the model says one observation
+        dynamics_noise=[[1e-4, 0.0], [0.0, 1e-4]],
+        observation_noise=[[1e-2]],
+        prior=Belief(mean=[0.0, 0.0], cov=np.eye(2)),
+        control_matrix=CONTROL,
+        observation_model=CallableSensor(wide, noise_at, ()),  # the sensor says two
+    )
+
+
+def test_a_sensor_disagreeing_with_the_model_does_not_construct():
+    with pytest.raises(ValueError, match="observation_matrix"):
+        World(_disagreeing_sensor_model())
+
+
+def test_a_sensor_noise_that_is_not_positive_definite_is_refused_not_drawn():
+    # A silent NaN observation would reach every agent's belief and every score. The
+    # dynamics draw uses svd because a noiseless direction is legal there; a sensor
+    # noise that loses definiteness is not legal anywhere.
+    def vanishing(mean, params):
+        return jnp.array([[1e-2]]) * (1.0 - jnp.asarray(mean)[0])
+
+    model = LinearGaussianModel(
+        dynamics_matrix=DYNAMICS,
+        observation_matrix=SENSOR,
+        dynamics_noise=[[1e-8, 0.0], [0.0, 1e-8]],
+        observation_noise=[[1e-2]],
+        prior=Belief(mean=[0.0, 0.0], cov=np.eye(2)),
+        control_matrix=CONTROL,
+        observation_model=CallableSensor(SENSOR, vanishing, ()),
+    )
+    world = World(model, initial_state=[0.0, 10.0])
+
+    def walk_until_the_noise_vanishes():
+        for _ in range(4):
+            world.step([0.0], jax.random.PRNGKey(0))
+
+    with pytest.raises(ValueError, match="positive"):
+        walk_until_the_noise_vanishes()
+
+
+def test_a_well_behaved_state_dependent_sensor_still_draws():
+    world = World(_sensed_model(), initial_state=[1.0, 1.0])
+    assert world.step([1.0], jax.random.PRNGKey(0)).shape == (1,)
