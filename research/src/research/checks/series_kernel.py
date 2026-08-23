@@ -333,6 +333,29 @@ def posterior_sd_series(order: int) -> sympy.Expr:
     )
 
 
+def truncated_powers(base: sympy.Expr, order: int, upto: int):
+    """Successive powers of `base`, truncated at every step.
+
+    `base^1 … base^upto`, each cut at `σ^order` before the next multiplication, so no
+    power carries the full product before it is cut. Truncation is a projection and
+    `σ` degrees only rise under multiplication, so cutting early loses nothing a kept
+    term needs. The increment, the moments and the predictive average all build their
+    powers here, which keeps that argument enforced once rather than restated per loop.
+
+    Args:
+        base: the expression to raise, a polynomial in `σ`.
+        order: the highest power of `σ` to keep, inclusive.
+        upto: the highest power of `base` to yield.
+
+    Yields:
+        The truncated powers, in increasing degree.
+    """
+    power: sympy.Expr = sympy.Integer(1)
+    for _ in range(upto):
+        power = truncate(power * base, order)
+        yield power
+
+
 @cache
 def displacement_series(order: int) -> sympy.Expr:
     """`h = Kν + √v_q · z` as a polynomial in `σ`.
@@ -411,10 +434,12 @@ def increment_series(order: int) -> sympy.Expr:
             "before asking for this order."
         )
     displacement = displacement_series(order)
-    power = displacement
-    total = L1 * power
-    for degree, coefficient in enumerate((L2, L3, L4, L5, L6), start=2):
-        power = truncate(power * displacement, order)
+    total: sympy.Expr = sympy.Integer(0)
+    coefficients = (L1, L2, L3, L4, L5, L6)
+    powers = truncated_powers(displacement, order, len(coefficients))
+    for degree, (coefficient, power) in enumerate(
+        zip(coefficients, powers, strict=True), start=1
+    ):
         total += coefficient * power / sympy.factorial(degree)
     return truncate(total, order)
 
@@ -589,11 +614,14 @@ def exact_predictive_expectation(expression: sympy.Expr, order: int) -> sympy.Ex
     """
     innovation = innovation_series(order)
     polynomial = sympy.Poly(sympy.expand(expression), NU)
-    powers: dict[int, sympy.Expr] = {0: sympy.Integer(1)}
-    running: sympy.Expr = sympy.Integer(1)
-    for degree in range(1, polynomial.degree() + 1):
-        running = truncate(running * innovation, order)
-        powers[degree] = running
+    if polynomial.is_zero:
+        # `Poly(0, NU).degree()` is `-oo`, which is not a loop bound. The average of
+        # nothing is nothing, and the substitution path this replaced returned it.
+        return sympy.Integer(0)
+    accumulated = truncated_powers(innovation, order, polynomial.degree())
+    powers: dict[int, sympy.Expr] = {0: sympy.Integer(1)} | dict(
+        enumerate(accumulated, start=1)
+    )
     substituted = sum(
         (
             truncate(coefficient * powers[int(monomial[0])], order)
@@ -629,9 +657,7 @@ def cumulants(
     if upto < 1:
         raise ValueError(f"cumulants asked for κ up to {upto}, which is not a cumulant")
     moments: dict[int, sympy.Expr] = {0: sympy.Integer(1)}
-    power: sympy.Expr = sympy.Integer(1)
-    for index in range(1, upto + 1):
-        power = truncate(power * expression, order)
+    for index, power in enumerate(truncated_powers(expression, order, upto), start=1):
         moments[index] = truncate(gaussian_expectation(power, symbol), order)
     found: dict[int, sympy.Expr] = {}
     for index in range(1, upto + 1):

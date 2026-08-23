@@ -1443,3 +1443,25 @@ claims above. It evaluates no `T`: the form is registered here, and the value co
 **What `T` still waits on.** `f*` re-derived under the sextic edge, which needs the
 statistical term settled, which `research/d2_noise_model_exploration.md` puts in question
 on two counts this document has not answered.
+
+### AMENDMENT 2026-08-23: two sextic provenance refs were wrong, and are corrected
+
+The RESULT of 2026-08-23 says `research/c6_hand_derivation.md` "registers the basis and
+the cumulant reach at `018ccc7`". Half of that is false and is corrected here rather than
+in place.
+
+`018ccc7` carries the basis and its counting rule, so `SEXTIC_BASIS_SOURCE` was right to
+name it. It does **not** carry the cumulant reach: the connectivity bound
+`m ≤ N/2 + 1` landed at `2f39903`, in the amendment that retired the table `018ccc7`
+opened with. A reviewer following the earlier ref would have found the superseded `κ₅`
+claim, which the bound contradicts. Five `PROVED` rows carried it.
+
+`SEXTIC_CUMULANT_SOURCE.registered_at` now reads `2f39903`.
+
+Separately, `measured_at` on both sextic sources read `5ce7695`, the commit that raised
+`DERIVATIVE_ORDER` and made the expansion computable. Nothing measured `c₆` there. The
+checks first ran at `88afd7c`, which is what both now name.
+
+`tests/test_provenance_ordering.py` passed throughout, both wrong refs still preceding
+their measurement. Ordering is what that test asks about, and whether a ref carries the
+claim it is cited for is a separate question it does not put.

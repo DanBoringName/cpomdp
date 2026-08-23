@@ -54,6 +54,7 @@ import sympy
 from sympy.utilities.iterables import partitions
 
 from research.checks.series_kernel import (
+    DERIVATIVE_ORDER,
     EXPANSION_SOURCE,
     L1,
     L2,
@@ -98,9 +99,9 @@ SEXTIC_ORDER = 6
 #: The commit these checks were first measured at.
 _MEASURED_REF = "1888ad4"
 
-#: The commit at which `DERIVATIVE_ORDER` reached six and the sextic expansion first
-#: became computable in this tree.
-_SEXTIC_MEASURED_REF = "5ce7695"
+#: The commit at which the sextic checks below first ran. `5ce7695` made the expansion
+#: computable and is not where anything measured it, which is what this has to name.
+_SEXTIC_MEASURED_REF = "88afd7c"
 
 #: Where the closed form `c₂` was derived independently of this series. Registered
 #: 2026-08-07, nine days before this suite measured against it.
@@ -145,6 +146,20 @@ CUMULANT_SOURCE = Source(
     ),
 )
 
+#: The basis size the counting rule must produce, and the number of its coefficients
+#: that come out non-zero. Both reach `research/gate_d4_registration.md`'s prose, so
+#: both are asserted rather than only printed.
+SEXTIC_BASIS_SIZE = 18
+SEXTIC_LIVE_TERMS = 15
+
+#: The three basis coefficients that vanish, and why each is expected to. Only the first
+#: was predicted; the other two are reported rather than explained.
+SEXTIC_ZERO_TERMS = {
+    "l6": "l₆ entering W only linearly and the gap carrying no first cumulant",
+    "l4/R^1": "reported rather than predicted",
+    "l2/R^2": "reported rather than predicted",
+}
+
 #: Where the sextic basis and its counting rule are derived, ahead of any run of it.
 SEXTIC_BASIS_SOURCE = Source(
     correspondence=(
@@ -159,14 +174,16 @@ SEXTIC_BASIS_SOURCE = Source(
 )
 
 #: Where the reach of each cumulant is derived. The amendment supersedes the table the
-#: same document opened with, and says so rather than replacing it.
+#: same document opened with, and says so rather than replacing it. Its ref is the
+#: amendment's own commit, not the document's: `018ccc7` carries the superseded table
+#: and a reviewer sent there would find the claim this cites contradicted.
 SEXTIC_CUMULANT_SOURCE = Source(
     correspondence=(
         "research/c6_hand_derivation.md, AMENDMENT 2026-08-23: a joint cumulant of m "
         "factors reaches σ^N only if m ≤ N/2 + 1"
     ),
     provenance=Provenance(
-        registered_at="018ccc7",
+        registered_at="2f39903",
         measured_at=_SEXTIC_MEASURED_REF,
         registered="the connectivity bound on which cumulants reach an order",
     ),
@@ -264,6 +281,7 @@ def half_variance(order: int) -> sympy.Expr:
     return truncate(cumulants(log_ratio_in_sigma(order), 2, order)[2] / 2, order)
 
 
+@cache
 def cumulant_terms(order: int, upto: int = 4) -> dict[int, sympy.Expr]:
     """The gap's cumulant series term by term: `κ_n/n!` for `n = 2 … upto`.
 
@@ -277,7 +295,8 @@ def cumulant_terms(order: int, upto: int = 4) -> dict[int, sympy.Expr]:
         upto: the highest cumulant to include.
 
     Returns:
-        The contributions, keyed by cumulant index.
+        The contributions, keyed by cumulant index. Cached on `(order, upto)`, both
+        checks that ask for the sextic recursion asking for it identically.
     """
     found = cumulants(log_ratio_in_sigma(order), upto, order)
     return {
@@ -325,6 +344,63 @@ def quartic_coefficient() -> sympy.Expr:
     return sympy.expand(averaged_gap(ORDER).coeff(SIGMA, 4))
 
 
+def resolve_onto_basis(
+    target: sympy.Expr,
+    monomials: dict[str, sympy.Expr],
+    variables: tuple[sympy.Symbol, ...],
+) -> tuple[dict[str, sympy.Expr], sympy.Expr]:
+    """`target` resolved onto `monomials`, with whatever is left over.
+
+    The quartic and the sextic resolutions both come through here, so the two
+    registered remainders are computed by one method rather than by two copies that
+    could drift apart.
+
+    Args:
+        target: the coefficient to resolve, polynomial in `variables`.
+        monomials: the basis, keyed by a readable name.
+        variables: the generators, in a fixed order.
+
+    Returns:
+        The coefficient of each basis term, and what is left after removing them all.
+    """
+    polynomial = sympy.Poly(sympy.expand(target), *variables)
+    found = {
+        name: polynomial.coeff_monomial(monomial)
+        for name, monomial in monomials.items()
+    }
+    rebuilt = sum(
+        (found[name] * monomial for name, monomial in monomials.items()),
+        sympy.Integer(0),
+    )
+    return found, sympy.expand(target - rebuilt)
+
+
+def quartic_basis_by_hand(inverse: sympy.Symbol) -> dict[str, sympy.Expr]:
+    """The registration's seven `c₄` monomials, as it lists them.
+
+    Written out rather than generated. The registration fixed them on 2026-08-07,
+    and a second derivation in code would be a second thing to keep in sync.
+    `check_counting_rule_against_the_known_orders` compares the generated basis
+    against this one, a comparison that would be circular if both came from the
+    rule.
+
+    Args:
+        inverse: the symbol standing for `1/R̄`, so the terms stay polynomial.
+
+    Returns:
+        Each monomial, keyed by the registration's name for it.
+    """
+    return {
+        "l'^4": L1**4,
+        "l'^2 l''": L1**2 * L2,
+        "l''^2": L2**2,
+        "l' l'''": L1 * L3,
+        "l''''": L4,
+        "l'^2 / R": L1**2 * inverse,
+        "l'' / R": L2 * inverse,
+    }
+
+
 @cache
 def basis_coefficients() -> tuple[dict[str, sympy.Expr], sympy.Expr]:
     """`c₄` resolved onto the registration's seven-term dimensional basis.
@@ -339,25 +415,9 @@ def basis_coefficients() -> tuple[dict[str, sympy.Expr], sympy.Expr]:
     """
     inverse = sympy.Symbol("u", positive=True)  # 1/R̄, so the basis is polynomial
     quartic = sympy.expand(quartic_coefficient().subs(RBAR, 1 / inverse))
-    monomials = {
-        "l'^4": L1**4,
-        "l'^2 l''": L1**2 * L2,
-        "l''^2": L2**2,
-        "l' l'''": L1 * L3,
-        "l''''": L4,
-        "l'^2 / R": L1**2 * inverse,
-        "l'' / R": L2 * inverse,
-    }
-    polynomial = sympy.Poly(quartic, L1, L2, L3, L4, inverse)
-    found = {
-        name: polynomial.coeff_monomial(monomial)
-        for name, monomial in monomials.items()
-    }
-    rebuilt = sum(
-        (found[name] * monomial for name, monomial in monomials.items()),
-        sympy.Integer(0),
+    return resolve_onto_basis(
+        quartic, quartic_basis_by_hand(inverse), (L1, L2, L3, L4, inverse)
     )
-    return found, sympy.expand(quartic - rebuilt)
 
 
 def check_gap_is_half_the_variance() -> list[CheckReport]:
@@ -736,34 +796,59 @@ def sextic_coefficient() -> sympy.Expr:
     Returns:
         The coefficient, in free `l₁..l₆` and a symbolic `R̄`.
     """
-    return sympy.expand(averaged_gap(SEXTIC_ORDER).coeff(SIGMA, 6))
+    return sympy.expand(averaged_gap(SEXTIC_ORDER).coeff(SIGMA, SEXTIC_ORDER))
+
+
+@cache
+def dimensional_basis(order: int) -> dict[str, sympy.Expr]:
+    """The monomials `c_order` may be built from, generated rather than listed.
+
+    Dimension fixes the shape. With `σ ~ L` and `l_n ~ L^{-n}`, a dimensionless gap
+    makes `c_order ~ L^{-order}`, so a term `(∏ l_{n_i})·R̄^{-k}` needs
+    `Σ n_i = order − 2k`. One monomial per partition of that, for each `k`.
+
+    `k` stops one short of `order/2`: at that value the constraint reads `Σn = 0`, a
+    bare inverse power of `R̄` carrying no log-derivative. A constant `R` has every
+    `l_n = 0` and an identically zero gap, so a term surviving there cannot appear.
+
+    Args:
+        order: the coefficient's order in `σ`, even and at least two.
+
+    Returns:
+        Each basis term, keyed by a readable name.
+
+    Raises:
+        ValueError: if `order` is odd, below two, or above what `l₁..l₆` can express.
+    """
+    if order < 2 or order % 2 or order > DERIVATIVE_ORDER:
+        raise ValueError(
+            f"dimensional_basis({order}) needs an even order between 2 and "
+            f"{DERIVATIVE_ORDER}: the odd coefficients vanish and the carried "
+            f"log-derivatives stop at l{DERIVATIVE_ORDER}"
+        )
+    carried = {1: L1, 2: L2, 3: L3, 4: L4, 5: L5, 6: L6}
+    basis: dict[str, sympy.Expr] = {}
+    for inverse_power in range(order // 2):
+        for part in partitions(order - 2 * inverse_power):
+            name = "".join(
+                f"l{index}^{count}" if count > 1 else f"l{index}"
+                for index, count in sorted(part.items())
+            )
+            term: sympy.Expr = RBAR ** (-inverse_power)
+            for index, count in part.items():
+                term *= carried[index] ** count
+            basis[name + (f"/R^{inverse_power}" if inverse_power else "")] = term
+    return basis
 
 
 @cache
 def sextic_basis() -> dict[str, sympy.Expr]:
-    """The eighteen monomials `c₆` may be built from, keyed by name.
-
-    Generated from the counting rule rather than listed: for each power `k` of `1/R̄`
-    the admissible log-derivative monomials are the partitions of `6 − 2k`, and `k`
-    stops below three because a term carrying no log-derivative would survive a constant
-    `R`, where the gap is identically zero.
+    """The monomials `c₆` may be built from.
 
     Returns:
         Each basis term, keyed by a readable name.
     """
-    carried = {1: L1, 2: L2, 3: L3, 4: L4, 5: L5, 6: L6}
-    basis: dict[str, sympy.Expr] = {}
-    for inverse_power in range(3):
-        for part in partitions(6 - 2 * inverse_power):
-            name = "".join(
-                f"l{order}^{count}" if count > 1 else f"l{order}"
-                for order, count in sorted(part.items())
-            )
-            term: sympy.Expr = RBAR ** (-inverse_power)
-            for order, count in part.items():
-                term *= carried[order] ** count
-            basis[name + (f"/R^{inverse_power}" if inverse_power else "")] = term
-    return basis
+    return dimensional_basis(SEXTIC_ORDER)
 
 
 @cache
@@ -783,19 +868,23 @@ def sextic_resolution() -> tuple[dict[str, sympy.Expr], sympy.Expr]:
         name: sympy.expand(term.subs(RBAR, 1 / inverse))
         for name, term in sextic_basis().items()
     }
-    variables = (L1, L2, L3, L4, L5, L6, inverse)
-    target = sympy.Poly(
-        sympy.expand(sextic_coefficient().subs(RBAR, 1 / inverse)), *variables
-    )
-    weights = {
-        name: target.coeff_monomial(sympy.Poly(term, *variables).monoms()[0])
-        for name, term in basis.items()
-    }
-    identified = sum(
-        (weight * basis[name] for name, weight in weights.items()),
-        sympy.Integer(0),
-    )
-    return weights, sympy.expand(target.as_expr() - identified)
+    target = sympy.expand(sextic_coefficient().subs(RBAR, 1 / inverse))
+    return resolve_onto_basis(target, basis, (L1, L2, L3, L4, L5, L6, inverse))
+
+
+def _slug(term: str) -> str:
+    """A basis term's name as a check-id segment.
+
+    `check_id` takes a dotted key of plain identifiers, and a basis name carries `^`
+    and `/`. This maps them to underscores rather than inventing a second naming scheme.
+
+    Args:
+        term: the basis term's name, as `sextic_basis` keys it.
+
+    Returns:
+        The segment.
+    """
+    return term.replace("^", "").replace("/", "_over_")
 
 
 def check_sextic_basis() -> list[CheckReport]:
@@ -806,7 +895,18 @@ def check_sextic_basis() -> list[CheckReport]:
     """
     weights, remainder = sextic_resolution()
     live = {name: weight for name, weight in weights.items() if weight != 0}
-    return [
+    reports = [
+        report_identity(
+            name=f"C10 the basis has {SEXTIC_BASIS_SIZE} terms",
+            check_id="gap_series.sextic_basis_size",
+            claim=(
+                f"the counting rule generates {SEXTIC_BASIS_SIZE} monomials, which is "
+                "what the registration's prose says c₆ was resolved onto"
+            ),
+            source=SEXTIC_BASIS_SOURCE,
+            residual=sympy.Integer(len(weights) - SEXTIC_BASIS_SIZE),
+            shown=f"the rule generated {len(weights)} terms",
+        ),
         report_identity(
             name="C10 sextic basis spans c₆",
             check_id="gap_series.sextic_basis_spans",
@@ -816,12 +916,75 @@ def check_sextic_basis() -> list[CheckReport]:
             shown=f"{len(live)} of {len(weights)} basis coefficients are non-zero",
         ),
         report_identity(
-            name="C10 l₆ does not reach the gap",
-            check_id="gap_series.sextic_l6_absent",
-            claim="the l₆ coefficient of c₆ is zero, l₆ entering W only linearly",
-            source=SEXTIC_CUMULANT_SOURCE,
-            residual=weights.get("l6", sympy.Integer(0)),
-            shown=f"[l₆] c₆ = {weights.get('l6', 0)}",
+            name=f"C10 {SEXTIC_LIVE_TERMS} coefficients are non-zero",
+            check_id="gap_series.sextic_live_terms",
+            claim=(
+                f"{SEXTIC_LIVE_TERMS} of the {SEXTIC_BASIS_SIZE} basis coefficients "
+                "are non-zero, the count the registration publishes"
+            ),
+            source=SEXTIC_BASIS_SOURCE,
+            residual=sympy.Integer(len(live) - SEXTIC_LIVE_TERMS),
+            shown=f"{len(live)} non-zero",
+        ),
+    ]
+    # The registration names three coefficients that vanish. Only `l₆` was predicted;
+    # the other two are reported. All three are asserted, since all three are in prose.
+    for term, why in SEXTIC_ZERO_TERMS.items():
+        reports.append(
+            report_identity(
+                name=f"C10 [{term}] c₆ = 0",
+                check_id=f"gap_series.sextic_{_slug(term)}_absent",
+                claim=f"the {term} coefficient of c₆ is zero, {why}",
+                source=(
+                    SEXTIC_CUMULANT_SOURCE if term == "l6" else SEXTIC_BASIS_SOURCE
+                ),
+                residual=weights.get(term, sympy.Integer(0)),
+                shown=f"[{term}] c₆ = {weights.get(term, 0)}",
+            )
+        )
+    return reports
+
+
+def check_counting_rule_against_the_known_orders() -> list[CheckReport]:
+    """C14: the rule reproduces the bases already registered, without being told them.
+
+    `research/gate_d4_registration.md` fixed `c₄`'s basis at seven terms on 2026-08-07
+    from a dimensional argument, and `c₂` occupies two. The rule that generated `c₆`'s
+    eighteen is asked for both, and its answer is compared against the seven this module
+    already lists by hand for the quartic. A rule that reproduces neither is a rule
+    fitted to the one case it was written for.
+    """
+    inverse = sympy.Symbol("u", positive=True)
+    by_hand = quartic_basis_by_hand(inverse)
+    generated = dimensional_basis(ORDER)
+    hand_terms = {
+        sympy.expand(term.subs(inverse, 1 / RBAR)) for term in by_hand.values()
+    }
+    rule_terms = {sympy.expand(term) for term in generated.values()}
+    return [
+        report_identity(
+            name="C14 the rule gives c₂ two terms",
+            check_id="gap_series.counting_rule_at_order_two",
+            claim="the counting rule generates two monomials at σ², as c₂ occupies",
+            source=SEXTIC_BASIS_SOURCE,
+            residual=sympy.Integer(len(dimensional_basis(2)) - 2),
+            shown=f"order 2: {sorted(dimensional_basis(2))}",
+        ),
+        report_identity(
+            name="C14 the rule gives c₄ seven terms",
+            check_id="gap_series.counting_rule_at_order_four",
+            claim="the counting rule generates the registration's seven at σ⁴",
+            source=SEXTIC_BASIS_SOURCE,
+            residual=sympy.Integer(len(generated) - len(by_hand)),
+            shown=f"order 4: {len(generated)} generated, {len(by_hand)} listed",
+        ),
+        report_identity(
+            name="C14 the rule's c₄ basis is the listed one",
+            check_id="gap_series.counting_rule_matches_the_quartic_basis",
+            claim="the generated monomials at σ⁴ are the seven listed by hand",
+            source=SEXTIC_BASIS_SOURCE,
+            residual=sympy.Integer(len(hand_terms ^ rule_terms)),
+            shown=f"symmetric difference: {sorted(map(str, hand_terms ^ rule_terms))}",
         ),
     ]
 
@@ -833,7 +996,7 @@ def check_sextic_cumulant_reach() -> list[CheckReport]:
     contribute nothing. The document this cites opened with a table saying otherwise for
     the fifth, and its amendment is what is checked here.
     """
-    terms = cumulant_terms(SEXTIC_ORDER, upto=6)
+    terms = cumulant_terms(SEXTIC_ORDER, upto=SEXTIC_ORDER)
     return [
         report_identity(
             name=f"C11 κ{index} does not reach σ⁶",
@@ -843,9 +1006,9 @@ def check_sextic_cumulant_reach() -> list[CheckReport]:
                 f"bound admitting only m ≤ 4"
             ),
             source=SEXTIC_CUMULANT_SOURCE,
-            residual=sympy.expand(terms[index]).coeff(SIGMA, 6),
+            residual=sympy.expand(terms[index]).coeff(SIGMA, SEXTIC_ORDER),
             shown=f"[σ⁶] κ{index}/{index}! = "
-            f"{sympy.expand(terms[index]).coeff(SIGMA, 6)}",
+            f"{sympy.expand(terms[index]).coeff(SIGMA, SEXTIC_ORDER)}",
         )
         for index in (5, 6)
     ]
@@ -865,7 +1028,10 @@ def check_sextic_arms_agree() -> list[CheckReport]:
     generating = averaged_gap(SEXTIC_ORDER)
     recursion = exact_predictive_expectation(
         truncate(
-            sum(cumulant_terms(SEXTIC_ORDER, upto=6).values(), sympy.Integer(0)),
+            sum(
+                cumulant_terms(SEXTIC_ORDER, upto=SEXTIC_ORDER).values(),
+                sympy.Integer(0),
+            ),
             SEXTIC_ORDER,
         ),
         SEXTIC_ORDER,
@@ -958,6 +1124,7 @@ def run_checks() -> list[CheckReport]:
         check_exact_predictive_is_required,
         check_quartic_basis,
         check_sextic_basis,
+        check_counting_rule_against_the_known_orders,
         check_sextic_cumulant_reach,
         check_sextic_arms_agree,
         check_odd_orders_vanish,
