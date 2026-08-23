@@ -19,6 +19,14 @@ import numpy as np
 from scipy.integrate import quad
 from scipy.optimize import brentq, minimize_scalar
 
+from research.explorations.operating_point import (
+    BETA,
+    DECADES,
+    F_STAR,
+    LN10,
+    SIGMA_P,
+)
+
 __all__ = [
     "BETA",
     "REGISTERED",
@@ -27,14 +35,9 @@ __all__ = [
     "optimum",
 ]
 
-LN10 = np.log(10)
-
-#: The registered total error budget on the fitted exponent.
-BETA = 0.05
-
 #: What `research/gate_d4_registration.md` records at `k_min = 10` and `β = 0.05`, as
 #: `(D*, f*, σ_p)`. The calibration below is pinned to the first of these.
-REGISTERED = (0.520, 0.0488, 0.0359)
+REGISTERED = (DECADES, F_STAR, SIGMA_P)
 
 #: The registration's ratio of its first-order envelope to the exact integral, at
 #: `f = 0.02`, keyed by `D`. Reproducing this is what licenses the integral below.
@@ -43,6 +46,11 @@ REGISTERED_RATIOS = {1.0: 1.71, 2.0: 1.27, 3.0: 1.16}
 
 def ols_bias(fraction: float, decades: float, exponent: int) -> float:
     """The exact bias an unmodelled term leaves in an OLS log-log exponent.
+
+    `noise_model._slope_shift` computes the same `Cov(v, ·)/Var(v)` functional on a
+    shifted domain. The two stay separate deliberately: each module is the record of
+    what its write-up ran, each is verified against its own independent arm, and a
+    shared helper would let an edit to one silently move the other's published numbers.
 
     The correction is `−fraction·e^{exponent·u}` with `u = ln σ − ln σ_max`, so `u = 0`
     is the top edge and the correction is exactly `fraction` of the leading term there.
@@ -102,14 +110,25 @@ def largest_f(decades: float, exponent: int, budget: float) -> float:
     )
 
 
+def _bias_budget(noise_constant: float, decades: float) -> float | None:
+    """What the total budget leaves for bias once the noise term is spent.
+
+    `None` where the noise alone meets or exceeds `BETA`, so the objective and the
+    post-optimisation read cannot disagree about where that plateau starts.
+    """
+    noise = noise_constant / decades
+    if noise >= BETA:
+        return None
+    return float(np.sqrt(BETA**2 - noise**2))
+
+
 def _negative_threshold(
     decades: float, noise_constant: float, exponent: int, power: float
 ) -> float:
     """Minus `T` up to constants, `T` going as `f**power · 10**(−2D)`."""
-    noise = noise_constant / decades
-    if noise >= BETA:
+    budget = _bias_budget(noise_constant, decades)
+    if budget is None:
         return 0.0
-    budget = float(np.sqrt(BETA**2 - noise**2))
     return -(largest_f(decades, exponent, budget) ** power) * 10 ** (-2 * decades)
 
 
@@ -135,9 +154,15 @@ def optimum(
         options={"xatol": 1e-6},
     )
     decades = float(found.x)
-    noise = noise_constant / decades
-    fraction = largest_f(decades, exponent, float(np.sqrt(BETA**2 - noise**2)))
-    return decades, fraction, noise
+    budget = _bias_budget(noise_constant, decades)
+    if budget is None:
+        # The objective is a flat zero on this plateau, so the minimiser's point is
+        # arbitrary and no window satisfies the constraint.
+        raise ValueError(
+            f"the noise term {noise_constant / decades:.4f} already fills the budget "
+            f"{BETA} at D = {decades:.4f}, so no window satisfies the constraint"
+        )
+    return decades, largest_f(decades, exponent, budget), noise_constant / decades
 
 
 def main() -> None:

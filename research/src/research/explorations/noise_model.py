@@ -23,21 +23,34 @@ the gap growing as `σ²` while the bound does not.
 import numpy as np
 from scipy.integrate import quad
 
+from research.explorations.operating_point import (
+    BETA,
+    DECADES,
+    K_MIN,
+    LN10,
+    PUBLISHED_SIGMA_P,
+    SIGMA_P,
+)
+
 __all__ = [
+    "LN10",
     "REGISTERED",
+    "fitted_shift",
     "independent_random",
+    "independent_random_corrected",
     "systematic_offset",
     "systematic_tracking",
     "systematic_worst_case",
+    "unweighted_standard_error",
+    "weighted_standard_error",
 ]
 
-LN10 = np.log(10)
 
 #: The registered operating point: `(k_min, D*, σ_p)`.
-REGISTERED = (10.0, 0.520, 0.0359)
+REGISTERED = (K_MIN, DECADES, SIGMA_P)
 
 
-def _relative_error(point: float, k: float) -> float:
+def relative_error(point: float, k: float) -> float:
     """`ε(v)`, the bound's size relative to the gap at `v`."""
     return float(np.exp(-2.0 * point) / k)
 
@@ -150,7 +163,7 @@ def systematic_offset(k: float, decades: float) -> float:
     Returns:
         The shift in the fitted exponent. Independent of `N`.
     """
-    return abs(_slope_shift(lambda point: _relative_error(point, k), decades))
+    return abs(_slope_shift(lambda point: relative_error(point, k), decades))
 
 
 def systematic_tracking(k: float, decades: float) -> float:
@@ -189,7 +202,7 @@ def systematic_worst_case(k: float, decades: float) -> float:
     mean_point = width / 2
 
     def weighted(point: float) -> float:
-        return abs(point - mean_point) * _relative_error(point, k)
+        return abs(point - mean_point) * relative_error(point, k)
 
     # Split at the kink. `quad` across `|v - v̄|` misses by a few parts in ten thousand,
     # which is small and is still the integrator being asked the wrong question.
@@ -228,17 +241,11 @@ def fitted_shift(field, decades: float, samples: int) -> float:
 def main() -> None:
     """Print the readings, identify the estimator, and check every claim by fitting."""
     k, decades, registered = REGISTERED
-    print(f"at the registered point: k = {k:g}, D = {decades}, beta = 0.05")
+    print(f"at the registered point: k = {k:g}, D = {decades}, beta = {BETA}")
 
     print("\n  which estimator did the registration's sigma_p come from?")
     print("  it says heteroscedastic weights; its numbers say otherwise.")
-    published = (
-        (5.0, 0.4343, 0.089),
-        (10.0, 0.4343, 0.045),
-        (30.0, 0.4343, 0.015),
-        (10.0, 0.520, 0.0359),
-    )
-    for k_i, d_i, value in published:
+    for k_i, d_i, value in PUBLISHED_SIGMA_P:
         plain = unweighted_standard_error(k_i, d_i, 60)
         weighted = weighted_standard_error(k_i, d_i, 60)
         print(
@@ -268,11 +275,11 @@ def main() -> None:
     print("\n  measured by running the fit, sign kept, no linearisation:")
     for label, field in (
         ("tracking", lambda point: 1.0 / k),
-        ("constant offset", lambda point: _relative_error(point, k)),
+        ("constant offset", lambda point: relative_error(point, k)),
         (
             "worst case",
             lambda point: (
-                float(np.sign(point - decades * LN10 / 2)) * _relative_error(point, k)
+                float(np.sign(point - decades * LN10 / 2)) * relative_error(point, k)
             ),
         ),
     ):
@@ -280,20 +287,22 @@ def main() -> None:
             shift = fitted_shift(field, decades, samples)
             print(f"    {label:<16} N={samples:>6}: {shift:+.4f}")
 
-    print("\n  against the total budget beta = 0.05, unweighted:")
+    print(f"\n  against the total budget beta = {BETA}, unweighted:")
     for label, value in (
         ("tracking the gap", tracking),
         ("constant offset", offset),
         ("worst case", worst),
     ):
-        verdict = "inside" if value < 0.05 else "OVER BUDGET on its own"
-        print(f"    {label:<20} {value:.4f} = {value / 0.05:5.1%} of beta, {verdict}")
+        verdict = "inside" if value < BETA else "OVER BUDGET on its own"
+        print(
+            f"    {label:<20} {value:.4f} = {value / BETA:5.1%} of beta, {verdict}"
+        )
 
     # Checks. The exact fit must reproduce the integral to the linearisation, must not
     # move with N, and must order the three fields the way the envelope argument says.
-    exact_offset = fitted_shift(lambda p: _relative_error(p, k), decades, 50000)
+    exact_offset = fitted_shift(lambda p: relative_error(p, k), decades, 50000)
     exact_worst = fitted_shift(
-        lambda p: float(np.sign(p - decades * LN10 / 2)) * _relative_error(p, k),
+        lambda p: float(np.sign(p - decades * LN10 / 2)) * relative_error(p, k),
         decades,
         50000,
     )
@@ -301,7 +310,7 @@ def main() -> None:
     assert abs(abs(exact_offset) - offset) / offset < 0.05
     assert abs(abs(exact_worst) - worst) / worst < 0.05
     assert abs(exact_worst) > worst, "linearising understates the worst field"
-    coarse = fitted_shift(lambda p: _relative_error(p, k), decades, 50)
+    coarse = fitted_shift(lambda p: relative_error(p, k), decades, 50)
     assert abs(abs(coarse) - abs(exact_offset)) < 5e-4, (coarse, exact_offset)
     assert worst >= offset >= tracking
     assert tracking < 1e-12

@@ -1,5 +1,8 @@
+import pytest
+
 import research.explorations.c6_window as window
 import research.explorations.noise_model as noise
+import research.explorations.operating_point as point
 import research.explorations.sigma_max_edge as edge
 
 
@@ -12,11 +15,13 @@ def test_the_window_exploration_runs_and_its_assertions_hold(capsys):
     assert "D moves by a factor of 0.895" in printed
 
 
-def test_the_exploration_reports_no_warrant():
-    # It is not a check suite and must not look like one: nothing here may be collected
-    # into the manifest or read as carrying a warrant.
-    assert not hasattr(window, "run_checks")
-    assert not any(name.endswith("_SOURCE") for name in dir(window))
+@pytest.mark.parametrize("module", [window, noise, edge])
+def test_no_exploration_reports_a_warrant(module):
+    # The invariant is the package's, stated in explorations/__init__.py, so it is
+    # checked over the package rather than over whichever module was written first.
+    # A `run_checks` or a `_SOURCE` is the shape that would let one be collected.
+    assert not hasattr(module, "run_checks")
+    assert not any(name.endswith("_SOURCE") for name in dir(module))
 
 
 def test_the_noise_model_exploration_runs_and_its_assertions_hold(capsys):
@@ -31,11 +36,13 @@ def test_the_noise_model_exploration_runs_and_its_assertions_hold(capsys):
 def test_a_deterministic_error_does_not_average_away():
     # The claim the write-up rests on: a thousandfold increase in samples leaves the
     # fitted exponent where it was, where the random model would drop it 30-fold.
-    k, decades = 10.0, 0.520
-    offset = noise.systematic_offset  # noqa: F841  named for the reader
-    field = lambda point: noise._relative_error(point, k)  # noqa: E731
-    coarse = noise.fitted_shift(field, decades, 50)
-    fine = noise.fitted_shift(field, decades, 50_000)
+    k, decades = point.K_MIN, point.DECADES
+
+    def constant_offset(v):
+        return noise.relative_error(v, k)
+
+    coarse = noise.fitted_shift(constant_offset, decades, 50)
+    fine = noise.fitted_shift(constant_offset, decades, 50_000)
     assert abs(coarse - fine) < 5e-4, (coarse, fine)
     random_coarse = noise.independent_random(k, decades, 50)
     random_fine = noise.independent_random(k, decades, 50_000)
@@ -58,11 +65,11 @@ def test_the_registered_sigma_p_is_unweighted():
 
 
 def test_the_random_formula_carries_a_decades_for_nats_slip():
-    k, decades, samples = 10.0, 0.520, 345
+    k, decades, samples = point.K_MIN, point.DECADES, 345
     written = noise.independent_random(k, decades, samples)
     corrected = noise.independent_random_corrected(k, decades, samples)
     exact = noise.unweighted_standard_error(k, decades, samples)
-    assert abs(written / corrected - noise.LN10) < 1e-9
+    assert abs(written / corrected - point.LN10) < 1e-9
     assert abs(corrected - exact) / exact < 0.01
 
 

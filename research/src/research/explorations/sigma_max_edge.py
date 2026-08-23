@@ -148,13 +148,19 @@ def main() -> None:
     tail = sextic_window_factor(np.array([1e3, 1e4, 1e5]))
     assert np.all(np.diff(tail) > 0), "above the pole it rises towards the limit"
     assert abs(tail[-1] - limit) / limit < 1e-4, (tail[-1], limit)
-    above = sextic_window_factor(np.linspace(SEXTIC_ZERO + 1e-6, 1e6, 200001))
-    assert above.min() > sextic_window_factor(np.array([KAPPA_MIN]))[0], (
-        "nothing above the pole dips below the floor's value"
-    )
-    print(f"\n  large-kappa limit of the sextic factor: {limit:.6f}")
-    print("  checks passed: it rises to the pole, and never returns below the floor,")
-    print("  so kappa_min is the binding cell whatever ceiling the sweep takes")
+
+    # Log-spaced, not linear. A linear grid from the pole to 1e6 steps by about five and
+    # skips the dip entirely, which is the only part of the range this claim is about.
+    above_grid = np.geomspace(SEXTIC_ZERO * (1 + 1e-9), 1e6, 400001)
+    above = sextic_window_factor(above_grid)
+    dip, at = float(above.min()), float(above_grid[int(np.argmin(above))])
+    floor_value = float(sextic_window_factor(np.array([KAPPA_MIN]))[0])
+    print(f"\n  above the pole the factor dips to {dip:.6f} at kappa = {at:.4f}")
+    print(f"  and rises to {limit:.6f} as kappa grows; the floor's value is "
+          f"{floor_value:.6f}")
+    assert dip > floor_value, (dip, at, floor_value)
+    print("  checks passed: it rises to the pole, dips to a minimum well above the")
+    print("  floor's value, and so kappa_min binds whatever ceiling the sweep takes")
 
 
 if __name__ == "__main__":
