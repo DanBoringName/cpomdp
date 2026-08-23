@@ -685,11 +685,14 @@ what makes the timing checkable.
       of a small rational. Section 7 of the registration holds it, the disclosure that the
       run preceded its registration, and the out-of-sample runs on the other families,
       where `tanh` fires.
-- [~] `T` is what remains of this line. **`k_min` was never outstanding** and this said
-      otherwise: the AMENDMENT of 2026-08-07 registers `k_min = 10`, `β = 0.05`, D2's
-      interval at `2 ± 0.5` and `X = 0.1`, and registers `D` as an expression in `k`
-      evaluated at `k_min`, which gives `D* = 0.520` and `f* = 0.0488`. With `c₂` and
-      `c₄` in closed form along the ridge, `T = f·c₂²/|c₄|·10^(−2D)` is an evaluation.
+- [~] **`T` has a registered form and no value, and is parked until PR-7.** `k_min` was
+      never outstanding and this line said otherwise: the AMENDMENT of 2026-08-07
+      registers `k_min = 10`, `β = 0.05`, D2's interval at `2 ± 0.5` and `X = 0.1`, and
+      registers `D` as an expression in `k` evaluated at `k_min`. What remains is `f*`,
+      re-derived under the sextic edge, which needs a statistical term that two findings
+      put in question. Both turn on the reference filter's error *shape*, which is a
+      property of a filter PR-7 builds. The DECISION of 2026-08-23 records what unparks
+      it and what does not.
 - [x] **The sweep's lower bound.** Declared at `κ_min = 0.1`, rationalised rather than
       derived, with its revision condition bounded in advance (ADR-049). The argument is
       D2's second leg, registered before `c₆` existed.

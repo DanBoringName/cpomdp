@@ -1465,3 +1465,32 @@ checks first ran at `88afd7c`, which is what both now name.
 `tests/test_provenance_ordering.py` passed throughout, both wrong refs still preceding
 their measurement. Ordering is what that test asks about, and whether a ref carries the
 claim it is cited for is a separate question it does not put.
+
+### DECISION 2026-08-23: `T` is parked, and what unparks it
+
+`T` has a registered form and no value. It stays that way until the reference filter
+exists, which is PR-7's.
+
+**What is left.** `f*` has to be re-derived under the sextic edge, the registered
+`f* = 0.0488` having been optimised against the quartic one. That re-derivation needs the
+statistical term, and the statistical term is in question on two counts recorded above
+and in `research/d2_noise_model_exploration.md`: this document states the estimator two
+ways, and its published `σ_p` values match only one of them; and its stated formula
+`ε√12/(D√N)` carries decades where nats are needed.
+
+**Why waiting is not deferral.** Both counts turn on the same unknown. `δ_ref` is a
+certified bound on a deterministic error, so what it does to a fitted exponent depends on
+the error's *shape* across the window, not on its size at a point. A shape is a property
+of a filter. Until one exists there is nothing to measure, and the honest range on the
+exponent's error runs from zero to twice the whole budget.
+
+Settling `σ_p` now would mean choosing among readings of a quantity nobody has observed,
+and then registering `f*` and `T` on top of it.
+
+**What unparks it.** The reference filter, with its error measured across the window
+rather than bounded at a point. `Cov(v, ε)/Var(v)` on the measured field is then the
+statistical term, and it carries no `N`.
+
+**What does not.** Nothing about the gate's difficulty, and no reading of `T` that would
+follow from one branch rather than another. Parking moves no number: everything already
+registered stands, including `κ_min`, the sextic edge and the form `T` takes under it.
