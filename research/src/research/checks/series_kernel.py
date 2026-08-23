@@ -572,6 +572,13 @@ def exact_predictive_expectation(expression: sympy.Expr, order: int) -> sympy.Ex
     neither integral needs the other's result and the order between them does not
     matter.
 
+    The powers of the innovation series are accumulated one at a time and truncated at
+    each step, the same way `increment_series` builds its powers of `h`. Substituting
+    the series into every power at once and expanding afterwards carries the whole
+    product before it is cut, which is affordable at `σ⁴` and is not at `σ⁶`. Truncation
+    is a projection and `σ` degrees only rise under multiplication, so cutting early
+    cannot lose a term the result keeps.
+
     Args:
         expression: a polynomial in `ν`, with coefficients free of it.
         order: the highest power of `σ` to keep in the result.
@@ -579,7 +586,20 @@ def exact_predictive_expectation(expression: sympy.Expr, order: int) -> sympy.Ex
     Returns:
         The expectation, truncated.
     """
-    substituted = truncate(expression.subs(NU, innovation_series(order)), order)
+    innovation = innovation_series(order)
+    polynomial = sympy.Poly(sympy.expand(expression), NU)
+    powers: dict[int, sympy.Expr] = {0: sympy.Integer(1)}
+    running: sympy.Expr = sympy.Integer(1)
+    for degree in range(1, polynomial.degree() + 1):
+        running = truncate(running * innovation, order)
+        powers[degree] = running
+    substituted = sum(
+        (
+            truncate(coefficient * powers[int(monomial[0])], order)
+            for monomial, coefficient in polynomial.terms()
+        ),
+        sympy.Integer(0),
+    )
     over_sensor = truncate(gaussian_expectation(substituted, Z2), order)
     return truncate(gaussian_expectation(over_sensor, Z1), order)
 
