@@ -51,6 +51,7 @@ from collections.abc import Callable, Sequence
 from functools import cache
 
 import sympy
+from sympy.utilities.iterables import partitions
 
 from research.checks.series_kernel import (
     EXPANSION_SOURCE,
@@ -58,6 +59,8 @@ from research.checks.series_kernel import (
     L2,
     L3,
     L4,
+    L5,
+    L6,
     NU,
     RBAR,
     SIGMA,
@@ -88,8 +91,16 @@ __all__ = [
 #: against a literal, so a further order is this constant plus new stages.
 ORDER = 4
 
+#: The order the sextic checks work at. Held apart from `ORDER` so the quartic checks
+#: keep both their expansions and their cost, and only what needs `σ⁶` pays for it.
+SEXTIC_ORDER = 6
+
 #: The commit these checks were first measured at.
 _MEASURED_REF = "1888ad4"
+
+#: The commit at which `DERIVATIVE_ORDER` reached six and the sextic expansion first
+#: became computable in this tree.
+_SEXTIC_MEASURED_REF = "5ce7695"
 
 #: Where the closed form `c₂` was derived independently of this series. Registered
 #: 2026-08-07, nine days before this suite measured against it.
@@ -131,6 +142,33 @@ CUMULANT_SOURCE = Source(
         registered_at="99e3c34",
         measured_at=_MEASURED_REF,
         registered="Step 4, the gap as half the variance at leading order",
+    ),
+)
+
+#: Where the sextic basis and its counting rule are derived, ahead of any run of it.
+SEXTIC_BASIS_SOURCE = Source(
+    correspondence=(
+        "research/c6_hand_derivation.md, section 'The dimensional basis': the "
+        "eighteen-term basis, its counting rule, and the parity check"
+    ),
+    provenance=Provenance(
+        registered_at="018ccc7",
+        measured_at=_SEXTIC_MEASURED_REF,
+        registered="the dimensional basis, its counting rule and the eighteen terms",
+    ),
+)
+
+#: Where the reach of each cumulant is derived. The amendment supersedes the table the
+#: same document opened with, and says so rather than replacing it.
+SEXTIC_CUMULANT_SOURCE = Source(
+    correspondence=(
+        "research/c6_hand_derivation.md, AMENDMENT 2026-08-23: a joint cumulant of m "
+        "factors reaches σ^N only if m ≤ N/2 + 1"
+    ),
+    provenance=Provenance(
+        registered_at="018ccc7",
+        measured_at=_SEXTIC_MEASURED_REF,
+        registered="the connectivity bound on which cumulants reach an order",
     ),
 )
 
@@ -691,6 +729,181 @@ def check_scale_covariance(
     ]
 
 
+@cache
+def sextic_coefficient() -> sympy.Expr:
+    """`c₆`, the averaged gap's `σ⁶` coefficient.
+
+    Returns:
+        The coefficient, in free `l₁..l₆` and a symbolic `R̄`.
+    """
+    return sympy.expand(averaged_gap(SEXTIC_ORDER).coeff(SIGMA, 6))
+
+
+@cache
+def sextic_basis() -> dict[str, sympy.Expr]:
+    """The eighteen monomials `c₆` may be built from, keyed by name.
+
+    Generated from the counting rule rather than listed: for each power `k` of `1/R̄`
+    the admissible log-derivative monomials are the partitions of `6 − 2k`, and `k`
+    stops below three because a term carrying no log-derivative would survive a constant
+    `R`, where the gap is identically zero.
+
+    Returns:
+        Each basis term, keyed by a readable name.
+    """
+    carried = {1: L1, 2: L2, 3: L3, 4: L4, 5: L5, 6: L6}
+    basis: dict[str, sympy.Expr] = {}
+    for inverse_power in range(3):
+        for part in partitions(6 - 2 * inverse_power):
+            name = "".join(
+                f"l{order}^{count}" if count > 1 else f"l{order}"
+                for order, count in sorted(part.items())
+            )
+            term: sympy.Expr = RBAR ** (-inverse_power)
+            for order, count in part.items():
+                term *= carried[order] ** count
+            basis[name + (f"/R^{inverse_power}" if inverse_power else "")] = term
+    return basis
+
+
+@cache
+def sextic_resolution() -> tuple[dict[str, sympy.Expr], sympy.Expr]:
+    """`c₆` resolved onto the eighteen-term basis, with whatever is left over.
+
+    The basis is derived in `research/c6_hand_derivation.md` and generated here from its
+    counting rule. Resolving is what a derivation can get wrong, so the remainder is
+    returned rather than assumed away.
+
+    Returns:
+        The coefficient of each basis term, and what is left after removing all of
+        them.
+    """
+    inverse = sympy.Symbol("u", positive=True)  # 1/R̄, so the basis is polynomial
+    basis = {
+        name: sympy.expand(term.subs(RBAR, 1 / inverse))
+        for name, term in sextic_basis().items()
+    }
+    variables = (L1, L2, L3, L4, L5, L6, inverse)
+    target = sympy.Poly(
+        sympy.expand(sextic_coefficient().subs(RBAR, 1 / inverse)), *variables
+    )
+    weights = {
+        name: target.coeff_monomial(sympy.Poly(term, *variables).monoms()[0])
+        for name, term in basis.items()
+    }
+    identified = sum(
+        (weight * basis[name] for name, weight in weights.items()),
+        sympy.Integer(0),
+    )
+    return weights, sympy.expand(target.as_expr() - identified)
+
+
+def check_sextic_basis() -> list[CheckReport]:
+    """C10: `c₆` lies in the span of the eighteen-term basis, with nothing left over.
+
+    A non-zero remainder refutes either the basis or the expansion. It is reported as
+    the residual rather than absorbed into a nineteenth term.
+    """
+    weights, remainder = sextic_resolution()
+    live = {name: weight for name, weight in weights.items() if weight != 0}
+    return [
+        report_identity(
+            name="C10 sextic basis spans c₆",
+            check_id="gap_series.sextic_basis_spans",
+            claim="c₆ resolves onto the eighteen-term basis with no remainder",
+            source=SEXTIC_BASIS_SOURCE,
+            residual=remainder,
+            shown=f"{len(live)} of {len(weights)} basis coefficients are non-zero",
+        ),
+        report_identity(
+            name="C10 l₆ does not reach the gap",
+            check_id="gap_series.sextic_l6_absent",
+            claim="the l₆ coefficient of c₆ is zero, l₆ entering W only linearly",
+            source=SEXTIC_CUMULANT_SOURCE,
+            residual=weights.get("l6", sympy.Integer(0)),
+            shown=f"[l₆] c₆ = {weights.get('l6', 0)}",
+        ),
+    ]
+
+
+def check_sextic_cumulant_reach() -> list[CheckReport]:
+    """C11: which cumulants reach `σ⁶`, against the connectivity bound.
+
+    `κ_m` reaches `σ^N` only if `m ≤ N/2 + 1`, so at `σ⁶` the fifth and sixth cumulants
+    contribute nothing. The document this cites opened with a table saying otherwise for
+    the fifth, and its amendment is what is checked here.
+    """
+    terms = cumulant_terms(SEXTIC_ORDER, upto=6)
+    return [
+        report_identity(
+            name=f"C11 κ{index} does not reach σ⁶",
+            check_id=f"gap_series.sextic_cumulant_{index}_absent",
+            claim=(
+                f"the σ⁶ coefficient of κ{index}/{index}! is zero, the connectivity "
+                f"bound admitting only m ≤ 4"
+            ),
+            source=SEXTIC_CUMULANT_SOURCE,
+            residual=sympy.expand(terms[index]).coeff(SIGMA, 6),
+            shown=f"[σ⁶] κ{index}/{index}! = "
+            f"{sympy.expand(terms[index]).coeff(SIGMA, 6)}",
+        )
+        for index in (5, 6)
+    ]
+
+
+def check_sextic_arms_agree() -> list[CheckReport]:
+    """C13: the two routes to the gap agree at `σ⁶`.
+
+    One expands `log E_q[e^W] − E_q[W]` through the generating function and uses no
+    cumulant identity. The other sums `κ_n/n!` from the cumulant recursion. Neither
+    calls the other, and both are averaged under the same exact predictive, so the
+    agreement separates the two routes rather than the kernel beneath them.
+
+    This is what licenses `EXACT` for the sextic. Two independently computed closed
+    forms agreeing is the licence; a tolerance being met is not.
+    """
+    generating = averaged_gap(SEXTIC_ORDER)
+    recursion = exact_predictive_expectation(
+        truncate(
+            sum(cumulant_terms(SEXTIC_ORDER, upto=6).values(), sympy.Integer(0)),
+            SEXTIC_ORDER,
+        ),
+        SEXTIC_ORDER,
+    )
+    return [
+        report_identity(
+            name=f"C13 arms agree at σ^{power}",
+            check_id=f"gap_series.sextic_arms_agree_sigma{power}",
+            claim=(
+                f"the generating function and the cumulant recursion give the same "
+                f"σ^{power} coefficient"
+            ),
+            source=SEXTIC_CUMULANT_SOURCE,
+            residual=sympy.expand(
+                generating.coeff(SIGMA, power) - recursion.coeff(SIGMA, power)
+            ),
+            shown=f"[σ^{power}] both routes agree",
+        )
+        for power in (2, 4, 6)
+    ]
+
+
+def check_odd_orders_vanish() -> list[CheckReport]:
+    """C12: the averaged gap carries no odd power of `σ` below `σ⁶`."""
+    gap = averaged_gap(SEXTIC_ORDER)
+    return [
+        report_identity(
+            name=f"C12 σ^{power} coefficient vanishes",
+            check_id=f"gap_series.odd_order_{power}_vanishes",
+            claim=f"the averaged gap has no σ^{power} term",
+            source=SEXTIC_BASIS_SOURCE,
+            residual=sympy.expand(gap.coeff(SIGMA, power)),
+            shown=f"[σ^{power}] E[KL] = {sympy.expand(gap.coeff(SIGMA, power))}",
+        )
+        for power in (3, 5)
+    ]
+
+
 def check_exponential_family() -> list[CheckReport]:
     """C7: for `R = A·e^{bx}`, exactly two of the seven basis terms survive.
 
@@ -744,6 +957,10 @@ def run_checks() -> list[CheckReport]:
         check_direction_independence,
         check_exact_predictive_is_required,
         check_quartic_basis,
+        check_sextic_basis,
+        check_sextic_cumulant_reach,
+        check_sextic_arms_agree,
+        check_odd_orders_vanish,
         check_exponential_family,
     )
     reports = [report for stage in stages for report in stage()]
@@ -764,7 +981,10 @@ def _print_setup() -> None:
     fixed = gap_from_definition(ORDER)
     averaged = averaged_gap(ORDER)
     found, remainder = basis_coefficients()
-    print(f"R̄ symbolic, l₁..l₄ free, ORDER = {ORDER}. No family chosen, no numbers.\n")
+    print(
+        f"R̄ symbolic, l₁..l₆ free, ORDER = {ORDER} and {SEXTIC_ORDER}. "
+        "No family chosen, no numbers.\n"
+    )
     print(f"[σ²] KL(y)  = {sympy.factor(fixed.coeff(SIGMA, 2))}")
     print(f"c₂          = {sympy.expand(averaged.coeff(SIGMA, 2))}")
     print(f"c₄          = {sympy.factor(quartic_coefficient())}\n")

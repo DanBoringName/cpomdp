@@ -56,6 +56,9 @@ def _ids(module: str) -> tuple[str, ...]:
 
 
 class TestTheSuitesDeclareDistinctKeys:
+    # Slow since the sextic landed: reading a suite's ids runs it, and gap_series now
+    # carries the σ⁶ expansion. Its two siblings below were already marked.
+    @pytest.mark.slow
     @pytest.mark.parametrize("module", _SUITE_CASES)
     def test_no_two_checks_share_a_key(self, module):
         ids = _ids(module)
@@ -63,6 +66,7 @@ class TestTheSuitesDeclareDistinctKeys:
             check_id for check_id in set(ids) if ids.count(check_id) > 1
         )
 
+    @pytest.mark.slow
     @pytest.mark.parametrize("module", _SUITE_CASES)
     def test_every_key_is_namespaced_to_its_module(self, module):
         ids = _ids(module)
