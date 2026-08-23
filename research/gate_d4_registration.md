@@ -1352,3 +1352,25 @@ and no ordering of commits changes that.
 Recorded rather than repaired. The alternative was to take the decision quietly inside
 the work that produced the coefficient, which is the failure mode the whole registration
 exists to make visible.
+
+### DISCLOSURE 2026-08-23: `N` is undeclared, and `D*` and `f*` rest on it
+
+The statistical term reads `σ_p ≈ ε√12/(D√N)`, so it depends on `N`, the number of `σ`
+samples the D2 fit uses. `N` appears nowhere else in this document and is not declared.
+
+It is not a presentational gap. The amendment that retired the bias-only closed form
+concluded that the bias-only problem is **ill-posed**, `T` being maximised by shrinking
+the window to nothing, and that what makes it well-posed is the noise term diverging as
+`D → 0`. That term is the one carrying `N`. So `D* = 0.520` and `f* = 0.0488` are the
+optimum *at some N*, and this document does not say which.
+
+`N` is also not neutral, on the same terms `D` is not: more samples lower `σ_p`
+monotonically, which loosens the constraint and admits a larger `f`, which raises `T`.
+Nothing here bounds it from above.
+
+Declared on grounds independent of D4, before the propagation behind `σ_p` is recovered.
+Recovering that propagation first and choosing `N` afterwards would be choosing with its
+consequence for `T` already computable.
+
+`research/c6_window_exploration.md` records what this was found by. That file is
+exploratory, uses a stand-in for `σ_p`, and is cited by nothing.
