@@ -504,6 +504,49 @@ def test_a_sensor_noise_that_is_not_positive_definite_is_refused_not_drawn():
         walk_until_the_noise_vanishes()
 
 
+def test_a_process_noise_that_goes_indefinite_is_refused_not_drawn():
+    # The sensor's failure is a NaN. This one is not: the svd draw factors through the
+    # singular values, so a negative eigenvalue is sampled as |λ| and the step returns
+    # a finite, plausible state drawn from the wrong Q. Nothing downstream can tell.
+    def loses_a_direction(mean, params):
+        return jnp.diag(jnp.array([1e-4, 1e-4 * (1.0 - jnp.asarray(mean)[0])]))
+
+    model = LinearGaussianModel(
+        dynamics_matrix=DYNAMICS,
+        observation_matrix=SENSOR,
+        dynamics_noise=[[1e-4, 0.0], [0.0, 1e-4]],
+        observation_noise=[[1e-2]],
+        prior=Belief(mean=[0.0, 0.0], cov=np.eye(2)),
+        control_matrix=CONTROL,
+        dynamics_noise_model=CallableProcessNoise(loses_a_direction, ()),
+    )
+    # It probes positive-semi-definite at the origin, so it constructs.
+    world = World(model, initial_state=[2.0, 0.0])
+
+    with pytest.raises(ValueError, match=r"dynamics_noise_model\.noise_at"):
+        world.step([0.0], jax.random.PRNGKey(0))
+
+
+def test_a_noiseless_dynamics_direction_is_still_legal():
+    # The guard above must not reach past indefinite into semi-definite: a state
+    # dimension with no process noise is a deterministic direction, not an error.
+    def noiseless_second_direction(mean, params):
+        return jnp.diag(jnp.array([1e-4, 0.0]))
+
+    model = LinearGaussianModel(
+        dynamics_matrix=DYNAMICS,
+        observation_matrix=SENSOR,
+        dynamics_noise=[[1e-4, 0.0], [0.0, 1e-4]],
+        observation_noise=[[1e-2]],
+        prior=Belief(mean=[0.0, 0.0], cov=np.eye(2)),
+        control_matrix=CONTROL,
+        dynamics_noise_model=CallableProcessNoise(noiseless_second_direction, ()),
+    )
+    world = World(model, initial_state=[1.0, 1.0])
+
+    assert world.step([1.0], jax.random.PRNGKey(0)).shape == (1,)
+
+
 def test_a_well_behaved_state_dependent_sensor_still_draws():
     world = World(_sensed_model(), initial_state=[1.0, 1.0])
     assert world.step([1.0], jax.random.PRNGKey(0)).shape == (1,)

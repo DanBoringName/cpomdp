@@ -148,11 +148,16 @@ class World:
             mean_next = mean_next + model.control_matrix @ action
 
         process = model.dynamics_noise_model
-        dynamics_noise = (
-            model.dynamics_noise
-            if process is None or process.is_fixed
-            else process.noise_at(mean_next)
-        )
+        if process is None or process.is_fixed:
+            dynamics_noise = model.dynamics_noise
+        else:
+            dynamics_noise = process.noise_at(mean_next)
+            # A process noise is only probed at construction, at one state. The svd
+            # draw below factors through the *singular* values, so a direction that
+            # has gone negative by the state the walk reaches is drawn as |λ| rather
+            # than as NaN: a finite, plausible state sampled from the wrong Q, with
+            # nothing raised. Semi-definite stays legal here, indefinite does not.
+            validate_covariance(dynamics_noise, "dynamics_noise_model.noise_at(x)")
         # svd rather than the cholesky default: dynamics_noise is only required
         # positive *semi*-definite, so a noiseless state dimension is legal here.
         self._state = jax.random.multivariate_normal(
