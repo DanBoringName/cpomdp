@@ -690,24 +690,20 @@ what makes the timing checkable.
       interval at `2 ± 0.5` and `X = 0.1`, and registers `D` as an expression in `k`
       evaluated at `k_min`, which gives `D* = 0.520` and `f* = 0.0488`. With `c₂` and
       `c₄` in closed form along the ridge, `T = f·c₂²/|c₄|·10^(−2D)` is an evaluation.
-- [ ] **The sweep's lower bound is what `T` now waits on, and it is not declared
-      anywhere.** `c₂²/|c₄| = κ/(3|κ − 2|)` is monotone increasing on `(0, 2)`, so the
-      registered rule evaluating `T` at the `κ` minimising the window width selects the
-      sweep's lower edge whatever it is. Over `κ ∈ [0.05, 1]` that is a factor of 39 on
-      `T`. One number, declarable on D2-leg grounds, and independent of everything else
-      here.
+- [x] **The sweep's lower bound.** Declared at `κ_min = 0.1`, rationalised rather than
+      derived, with its revision condition bounded in advance (ADR-049). The argument is
+      D2's second leg, registered before `c₆` existed.
 - [x] `c₆` in closed form, so the binding truncation is no longer unmeasured.
       `c₆ = −κ(7κ + 9)(13κ − 3)/(48R₀³)` on the ridge, resolved onto an eighteen-term
       basis with remainder zero, `PROVED` at `EXACT` on two agreeing arms. `c₄` vanishes
       at `κ = 2` where `σ_max` diverges; `c₆` there is `−529/24`, and the two never
       vanish together. The derivation is `research/c6_hand_derivation.md`, registered
       before the suite computed anything.
-- [ ] **`σ_max` is still open, and the reason to defer it has got worse rather than
-      better.** Either redefine the edge against `c₆` or keep `f` as a bound that
-      subtraction makes slack. The 2026-08-07 entry deferred this because choosing then
-      meant choosing with the refit's outcome in view. Both branches can now be priced
-      exactly, so whoever chooses does so with more of the answer visible, and the
-      registration records that rather than repairing it.
+- [x] **`σ_max` against `c₆`.** The subtract branch had already fired on a rule
+      registered before its input was visible, so this discharged a consequence rather
+      than taking a choice. The edge is `σ_max⁴ = f·c₂/|c₆|` and `T` goes as `√f` rather
+      than `f`. The registered `f* = 0.0488` was optimised against the quartic and does
+      not carry across.
 
 **The checks that back it live in `research.checks`.** Standalone modules run with
 `--check`, not on the `pytest` path, and each prints under `warrantlib`'s vocabulary.

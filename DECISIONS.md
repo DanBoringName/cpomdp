@@ -3257,3 +3257,63 @@ would lose it on the next rewrite.
 - **The pattern applies beyond `κ_min`.** `f`, `D` and `k_min` were declared on stated
   grounds without this treatment, and a later amendment may owe them the same three
   parts.
+
+## ADR-050 — the code that produced a number is committed beside it
+
+**Date:** 2026-08-23
+**Status:** Accepted
+
+### The failure this closes, which already happened
+
+The scripts that produced the original 28 `c₄` cases were lost. Only prose survived them,
+so the numbers could be read and not checked. `research.checks` exists because of it, and
+`research/gate_d4_registration.md` records the loss rather than passing over it.
+
+That fix was scoped to warranted checks. It leaves out everything that decides a *form*
+rather than reporting a result: the probe that ruled an option out, the calibration that
+fixed a constant, the sweep that showed a parameter did not move. Those reach registrations
+and write-ups too, and until now they lived in a scratch directory.
+
+### The decision
+
+**A number that reached a registration, a write-up or a `PROVED` row has its derivation
+committed and runnable.**
+
+Two homes, and the difference between them is warrant rather than importance.
+
+**`research/src/research/checks/`** for anything carrying one. It emits `CheckReport`s, is
+declared in the manifest, and reconciles against it.
+
+**`research/src/research/explorations/`** for the rest. An exploration reports no warrant
+and appears in no manifest, because it has none to report. It is committed, linted, typed,
+and run by a test, so it cannot rot into a file nobody executes. `explorations/__init__.py`
+states the invariant and a parametrised test enforces it over every module in the package.
+
+### A→B→C, not just C
+
+A reviewer following how a number was reached wants the order: what was tried, what it
+ruled out, what replaced it. So an intermediate step is committed too, **including one
+that turned out wrong**. A superseded exploration keeps its file and gains a dated note
+naming what replaced it, on the terms the protected files already work.
+
+This has bitten twice in the work that prompted it. `research/c6_hand_derivation.md`
+predicted `κ₅` contributes at `σ⁶` and it does not, and the amendment recording that is
+what a reader needs to see beside the correction. `research/c6_window_exploration.md`
+claimed two bias arms were equal where they are a factor of two apart, and the assertion
+in the module is what caught it.
+
+### Assert, do not only print
+
+An exploration's claims are asserted inside it, so running it is checking it. A module
+printing a table nobody verifies has recorded a number without recording whether it is
+true, which is the shape of the failure the standing rule on prose already names.
+
+### Consequences
+
+- **A scratch file is not a record.** Anything under `/tmp` or a session scratchpad is
+  gone by the time a reviewer asks, which is when it is wanted.
+- **The cost is a test per exploration and a line in the write-up naming the module.**
+  Both are cheap beside re-deriving a number whose method was lost.
+- **It does not make an exploration authoritative.** No warrant, no manifest entry, no
+  citation from a check. `research/d2_noise_model_exploration.md` puts a registered term
+  in question and settles nothing, which is what an exploration is for.
