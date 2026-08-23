@@ -1,4 +1,4 @@
-"""The gap's expansion coefficients, symbolically: `c₂` and `c₄`.
+"""The gap's expansion coefficients, symbolically: `c₂`, `c₄` and `c₆`.
 
 The inference gap at a fixed observation is a cumulant difference::
 
@@ -19,15 +19,16 @@ the checks below test the derivation against them rather than describing what it
 section 7 discloses the sequence at its head. The content is unaffected and the
 scheduling is not, and a reader is entitled to judge them separately.
 
-**Nothing here is fitted.** No floats and no numeric value for `R̄`. `ℓ₁..ℓ₄` are free
+**Nothing here is fitted.** No floats and no numeric value for `R̄`. `ℓ₁..ℓ₆` are free
 symbols throughout the derivation, so there is no quantity a measured number could be
 substituted into. That is what makes the agreement with the fit evidence rather than
 circularity, and it is checkable by reading the module.
 
-One check does choose a family, and it is a consequence rather than an input. C7 sets
-`ℓ₂ = ℓ₃ = ℓ₄ = 0` to specialise the *derived* general form to `R = A·e^{bx}`. The
-substitution happens after the coefficient exists, never before it, so it cannot supply
-the answer it checks.
+Two checks do choose a family, and in both the choice is a consequence rather than an
+input. C7 sets `ℓ₂ = ℓ₃ = ℓ₄ = 0` to specialise the *derived* general form to
+`R = A·e^{bx}`. C14 substitutes `R = R₀ + κx²` at `μ* = √(R₀/κ)` to reach the ridge the
+registration's `σ_max` edge is defined on. Both substitutions happen after the
+coefficient exists, never before it, so neither can supply the answer it checks.
 
 **The predictive is the exact one.** `ν = σz₁ + √R̄·e^{δ/2}·z₂` is the generative
 process written out, not a model of it. Collapsing it to `N(0, R̄)` leaves `c₂` alone
@@ -82,10 +83,16 @@ __all__ = [
     "averaged_gap",
     "basis_coefficients",
     "cumulant_terms",
+    "dimensional_basis",
     "gap_from_definition",
     "half_variance",
     "quartic_coefficient",
+    "resolve_onto_basis",
+    "ridge_specialisation",
     "run_checks",
+    "sextic_basis",
+    "sextic_coefficient",
+    "sextic_resolution",
 ]
 
 #: The working order in `σ`. Everything below is written against it rather than
@@ -159,6 +166,42 @@ SEXTIC_ZERO_TERMS = {
     "l4/R^1": "reported rather than predicted",
     "l2/R^2": "reported rather than predicted",
 }
+
+#: The commit at which the ridge specialisation below first ran.
+_RIDGE_MEASURED_REF = "9edf053"
+
+#: Where the ridge is registered: the family, the operating point, and the two
+#: coefficients already in closed form when the document landed. `c₆` is *not* there,
+#: which is why the sextic report below carries its own source rather than this one.
+RIDGE_SOURCE = Source(
+    correspondence=(
+        "research/c6_hand_derivation.md, 'Why the sextic is wanted': the ridge "
+        "R(x) = R₀ + κx² at μ* = √(R₀/κ), with R̄ = 2R₀, c₂ and c₄ specialised"
+    ),
+    provenance=Provenance(
+        registered_at="018ccc7",
+        measured_at=_RIDGE_MEASURED_REF,
+        registered="the ridge R(x) = R₀ + κx² at μ*, with c₂ = κ/(4R₀) and "
+        "c₄ = 3κ(κ − 2)/(16R₀²)",
+    ),
+)
+
+#: `c₆` on the ridge had no registration to be measured against. It was transcribed
+#: into `sigma_max_edge.py` and three documents from a derivation nobody committed,
+#: which is the practice ADR-050 rules out. Registering and measuring at one commit is
+#: what actually happened here, and the marker is what stops it reading as a prediction.
+RIDGE_SEXTIC_SOURCE = Source(
+    correspondence=(
+        "research/src/research/explorations/sigma_max_edge.py, c6(): the closed form "
+        "the σ_max edge, the binding cell and the tail limit are all computed from"
+    ),
+    provenance=Provenance(
+        registered_at=_RIDGE_MEASURED_REF,
+        measured_at=_RIDGE_MEASURED_REF,
+        registered="c₆ = −κ(7κ + 9)(13κ − 3)/(48R₀³) on the ridge, derived here for "
+        "the first time rather than predicted ahead of it",
+    ),
+)
 
 #: Where the sextic basis and its counting rule are derived, ahead of any run of it.
 SEXTIC_BASIS_SOURCE = Source(
@@ -938,8 +981,12 @@ def check_sextic_basis() -> list[CheckReport]:
                 source=(
                     SEXTIC_CUMULANT_SOURCE if term == "l6" else SEXTIC_BASIS_SOURCE
                 ),
-                residual=weights.get(term, sympy.Integer(0)),
-                shown=f"[{term}] c₆ = {weights.get(term, 0)}",
+                # Indexed rather than `.get`: a SEXTIC_ZERO_TERMS key that stops
+                # matching `dimensional_basis` would otherwise report PROVED at
+                # residual 0, and the check-id and manifest entry are keyed off
+                # the same dict, so nothing else would fire either.
+                residual=weights[term],
+                shown=f"[{term}] c₆ = {weights[term]}",
             )
         )
     return reports
@@ -1109,6 +1156,83 @@ def check_exponential_family() -> list[CheckReport]:
     ]
 
 
+@cache
+def ridge_specialisation() -> dict[str, sympy.Expr]:
+    """`c₂`, `c₄` and `c₆` on the ridge of `d4-family-v1`.
+
+    Specialises the *derived* general forms to `R(x) = R₀ + κx²` at `μ* = √(R₀/κ)`.
+    The substitution happens after each coefficient exists, exactly as C7 does for the
+    exponential family, so it cannot supply the answer it is checked against.
+
+    Returns:
+        Each coefficient, keyed `c2`, `c4`, `c6`, in `κ` and `R₀`.
+    """
+    curvature, floor, position = sympy.symbols("kappa R_0 x", positive=True)
+    reading = floor + curvature * position**2
+    operating_point = sympy.sqrt(floor / curvature)
+    carried = {
+        symbol: sympy.diff(sympy.log(reading), position, order).subs(
+            position, operating_point
+        )
+        for order, symbol in enumerate((L1, L2, L3, L4, L5, L6), start=1)
+    }
+    carried[RBAR] = reading.subs(position, operating_point)
+    return {
+        "c2": sympy.simplify(
+            sympy.expand(averaged_gap(ORDER).coeff(SIGMA, 2)).subs(carried)
+        ),
+        "c4": sympy.simplify(quartic_coefficient().subs(carried)),
+        "c6": sympy.simplify(sextic_coefficient().subs(carried)),
+    }
+
+
+def check_ridge_specialisation() -> list[CheckReport]:
+    """C14: the ridge closed forms, against the registration and against the code.
+
+    `c₂` and `c₄` were in closed form on the ridge before this ran, so those two are
+    predictions and are reported that way. `c₆` was not: it reached the registration
+    as a hand transcription in `sigma_max_edge.py` with no derivation committed
+    anywhere. This is that derivation, and every number downstream of it — the σ_max
+    edge, the binding cell, the −529/24 at κ = 2, the 3/13 root and the tail limit —
+    is computed from the expression checked here.
+
+    Returns:
+        One report per coefficient.
+    """
+    curvature, floor = sympy.symbols("kappa R_0", positive=True)
+    derived = ridge_specialisation()
+    return [
+        report_identity(
+            name="C14 ridge c₂",
+            check_id="gap_series.ridge_c2",
+            claim="on the ridge, c₂ = κ/(4R₀)",
+            source=RIDGE_SOURCE,
+            residual=derived["c2"] - curvature / (4 * floor),
+            shown=f"c₂|ridge = {sympy.factor(derived['c2'])}",
+        ),
+        report_identity(
+            name="C14 ridge c₄",
+            check_id="gap_series.ridge_c4",
+            claim="on the ridge, c₄ = 3κ(κ − 2)/(16R₀²), zero at κ = 2",
+            source=RIDGE_SOURCE,
+            residual=derived["c4"] - 3 * curvature * (curvature - 2) / (16 * floor**2),
+            shown=f"c₄|ridge = {sympy.factor(derived['c4'])}",
+        ),
+        report_identity(
+            name="C14 ridge c₆",
+            check_id="gap_series.ridge_c6",
+            claim=(
+                "on the ridge, c₆ = −κ(7κ + 9)(13κ − 3)/(48R₀³), the form "
+                "sigma_max_edge.c6 hard-codes at R₀ = 1"
+            ),
+            source=RIDGE_SEXTIC_SOURCE,
+            residual=derived["c6"]
+            + curvature * (7 * curvature + 9) * (13 * curvature - 3) / (48 * floor**3),
+            shown=f"c₆|ridge = {sympy.factor(derived['c6'])}",
+        ),
+    ]
+
+
 def run_checks() -> list[CheckReport]:
     """Run every coefficient check, in the order the derivation needs them.
 
@@ -1129,6 +1253,7 @@ def run_checks() -> list[CheckReport]:
         check_sextic_arms_agree,
         check_odd_orders_vanish,
         check_exponential_family,
+        check_ridge_specialisation,
     )
     reports = [report for stage in stages for report in stage()]
     reports += check_scale_covariance(
@@ -1171,7 +1296,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         Zero when every identity holds, one otherwise.
     """
     parser = argparse.ArgumentParser(
-        description="The gap's expansion coefficients, symbolically: c₂ and c₄."
+        description="The gap's expansion coefficients, symbolically: c₂, c₄ and c₆."
     )
     parser.add_argument("--check", action="store_true", help="run the check suite")
     arguments = parser.parse_args(argv)

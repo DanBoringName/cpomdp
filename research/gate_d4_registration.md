@@ -1494,3 +1494,36 @@ statistical term, and it carries no `N`.
 **What does not.** Nothing about the gate's difficulty, and no reading of `T` that would
 follow from one branch rather than another. Parking moves no number: everything already
 registered stands, including `κ_min`, the sextic edge and the form `T` takes under it.
+
+### AMENDMENT 2026-08-23: the corrected ref count was itself wrong, and `c₆` now has a committed derivation
+
+Two things, both appended rather than fixed in place.
+
+**The count.** The AMENDMENT above ends "Five `PROVED` rows carried it", of
+`SEXTIC_CUMULANT_SOURCE`. Six do: `gap_series.sextic_l6_absent`, the two from
+`check_sextic_cumulant_reach` (`κ₅`, `κ₆`) and the three from `check_sextic_arms_agree`
+(`σ²`, `σ⁴`, `σ⁶`). The number was not asserted anywhere, which is why correcting one
+count left the next one wrong.
+
+**The ridge closed forms.** `c₆ = −κ(7κ + 9)(13κ − 3)/(48R₀³)` reached this document,
+`BUILD_PLAN.md` and `sigma_max_edge.py` as a hand transcription. No committed code
+substituted `R(x) = R₀ + κx²` at `μ* = √(R₀/κ)` into the derived coefficient to produce
+it, which is the practice ADR-050 registers in this same change. `gap_series.ridge_c2`,
+`ridge_c4` and `ridge_c6` now do.
+
+The transcription was **correct**. All three coefficients reproduce, at general `R₀`:
+
+```text
+c₂ = κ/(4R₀)      c₄ = 3κ(κ − 2)/(16R₀²)      c₆ = −κ(7κ + 9)(13κ − 3)/(48R₀³)
+```
+
+so nothing registered on top of `c₆` moves — not `σ_max⁴ = f·c₂/|c₆|`, not the `−529/24`
+at `κ = 2`, not the `3/13` root, not the `(1/4)^{3/2}/√(91/48)` tail limit, and not the
+conclusion that the declared floor binds whatever ceiling the sweep takes. What changes
+is that a slip in any of them would now fail a check rather than survive the suite.
+
+`c₂` and `c₄` were in closed form on the ridge before this ran, in
+`research/c6_hand_derivation.md` at `018ccc7`, so those two rows are predictions and
+carry that ref. `c₆` was not registered anywhere ahead of it, so its row registers and
+measures at one commit and says so rather than borrowing `018ccc7`, which is the error
+the AMENDMENT above corrects.
