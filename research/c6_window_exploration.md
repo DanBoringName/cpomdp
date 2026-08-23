@@ -5,6 +5,13 @@ below rest on a stand-in for a quantity the registration derives differently, st
 "What this cannot support" at the end. They are here to record what was looked at and
 what it suggests, not to be quoted.
 
+## The code
+
+`research/src/research/explorations/c6_window.py`, run with
+`python -m research.explorations.c6_window`. It prints every number below and asserts the
+two validations, so a reader can disagree with the method rather than with the prose. It
+reports no warrant and is in no manifest: an exploration has none to report.
+
 ## The question
 
 `research/gate_d4_registration.md` registers `D* = 0.520` and `f* = 0.0488` at
@@ -32,10 +39,16 @@ registration's first-order envelope `−3f/L²` at `f = 0.02`:
 | registration | 1.71 | 1.27 | 1.16 |
 
 **The sextic arm satisfies a scaling identity.** The first-order envelope generalises to
-`−(6/m)·f/L²`, giving `−3f/L²` at `m = 2` and `−1.5f/L²` at `m = 4`. The exact integral
-depends on `m` and `L` only through `m·L`, so `m = 4` at `D` equals `m = 2` at `2D`. The
-computed ratios agree to four figures across both, which is what makes the sextic arm
-more than an untested copy of the quartic one.
+`−(6/m)·f/L²`, giving `−3f/L²` at `m = 2` and `−1.5f/L²` at `m = 4`. Rescaling `u` by the
+exponent turns the exact integral into `bias(m, L) = m·bias(1, m·L)`, so the `m = 4` bias
+at `D` is **twice** the `m = 2` bias at `2D`, and the two arms are related exactly rather
+than approximately. The computed ratio is 2.000000 at both widths tried.
+
+An earlier draft of this file claimed the two were *equal* rather than a factor of two
+apart. They are not, and the assertion in
+`research.explorations.c6_window` is what caught it: the ratio to the first-order
+envelope is what matches between the arms, and that was misread as the biases matching.
+Nothing else in this file rested on the wrong version.
 
 ## What it suggests
 
