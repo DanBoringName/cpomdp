@@ -168,7 +168,7 @@ SEXTIC_ZERO_TERMS = {
 }
 
 #: The commit at which the ridge specialisation below first ran.
-_RIDGE_MEASURED_REF = "9edf053"
+_RIDGE_MEASURED_REF = "471ba44"
 
 #: Where the ridge is registered: the family, the operating point, and the two
 #: coefficients already in closed form when the document landed. `c₆` is *not* there,
