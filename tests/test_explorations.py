@@ -1,5 +1,6 @@
 import research.explorations.c6_window as window
 import research.explorations.noise_model as noise
+import research.explorations.sigma_max_edge as edge
 
 
 def test_the_window_exploration_runs_and_its_assertions_hold(capsys):
@@ -63,3 +64,27 @@ def test_the_random_formula_carries_a_decades_for_nats_slip():
     exact = noise.unweighted_standard_error(k, decades, samples)
     assert abs(written / corrected - noise.LN10) < 1e-9
     assert abs(corrected - exact) / exact < 0.01
+
+
+def test_the_edge_exploration_runs_and_its_assertions_hold(capsys):
+    edge.main()
+    printed = capsys.readouterr().out
+    assert "floor binds" in printed
+    assert "c6 vanishes" in printed
+
+
+def test_the_declared_floor_binds_under_either_edge():
+    # T is evaluated at the kappa minimising the window, so which kappa that is decides
+    # the number. Under both edges it is the floor, for every ceiling tried.
+    for factor in (edge.quartic_window_factor, edge.sextic_window_factor):
+        for ceiling in (0.5, 1.0, 4.0, 10.0):
+            kappa, _ = edge.binding_kappa(factor, edge.KAPPA_MIN, ceiling)
+            assert abs(kappa - edge.KAPPA_MIN) < 1e-4, (factor.__name__, ceiling, kappa)
+
+
+def test_the_two_edges_never_fail_together():
+    # c4 vanishes at 2 and c6 at 3/13, so one edge is always available.
+    assert abs(edge.c4(edge.QUARTIC_ZERO)) < 1e-12
+    assert abs(edge.c6(edge.SEXTIC_ZERO)) < 1e-12
+    assert abs(edge.c6(edge.QUARTIC_ZERO)) > 1.0
+    assert abs(edge.c4(edge.SEXTIC_ZERO)) > 0.01

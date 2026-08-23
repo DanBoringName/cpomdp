@@ -1405,3 +1405,41 @@ values, on the same terms the `tanh` fire is not un-fired by better inputs.
 not neutral and does not push one way. Lowering it lowers `T`, which makes GATE-D4 easier
 to pass, since the gate passes on `gap > T`. The same move makes D1 and D2 harder to be
 tests at all, since they need `δ_ref ≤ T/k_min`. No value of `κ_min` is good for both.
+
+### AMENDMENT 2026-08-23: `σ_max` against `c₆`, and the shape `T` takes under it
+
+Discharging a consequence rather than taking a choice. The dilute-versus-subtract rule
+registered 2026-08-07 fired for **subtract**, before its input was visible. Subtraction
+removes the quartic from the fit, so the leading term the fit still carries is the
+sextic, and `σ_max` was defined against the quartic. `c₆` is now in closed form.
+
+**The edge.** `σ_max` is where the leading unmodelled term reaches a fraction `f` of the
+leading one. Under subtraction that term is `c₆σ⁶`, so `|c₆|σ_max⁶ = f·c₂σ_max²`:
+
+```text
+registered   σ_max² = f·c₂/|c₄|      T = f · c₂²/|c₄| · 10^(−2D)
+amended      σ_max⁴ = f·c₂/|c₆|      T = c₂^(3/2) · √(f/|c₆|) · 10^(−2D)
+```
+
+`T` was linear in `f` and is now a square root of it. `f` is unchanged in meaning, the
+fraction the leading unmodelled term reaches at the top edge, and changed in referent,
+that term now being the sextic rather than the quartic. **The registered `f* = 0.0488`
+does not carry across**, having been optimised against the quartic. It is re-derived or
+it is not used.
+
+**The edge is defined wherever the sweep goes.** `c₄` vanishes at `κ = 2` and `c₆` at
+`κ = 3/13`. They never coincide, so one of the two always sets an edge.
+
+**The binding cell is still the floor.** `T` is evaluated at the `κ` minimising the
+window width, which under the amended edge minimises `c₂^{3/2}/√|c₆|`. That factor rises
+from the floor to a pole at `κ = 3/13`, dips after it, and rises again to
+`(1/4)^{3/2}/√(91/48) ≈ 0.0908` as `κ` grows. It never returns below its value at
+`κ_min = 0.1`, so the declared floor binds whatever ceiling the sweep takes, under both
+the registered edge and this one.
+
+`research/src/research/explorations/sigma_max_edge.py` computes it and asserts the two
+claims above. It evaluates no `T`: the form is registered here, and the value comes after.
+
+**What `T` still waits on.** `f*` re-derived under the sextic edge, which needs the
+statistical term settled, which `research/d2_noise_model_exploration.md` puts in question
+on two counts this document has not answered.
