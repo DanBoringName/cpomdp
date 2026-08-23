@@ -285,9 +285,12 @@ class TestACarriedModelObjectAgreesWithThePlainFields:
 
     def test_an_agreeing_fixed_sensor_constructs(self):
         sensor = FixedSensor([[1.0, 0.0]], observation_noise=[[1.0]])
-        assert LinearGaussianModel(
-            **_valid_kwargs(observation_model=sensor)
-        ).observation_model is sensor
+        assert (
+            LinearGaussianModel(
+                **_valid_kwargs(observation_model=sensor)
+            ).observation_model
+            is sensor
+        )
 
     def test_a_callable_sensor_with_a_different_matrix_does_not_construct(self):
         sensor = CallableSensor([[0.0, 1.0]], _flat_noise, ())

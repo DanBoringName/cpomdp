@@ -156,8 +156,10 @@ def main() -> None:
     dip, at = float(above.min()), float(above_grid[int(np.argmin(above))])
     floor_value = float(sextic_window_factor(np.array([KAPPA_MIN]))[0])
     print(f"\n  above the pole the factor dips to {dip:.6f} at kappa = {at:.4f}")
-    print(f"  and rises to {limit:.6f} as kappa grows; the floor's value is "
-          f"{floor_value:.6f}")
+    print(
+        f"  and rises to {limit:.6f} as kappa grows; the floor's value is "
+        f"{floor_value:.6f}"
+    )
     assert dip > floor_value, (dip, at, floor_value)
     print("  checks passed: it rises to the pole, dips to a minimum well above the")
     print("  floor's value, and so kappa_min binds whatever ceiling the sweep takes")

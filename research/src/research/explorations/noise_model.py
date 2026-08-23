@@ -294,9 +294,7 @@ def main() -> None:
         ("worst case", worst),
     ):
         verdict = "inside" if value < BETA else "OVER BUDGET on its own"
-        print(
-            f"    {label:<20} {value:.4f} = {value / BETA:5.1%} of beta, {verdict}"
-        )
+        print(f"    {label:<20} {value:.4f} = {value / BETA:5.1%} of beta, {verdict}")
 
     # Checks. The exact fit must reproduce the integral to the linearisation, must not
     # move with N, and must order the three fields the way the envelope argument says.
