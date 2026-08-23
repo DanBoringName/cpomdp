@@ -21,7 +21,7 @@ Notation, matching ``research/c4_hand_derivation.md``:
 `s`          prior variance, `σ²`
 `ν`          innovation, `y − μ`
 `h`          displacement from the **prior** mean, `x − μ`
-`δ`          `l(x) − l(μ)` where `l = log R`, carried as `l₁..l₄`
+`δ`          `l(x) − l(μ)` where `l = log R`, carried as `l₁..l₆`
 `z`          standard normal draw under `q`
 ===========  ==========================================================
 
@@ -47,7 +47,7 @@ Run the checks::
     uv run --no-sync python -m research.checks.series_kernel --check
 
 Symbolic throughout. No floats, no numerics, and no functional form chosen for `R`: the
-log-derivatives `l₁..l₄` stay free symbols and `R̄` stays symbolic and is never set to
+log-derivatives `l₁..l₆` stay free symbols and `R̄` stays symbolic and is never set to
 one. A check that passes only at `R̄ = 1` is a check that has lost a variable.
 """
 
@@ -124,10 +124,11 @@ MU = sympy.Symbol("mu", real=True)
 
 #: Taylor coefficients of `l = log R` at the prior mean: `l₁ = l'(μ)` and so on. Free
 #: symbols, so no family is chosen and no check can pass by accident of one.
-L1, L2, L3, L4 = sympy.symbols("l1 l2 l3 l4", real=True)
+L1, L2, L3, L4, L5, L6 = sympy.symbols("l1 l2 l3 l4 l5 l6", real=True)
 
-#: Highest log-derivative carried.
-DERIVATIVE_ORDER = 4
+#: Highest log-derivative carried. `σ^n` needs `l_n`, so this bounds the order any
+#: expansion here can be asked for.
+DERIVATIVE_ORDER = 6
 
 #: Prior variance.
 PRIOR_VARIANCE = SIGMA**2
@@ -353,7 +354,7 @@ def displacement_series(order: int) -> sympy.Expr:
 
 @cache
 def log_noise_increment() -> sympy.Expr:
-    """`δ = l(μ + h) − l(μ)` as a Taylor polynomial in `h`, to fourth order.
+    """`δ = l(μ + h) − l(μ)` as a Taylor polynomial in `h`, to `DERIVATIVE_ORDER`.
 
     Built by differentiating an *undefined* function and then naming its derivatives,
     rather than by writing the coefficients down. That way the `1/k!` weights are
@@ -375,7 +376,7 @@ def log_noise_increment() -> sympy.Expr:
     )
     named = {
         sympy.Derivative(applied, (MU, order)): coefficient
-        for order, coefficient in enumerate((L1, L2, L3, L4), start=1)
+        for order, coefficient in enumerate((L1, L2, L3, L4, L5, L6), start=1)
     }
     return sympy.expand(taylor.subs(named))
 
@@ -384,11 +385,11 @@ def log_noise_increment() -> sympy.Expr:
 def increment_series(order: int) -> sympy.Expr:
     """`δ` with `h` expanded, as a polynomial in `σ`.
 
-    The powers of `h` are accumulated one at a time and truncated at each step, so the
-    fourth-order term never carries the full product before it is cut.
+    The powers of `h` are accumulated one at a time and truncated at each step, so no
+    term carries the full product before it is cut.
 
     `h` is `O(σ)`, so the `k`-th term `l_k·h^k/k!` is `O(σ^k)` and an expansion to
-    `σ^order` needs log-derivatives up to `l_order`. Only `l₁..l₄` are carried, so an
+    `σ^order` needs log-derivatives up to `l_order`. Only `l₁..l₆` are carried, so an
     order above `DERIVATIVE_ORDER` would silently drop the terms it cannot express and
     return a polynomial that looks complete. That is the failure this rejects.
 
@@ -412,7 +413,7 @@ def increment_series(order: int) -> sympy.Expr:
     displacement = displacement_series(order)
     power = displacement
     total = L1 * power
-    for degree, coefficient in enumerate((L2, L3, L4), start=2):
+    for degree, coefficient in enumerate((L2, L3, L4, L5, L6), start=2):
         power = truncate(power * displacement, order)
         total += coefficient * power / sympy.factorial(degree)
     return truncate(total, order)
@@ -934,9 +935,9 @@ def check_assembled_against_series() -> list[CheckReport]:
     the working order.
 
     The `series` arm is built here rather than imported, so it stays independent of the
-    module being checked. It runs to `σ⁴`, which is where `DERIVATIVE_ORDER` stops the
-    truncation path rather than where `series` stops being affordable: only `l₁..l₄` are
-    carried, so `σ⁵` has no expressible left-hand side to compare against. Raising the
+    module being checked. It runs to `σ⁶`, which is where `DERIVATIVE_ORDER` stops the
+    truncation path rather than where `series` stops being affordable: only `l₁..l₆` are
+    carried, so `σ⁷` has no expressible left-hand side to compare against. Raising the
     constant is what moves this check, not a faster CAS.
 
     **Order conventions differ, and the difference is real.** ``sympy.series(expr, x, 0,
@@ -1032,7 +1033,7 @@ def run_checks() -> list[CheckReport]:
 
 def _print_setup() -> None:
     """Print the symbolic objects the checks are about, for the bare run."""
-    print("R̄ symbolic, l₁..l₄ free. No family chosen, no numbers.\n")
+    print("R̄ symbolic, l₁..l₆ free. No family chosen, no numbers.\n")
     print(f"K        = {kalman_gain()}   -> {gain_series(4)}")
     print(f"√v_q     = {posterior_sd()}   -> {posterior_sd_series(3)}")
     print(f"δ(h)     = {log_noise_increment()}")

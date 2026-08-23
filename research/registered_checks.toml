@@ -18,6 +18,8 @@ checks = [
   "series_kernel.assembled_w_to_sigma2",
   "series_kernel.assembled_w_to_sigma3",
   "series_kernel.assembled_w_to_sigma4",
+  "series_kernel.assembled_w_to_sigma5",
+  "series_kernel.assembled_w_to_sigma6",
   "series_kernel.exponential_expansion",
   "series_kernel.first_cumulant_is_the_mean",
   "series_kernel.gain_expansion",
