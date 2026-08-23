@@ -234,13 +234,42 @@ class LinearGaussianModel:
                 f"control_matrix must have {n} rows to match the {n}-D state, "
                 f"got shape {self.control_matrix.shape}"
             )
-        if self.observation_model is not None and not isinstance(
-            self.observation_model, ObservationModel
-        ):
-            raise TypeError(
-                f"observation_model must be an ObservationModel, "
-                f"got {type(self.observation_model).__name__}"
+        if self.observation_model is not None:
+            if not isinstance(self.observation_model, ObservationModel):
+                raise TypeError(
+                    f"observation_model must be an ObservationModel, "
+                    f"got {type(self.observation_model).__name__}"
+                )
+            # An observation_model restates the observation channel, and the consumers
+            # split on which restatement they read: the Kalman filter and the world use
+            # the plain fields when the sensor is fixed, the EFE kernel uses the sensor
+            # whenever one is present. Probe it here so a disagreement is refused at
+            # the one place every consumer passes through.
+            sensor_matrix, sensor_noise = self.observation_model.linearize(
+                self.prior.mean
             )
+            sensor_matrix = jnp.asarray(sensor_matrix)
+            sensor_noise = jnp.asarray(sensor_noise)
+            if not jnp.array_equal(sensor_matrix, self.observation_matrix):
+                raise ValueError(
+                    "observation_model.linearize returns an observation matrix that "
+                    "is not the model's observation_matrix. One of the two would be "
+                    "read depending on the consumer, so they must be the same array."
+                )
+            if sensor_noise.shape != (m, m):
+                raise ValueError(
+                    f"observation_model.linearize must return an {m}x{m} observation "
+                    f"noise to match the {m}-D observation, got shape "
+                    f"{sensor_noise.shape}"
+                )
+            if self.observation_model.is_fixed and not jnp.array_equal(
+                sensor_noise, self.observation_noise
+            ):
+                raise ValueError(
+                    "a fixed observation_model carries an observation noise that is "
+                    "not the model's observation_noise. A state-dependent sensor may "
+                    "vary; a fixed one restates the field and must restate it exactly."
+                )
 
         # dynamics_noise_model (optional): state-dependent Q(x). CallableProcessNoise
         # check its own shape (no n), so probe it here, where n is known.
@@ -256,6 +285,16 @@ class LinearGaussianModel:
                 raise ValueError(
                     f"dynamics_noise_model.noise_at(x) must return an {n}x{n} "
                     f"covariance to match the {n}-D state, got shape {q_probe.shape}"
+                )
+            # The same split as the sensor: a fixed object restates dynamics_noise,
+            # and the EFE kernel reads the object where the filter reads the field.
+            if self.dynamics_noise_model.is_fixed and not jnp.array_equal(
+                q_probe, self.dynamics_noise
+            ):
+                raise ValueError(
+                    "a fixed dynamics_noise_model returns a covariance that is not "
+                    "the model's dynamics_noise. A state-dependent Q(x) may vary; a "
+                    "fixed one restates the field and must restate it exactly."
                 )
 
         # structure (optional): declarative metadata; validated opt-in via
