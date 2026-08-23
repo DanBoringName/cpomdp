@@ -3191,3 +3191,69 @@ so it is set by the requirement above.
 - **The evaluation points are pinned by test, not by comment.** Each is checked against
   an independently drawn sample at the point claimed, and against the same draw at the
   point not claimed.
+
+## ADR-049 — a rationalised parameter is registered with its revision condition bounded
+
+**Date:** 2026-08-23
+**Status:** Accepted
+
+### The instance
+
+`κ_min = 0.1` is declared as the lower bound of the `κ` sweep, and the rule evaluating
+`T` at the `κ` minimising the window width means the floor is the only part of the sweep
+that reaches `T`.
+
+The argument is that D2's second leg needs `κ ≲ 0.1` to resolve, that 0.1 sits below the
+`c₆` zero at `3/13` so the window's upper edge stays defined, and that it holds the
+`μ`-rule inflation at 3×. Every part of that was registered before `c₆` existed and
+before `T` could be evaluated.
+
+That is a defensible reading of an existing constraint. It is not a derivation, and no
+experiment distinguishes 0.1 from a nearby value.
+
+### The decision
+
+**A parameter that is rationalised rather than derived is registered as such, and its
+revision condition is bounded before any result exists.**
+
+**Say the epistemic status.** The registration records `κ_min` as a plausibly weak
+decision in those words. Presenting a chosen number as a forced one is the failure this
+avoids, and it costs nothing to avoid.
+
+**Bound the revision in advance.** "May need revisiting" is honest as an intention and
+useless as a rule: it licenses a change after a disappointing result on the same terms as
+a change after a genuine finding. So the licence is narrowed to a measurement bearing on
+the argument that produced the value, and a gate outcome is excluded by name.
+
+**Say what a revision does to results already obtained.** Nothing. The outcome under the
+declared value stands as obtained, and a re-evaluation is a separate cell carrying both.
+This is ADR-037's treatment of the `tanh` fire generalised: a result is not undone by
+re-running it with inputs chosen after seeing it.
+
+### The incentive is registered too
+
+`κ_min` moves `T`, and `T` has opposite senses for the two things that read it. Lowering
+`κ_min` lowers `T`, which makes GATE-D4 easier to pass and makes D1 and D2 harder to be
+tests at all. Recording that is what lets a later reader check whether it was acted on,
+and the absence of a direction that helps everything is a structural defence rather than
+a rhetorical one.
+
+### Where it is visible
+
+The registration carries the declaration. `Provenance.registered` carries it to every
+printed row once the `T` check exists, that field being one line on what a reviewer finds
+at the registering ref.
+
+It is **not** carried in `warrantlib`. That package is published on its own and knows
+nothing about this programme beyond one historical note. A `κ` belonging to one study has
+no place in a general vocabulary, and the mechanism for saying so from cpomdp already
+exists. Nor is it carried in `research/registered_checks.toml`, which is generated and
+would lose it on the next rewrite.
+
+### Consequences
+
+- **`T` is unblocked on this axis.** What remains is `σ_max` against `c₆`, and the noise
+  model that `research/d2_noise_model_exploration.md` puts in question.
+- **The pattern applies beyond `κ_min`.** `f`, `D` and `k_min` were declared on stated
+  grounds without this treatment, and a later amendment may owe them the same three
+  parts.

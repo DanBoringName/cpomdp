@@ -1374,3 +1374,34 @@ consequence for `T` already computable.
 
 `research/c6_window_exploration.md` records what this was found by. That file is
 exploratory, uses a stand-in for `σ_p`, and is cited by nothing.
+
+### DECLARATION 2026-08-23: `κ_min = 0.1`, rationalised rather than derived
+
+The sweep's lower bound, which the rule evaluating `T` at the `κ` minimising the window
+width selects whatever else the sweep contains. `c₂²/|c₄| = κ/(3|κ − 2|)` rises across
+the range in play, so the floor is the binding cell and nothing above it reaches `T`.
+
+**The argument.** D2's second leg, registered 2026-08-07, sweeps `κ` off the ridge and
+needs `κ ≲ 0.1` to resolve: its slope runs to 2 as `κ → 0` against exactly 1 on the
+ridge, and at `κ = 0.1` the separation is 0.82. A floor of 0.1 also sits below the `c₆`
+zero at `κ = 3/13`, so the window's upper edge is defined across the whole range whichever
+term binds, and it holds the `μ`-rule inflation at 3× where this document still treats it
+as second order.
+
+**What that argument is worth.** It is a defensible reading of a constraint registered
+before `c₆` existed and before `T` was computable. It is not a value the mathematics
+forces. No experiment has been run that could distinguish 0.1 from 0.08 or 0.15, and none
+is planned. **This is a plausibly weak decision and is recorded as one.**
+
+**Revision is licensed by one condition only:** a measurement bearing on where the second
+leg resolves. A gate outcome is not such a measurement, and neither is a `T` that reads
+uncomfortably.
+
+**A revision after any gate result does not revise that result.** The outcome obtained
+under `κ_min = 0.1` stands as obtained. A re-evaluation is a separate cell carrying both
+values, on the same terms the `tanh` fire is not un-fired by better inputs.
+
+**The incentive, stated so a later reader can check whether it was acted on.** `κ_min` is
+not neutral and does not push one way. Lowering it lowers `T`, which makes GATE-D4 easier
+to pass, since the gate passes on `gap > T`. The same move makes D1 and D2 harder to be
+tests at all, since they need `δ_ref ≤ T/k_min`. No value of `κ_min` is good for both.
