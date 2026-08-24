@@ -3354,3 +3354,59 @@ arrives at.
 - **The convention is now stated where it can be checked**: reversal is *Supersedes*,
   accumulation is *Extends*. ADR-048's own header is left as written and corrected by
   this record.
+
+## ADR-052 — the averaged inference gap is built twice, on purpose, for now
+
+**Date:** 2026-08-24
+**Status:** Accepted
+
+### The quantity, and the two places it will live
+
+`E_{y∼p*}[ KL(q ‖ p(x|y)) ]` is the averaged inference gap. R6 is a claim about it, and
+PR-7 requires the reference filter to return it directly.
+
+`research.checks.gap_kernel` already computes it, for the scalar GATE-D4 case, by
+`scipy.integrate.quad`. It pins three conventions that were nearly lost once already:
+reverse direction, `R` frozen at the prior mean, and the average taken under the true
+`p*(y)` rather than the agent's plug-in predictive. It is cited from
+`research/c4_hand_derivation.md` and twice from `research/gate_d4_registration.md`, and it
+stands behind the 28 fitted `c₄` cases.
+
+PR-7's version is general: any grid, any pointwise likelihood, any transition kernel, any
+rung of the ladder. It is a different object with the same integral inside it.
+
+### The decision
+
+Build the general one in `cpomdp.reference` and leave `gap_kernel` alone. Cross-check the
+two on a scalar case in a test, so a divergence between them fails rather than propagates.
+
+Two implementations of one quantity is how numbers drift apart, and this record exists
+because that is a real cost being accepted rather than overlooked. It is accepted because
+the alternative is worse right now. Migrating `gap_kernel` onto the new engine edits a
+module carrying registered provenance for numbers already declared, inside a PR whose
+merge gate is about a filter rather than about `c₄`. A refactor there would put the `c₄`
+cases behind a code path that did not exist when they were measured, and no reader could
+afterwards tell which engine produced them.
+
+The conventions are the thing that must not fork. They belong to the ladder and the
+averaging, not to either implementation, and the cross-check test is what holds them
+together until there is one engine.
+
+### When it gets cut
+
+Not on a date. When the `p*` work is finished and it is settled where that code lives and
+how it splits between the library and `research/`. That question is open today: the
+predictive, its truncation and its error shape are all still being decided, and PR-8's `T`
+is parked on the last of them. Deciding the module boundary before those settle would fix
+it against a shape that has not stopped moving.
+
+### Consequences
+
+- **A number is reachable by two routes**, and the cross-check is the only thing making
+  that safe. If it is ever deleted or relaxed, this decision stops being defensible.
+- **`gap_kernel` keeps its provenance intact.** The `c₄` cases stay behind the engine that
+  measured them, which is what the derivation-code rule asks for.
+- **The new engine carries no warrant on arrival.** It computes a number; nothing declares
+  it until R6 registers one. Until then it is `COMPUTED`, and the word is not "certified".
+- **The debt is tracked, not remembered.** A GitHub issue points here and is closed by the
+  merge, not by the decision.
