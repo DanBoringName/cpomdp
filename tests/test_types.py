@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from cpomdp.observation import FixedSensor
+from cpomdp.observation import CallableSensor, FixedSensor
 from cpomdp.types import Belief, LinearGaussianModel
 
 
@@ -235,7 +235,7 @@ class TestPytreeRegistration:
     def test_model_round_trips_with_an_observation(self):
         # observation is a nullable child like control: a FixedSensor recurses
         # into its own array leaves and is rebuilt on unflatten.
-        sensor = FixedSensor([[1.0, 0.0]], observation_noise=[[0.5]])
+        sensor = FixedSensor([[1.0, 0.0]], observation_noise=[[1.0]])
         m = LinearGaussianModel(**_valid_kwargs(observation_model=sensor))
         leaves, treedef = jax.tree_util.tree_flatten(m)
         restored = jax.tree_util.tree_unflatten(treedef, leaves)
@@ -243,3 +243,85 @@ class TestPytreeRegistration:
         c_out, r_out = restored.observation_model.linearize(jnp.zeros(2))
         np.testing.assert_array_equal(c_out, sensor.observation_matrix)
         np.testing.assert_array_equal(r_out, sensor.observation_noise)
+
+
+def _flat_noise(mean, params):
+    return jnp.array([[1.0]])
+
+
+class _AgreeingFixedProcessNoise:
+    """A DynamicsNoise whose constant equals the baseline model's plain field."""
+
+    is_fixed = True
+
+    def noise_at(self, x):
+        return jnp.array([[0.1, 0.0], [0.0, 0.1]])
+
+
+class _DisagreeingFixedProcessNoise:
+    is_fixed = True
+
+    def noise_at(self, x):
+        return jnp.array([[0.9, 0.0], [0.0, 0.9]])
+
+
+class TestACarriedModelObjectAgreesWithThePlainFields:
+    """One model, one story: an object restating a plain field must restate it exactly.
+
+    The consumers split otherwise. The Kalman filter and the world read the plain fields
+    when the object says it is fixed, while the EFE kernel reads the object whenever one
+    is present, so a disagreement changes the planner's numbers and nobody's else's.
+    """
+
+    def test_a_fixed_sensor_with_a_different_noise_does_not_construct(self):
+        sensor = FixedSensor([[1.0, 0.0]], observation_noise=[[0.5]])
+        with pytest.raises(ValueError, match="observation_noise"):
+            LinearGaussianModel(**_valid_kwargs(observation_model=sensor))
+
+    def test_a_fixed_sensor_with_a_different_matrix_does_not_construct(self):
+        sensor = FixedSensor([[0.0, 1.0]], observation_noise=[[1.0]])
+        with pytest.raises(ValueError, match="observation_matrix"):
+            LinearGaussianModel(**_valid_kwargs(observation_model=sensor))
+
+    def test_an_agreeing_fixed_sensor_constructs(self):
+        sensor = FixedSensor([[1.0, 0.0]], observation_noise=[[1.0]])
+        assert (
+            LinearGaussianModel(
+                **_valid_kwargs(observation_model=sensor)
+            ).observation_model
+            is sensor
+        )
+
+    def test_a_callable_sensor_with_a_different_matrix_does_not_construct(self):
+        sensor = CallableSensor([[0.0, 1.0]], _flat_noise, ())
+        with pytest.raises(ValueError, match="observation_matrix"):
+            LinearGaussianModel(**_valid_kwargs(observation_model=sensor))
+
+    def test_a_callable_sensor_with_a_wrong_shaped_noise_does_not_construct(self):
+        def wide(mean, params):
+            return jnp.eye(2)
+
+        # CallableSensor probes its own noise_fn and refuses this before the model is
+        # even asked. The model's probe is for a protocol implementation that does not
+        # self-check, so this pins the earliest of the two guards.
+        with pytest.raises(ValueError, match=r"\(1, 1\)"):
+            LinearGaussianModel(
+                **_valid_kwargs(
+                    observation_model=CallableSensor([[1.0, 0.0]], wide, ())
+                )
+            )
+
+    def test_an_agreeing_callable_sensor_constructs(self):
+        sensor = CallableSensor([[1.0, 0.0]], _flat_noise, ())
+        LinearGaussianModel(**_valid_kwargs(observation_model=sensor))
+
+    def test_a_fixed_process_noise_with_a_different_value_does_not_construct(self):
+        with pytest.raises(ValueError, match="dynamics_noise"):
+            LinearGaussianModel(
+                **_valid_kwargs(dynamics_noise_model=_DisagreeingFixedProcessNoise())
+            )
+
+    def test_an_agreeing_fixed_process_noise_constructs(self):
+        LinearGaussianModel(
+            **_valid_kwargs(dynamics_noise_model=_AgreeingFixedProcessNoise())
+        )

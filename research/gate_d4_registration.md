@@ -1299,3 +1299,231 @@ the cumulant-moment recursion and the innovation moments are each stated and che
 one commit. Their two refs are identical and the render says the ordering is not
 established by history, which is the same reservation the 2026-08-17 table states in prose
 for its own same-hash rows.
+
+### RESULT 2026-08-23: `c₆` in closed form, and the edge it bounds where `c₄` does not
+
+Derived symbolically on free `l₁..l₆` and a symbolic `R̄`, by the same pipeline that
+produced `c₄` and against the same two arms. `research/c6_hand_derivation.md` registers
+the basis and the cumulant reach at `018ccc7`, before the suite computed either.
+
+**The basis holds.** `c₆` resolves onto the eighteen-term dimensional basis with
+remainder exactly zero, fifteen coefficients non-zero. The counting rule behind it,
+`Σ_{k<n} p(2n − 2k)`, reproduces `c₄`'s registered seven and `c₂`'s two without being
+told them. Three coefficients come out zero: `l₆`, `l₄/R̄` and `l₂/R̄²`. The first was
+predicted, the other two were not and are reported rather than explained.
+
+**Two arms agree.** The generating-function route and the cumulant recursion, neither
+calling the other, agree at `σ²`, `σ⁴` and `σ⁶`. Separately the truncation path agrees
+with `sympy.series` term for term through `σ⁶`, two orders further than before. The
+`EXACT` licence is that agreement, not a tolerance.
+
+**On the ridge of `d4-family-v1`**, with `μ* = √(R₀/κ)` and `R̄ = 2R₀`:
+
+```text
+c₂ =  κ / (4R₀)
+c₄ =  3κ(κ − 2) / (16R₀²)
+c₆ = −κ(7κ + 9)(13κ − 3) / (48R₀³)
+```
+
+`c₅ = 0`, and `σ³` carries nothing either. The gap is even in `σ` through `σ⁶`.
+
+**The κ = 2 problem is real and `c₆` answers it.** `c₄` is identically zero at `κ = 2`,
+where `σ_max = √(f·c₂/|c₄|)` diverges and the quartic bounds nothing. `c₆` there is
+`−529/24`. Its only positive root is `κ = 3/13`, where `c₄` is not zero, so the two never
+vanish together and an edge taken against whichever term binds is defined across the
+whole positive axis.
+
+**`c₂²/|c₄|` is monotone increasing on `(0, 2)`**, so the rule evaluating `T` at the `κ`
+minimising the window width selects the sweep's lower edge whatever that edge is. No
+lower edge is declared. Over `κ ∈ [0.05, 1]` the factor on `T` is 39. That is a
+declaration this document still owes, and it is independent of everything above.
+
+### DISCLOSURE 2026-08-23: the `σ_max` choice is now being made with the numbers visible
+
+The 2026-08-07 entry left `σ_max` open between redefining the edge against `c₆` and
+keeping `f` as a bound that subtraction makes slack, on the grounds that "choosing now is
+choosing with the refit's outcome in view".
+
+That condition has not improved. It has worsened: `c₆` is now in closed form on the
+ridge, so both branches can be priced exactly before either is chosen. Whoever takes the
+decision takes it with more of the answer in view than the entry was written to avoid,
+and no ordering of commits changes that.
+
+Recorded rather than repaired. The alternative was to take the decision quietly inside
+the work that produced the coefficient, which is the failure mode the whole registration
+exists to make visible.
+
+### DISCLOSURE 2026-08-23: `N` is undeclared, and `D*` and `f*` rest on it
+
+The statistical term reads `σ_p ≈ ε√12/(D√N)`, so it depends on `N`, the number of `σ`
+samples the D2 fit uses. `N` appears nowhere else in this document and is not declared.
+
+It is not a presentational gap. The amendment that retired the bias-only closed form
+concluded that the bias-only problem is **ill-posed**, `T` being maximised by shrinking
+the window to nothing, and that what makes it well-posed is the noise term diverging as
+`D → 0`. That term is the one carrying `N`. So `D* = 0.520` and `f* = 0.0488` are the
+optimum *at some N*, and this document does not say which.
+
+`N` is also not neutral, on the same terms `D` is not: more samples lower `σ_p`
+monotonically, which loosens the constraint and admits a larger `f`, which raises `T`.
+Nothing here bounds it from above.
+
+Declared on grounds independent of D4, before the propagation behind `σ_p` is recovered.
+Recovering that propagation first and choosing `N` afterwards would be choosing with its
+consequence for `T` already computable.
+
+`research/c6_window_exploration.md` records what this was found by. That file is
+exploratory, uses a stand-in for `σ_p`, and is cited by nothing.
+
+### DECLARATION 2026-08-23: `κ_min = 0.1`, rationalised rather than derived
+
+The sweep's lower bound, which the rule evaluating `T` at the `κ` minimising the window
+width selects whatever else the sweep contains. `c₂²/|c₄| = κ/(3|κ − 2|)` rises across
+the range in play, so the floor is the binding cell and nothing above it reaches `T`.
+
+**The argument.** D2's second leg, registered 2026-08-07, sweeps `κ` off the ridge and
+needs `κ ≲ 0.1` to resolve: its slope runs to 2 as `κ → 0` against exactly 1 on the
+ridge, and at `κ = 0.1` the separation is 0.82. A floor of 0.1 also sits below the `c₆`
+zero at `κ = 3/13`, so the window's upper edge is defined across the whole range whichever
+term binds, and it holds the `μ`-rule inflation at 3× where this document still treats it
+as second order.
+
+**What that argument is worth.** It is a defensible reading of a constraint registered
+before `c₆` existed and before `T` was computable. It is not a value the mathematics
+forces. No experiment has been run that could distinguish 0.1 from 0.08 or 0.15, and none
+is planned. **This is a plausibly weak decision and is recorded as one.**
+
+**Revision is licensed by one condition only:** a measurement bearing on where the second
+leg resolves. A gate outcome is not such a measurement, and neither is a `T` that reads
+uncomfortably.
+
+**A revision after any gate result does not revise that result.** The outcome obtained
+under `κ_min = 0.1` stands as obtained. A re-evaluation is a separate cell carrying both
+values, on the same terms the `tanh` fire is not un-fired by better inputs.
+
+**The incentive, stated so a later reader can check whether it was acted on.** `κ_min` is
+not neutral and does not push one way. Lowering it lowers `T`, which makes GATE-D4 easier
+to pass, since the gate passes on `gap > T`. The same move makes D1 and D2 harder to be
+tests at all, since they need `δ_ref ≤ T/k_min`. No value of `κ_min` is good for both.
+
+### AMENDMENT 2026-08-23: `σ_max` against `c₆`, and the shape `T` takes under it
+
+Discharging a consequence rather than taking a choice. The dilute-versus-subtract rule
+registered 2026-08-07 fired for **subtract**, before its input was visible. Subtraction
+removes the quartic from the fit, so the leading term the fit still carries is the
+sextic, and `σ_max` was defined against the quartic. `c₆` is now in closed form.
+
+**The edge.** `σ_max` is where the leading unmodelled term reaches a fraction `f` of the
+leading one. Under subtraction that term is `c₆σ⁶`, so `|c₆|σ_max⁶ = f·c₂σ_max²`:
+
+```text
+registered   σ_max² = f·c₂/|c₄|      T = f · c₂²/|c₄| · 10^(−2D)
+amended      σ_max⁴ = f·c₂/|c₆|      T = c₂^(3/2) · √(f/|c₆|) · 10^(−2D)
+```
+
+`T` was linear in `f` and is now a square root of it. `f` is unchanged in meaning, the
+fraction the leading unmodelled term reaches at the top edge, and changed in referent,
+that term now being the sextic rather than the quartic. **The registered `f* = 0.0488`
+does not carry across**, having been optimised against the quartic. It is re-derived or
+it is not used.
+
+**The edge is defined wherever the sweep goes.** `c₄` vanishes at `κ = 2` and `c₆` at
+`κ = 3/13`. They never coincide, so one of the two always sets an edge.
+
+**The binding cell is still the floor.** `T` is evaluated at the `κ` minimising the
+window width, which under the amended edge minimises `c₂^{3/2}/√|c₆|`. That factor rises
+from the floor to a pole at `κ = 3/13`, dips after it, and rises again to
+`(1/4)^{3/2}/√(91/48) ≈ 0.0908` as `κ` grows. It never returns below its value at
+`κ_min = 0.1`, so the declared floor binds whatever ceiling the sweep takes, under both
+the registered edge and this one.
+
+`research/src/research/explorations/sigma_max_edge.py` computes it and asserts the two
+claims above. It evaluates no `T`: the form is registered here, and the value comes after.
+
+**What `T` still waits on.** `f*` re-derived under the sextic edge, which needs the
+statistical term settled, which `research/d2_noise_model_exploration.md` puts in question
+on two counts this document has not answered.
+
+### AMENDMENT 2026-08-23: two sextic provenance refs were wrong, and are corrected
+
+The RESULT of 2026-08-23 says `research/c6_hand_derivation.md` "registers the basis and
+the cumulant reach at `018ccc7`". Half of that is false and is corrected here rather than
+in place.
+
+`018ccc7` carries the basis and its counting rule, so `SEXTIC_BASIS_SOURCE` was right to
+name it. It does **not** carry the cumulant reach: the connectivity bound
+`m ≤ N/2 + 1` landed at `2f39903`, in the amendment that retired the table `018ccc7`
+opened with. A reviewer following the earlier ref would have found the superseded `κ₅`
+claim, which the bound contradicts. Five `PROVED` rows carried it.
+
+`SEXTIC_CUMULANT_SOURCE.registered_at` now reads `2f39903`.
+
+Separately, `measured_at` on both sextic sources read `5ce7695`, the commit that raised
+`DERIVATIVE_ORDER` and made the expansion computable. Nothing measured `c₆` there. The
+checks first ran at `88afd7c`, which is what both now name.
+
+`tests/test_provenance_ordering.py` passed throughout, both wrong refs still preceding
+their measurement. Ordering is what that test asks about, and whether a ref carries the
+claim it is cited for is a separate question it does not put.
+
+### DECISION 2026-08-23: `T` is parked, and what unparks it
+
+`T` has a registered form and no value. It stays that way until the reference filter
+exists, which is PR-7's.
+
+**What is left.** `f*` has to be re-derived under the sextic edge, the registered
+`f* = 0.0488` having been optimised against the quartic one. That re-derivation needs the
+statistical term, and the statistical term is in question on two counts recorded above
+and in `research/d2_noise_model_exploration.md`: this document states the estimator two
+ways, and its published `σ_p` values match only one of them; and its stated formula
+`ε√12/(D√N)` carries decades where nats are needed.
+
+**Why waiting is not deferral.** Both counts turn on the same unknown. `δ_ref` is a
+certified bound on a deterministic error, so what it does to a fitted exponent depends on
+the error's *shape* across the window, not on its size at a point. A shape is a property
+of a filter. Until one exists there is nothing to measure, and the honest range on the
+exponent's error runs from zero to twice the whole budget.
+
+Settling `σ_p` now would mean choosing among readings of a quantity nobody has observed,
+and then registering `f*` and `T` on top of it.
+
+**What unparks it.** The reference filter, with its error measured across the window
+rather than bounded at a point. `Cov(v, ε)/Var(v)` on the measured field is then the
+statistical term, and it carries no `N`.
+
+**What does not.** Nothing about the gate's difficulty, and no reading of `T` that would
+follow from one branch rather than another. Parking moves no number: everything already
+registered stands, including `κ_min`, the sextic edge and the form `T` takes under it.
+
+### AMENDMENT 2026-08-23: the corrected ref count was itself wrong, and `c₆` now has a committed derivation
+
+Two things, both appended rather than fixed in place.
+
+**The count.** The AMENDMENT above ends "Five `PROVED` rows carried it", of
+`SEXTIC_CUMULANT_SOURCE`. Six do: `gap_series.sextic_l6_absent`, the two from
+`check_sextic_cumulant_reach` (`κ₅`, `κ₆`) and the three from `check_sextic_arms_agree`
+(`σ²`, `σ⁴`, `σ⁶`). The number was not asserted anywhere, which is why correcting one
+count left the next one wrong.
+
+**The ridge closed forms.** `c₆ = −κ(7κ + 9)(13κ − 3)/(48R₀³)` reached this document,
+`BUILD_PLAN.md` and `sigma_max_edge.py` as a hand transcription. No committed code
+substituted `R(x) = R₀ + κx²` at `μ* = √(R₀/κ)` into the derived coefficient to produce
+it, which is the practice ADR-050 registers in this same change. `gap_series.ridge_c2`,
+`ridge_c4` and `ridge_c6` now do.
+
+The transcription was **correct**. All three coefficients reproduce, at general `R₀`:
+
+```text
+c₂ = κ/(4R₀)      c₄ = 3κ(κ − 2)/(16R₀²)      c₆ = −κ(7κ + 9)(13κ − 3)/(48R₀³)
+```
+
+so nothing registered on top of `c₆` moves — not `σ_max⁴ = f·c₂/|c₆|`, not the `−529/24`
+at `κ = 2`, not the `3/13` root, not the `(1/4)^{3/2}/√(91/48)` tail limit, and not the
+conclusion that the declared floor binds whatever ceiling the sweep takes. What changes
+is that a slip in any of them would now fail a check rather than survive the suite.
+
+`c₂` and `c₄` were in closed form on the ridge before this ran, in
+`research/c6_hand_derivation.md` at `018ccc7`, so those two rows are predictions and
+carry that ref. `c₆` was not registered anywhere ahead of it, so its row registers and
+measures at one commit and says so rather than borrowing `018ccc7`, which is the error
+the AMENDMENT above corrects.

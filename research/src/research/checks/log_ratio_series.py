@@ -29,7 +29,7 @@ Run it::
     uv run --no-sync python -m research.checks.log_ratio_series
 
 Symbolic throughout. No floats, no numerics, no functional form chosen for `R`: the
-log-derivatives `l₁..l₄` stay free symbols and `R̄` stays symbolic and is never set to
+log-derivatives `l₁..l₆` stay free symbols and `R̄` stays symbolic and is never set to
 one. A check that passes only at `R̄ = 1` is a check that has lost a variable.
 
 Every identity reports `PROVED` at `EXACT`, carrying a
@@ -367,7 +367,7 @@ def run_checks() -> list[CheckReport]:
 
 def _print_setup() -> None:
     """Print the symbolic objects the pins are about, for the bare run."""
-    print("R̄ symbolic, l₁..l₄ free. No family chosen, no numbers.\n")
+    print("R̄ symbolic, l₁..l₆ free. No family chosen, no numbers.\n")
     print(f"K        = {kalman_gain()}")
     print(f"√v_q     = {posterior_sd()}")
     print(f"δ(h)     = {log_noise_increment()}")

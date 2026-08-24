@@ -6,9 +6,11 @@ dropped check reads as a rename. Neither shows up in a count, which is what the 
 CI strings compare today.
 
 So the suites are run here and their ids are checked as a set. `research/` is not on
-`pytest`'s `testpaths`, and the two measured suites are far too slow for the
-pull-request path, so this covers the three symbolic modules and the crossover
-falsifiers. The measured suites' ids are built by the same helper, and that helper is
+`pytest`'s `testpaths`, so this is where the three symbolic modules and the crossover
+falsifiers are covered at all. Only `log_ratio_series` is covered on the pull-request
+path: `series_kernel` and `gap_series` both carry the sextic expansion, both are marked
+`slow`, and the PR job deselects that marker, so their ids are compared on the merge and
+release runs. The measured suites' ids are built by the same helper, and that helper is
 pinned below on its own.
 """
 
@@ -29,11 +31,16 @@ _SUITES = {
     "gap_series": gap_series.run_checks,
 }
 
-#: `gap_series` derives `c₂` and `c₄` symbolically and costs about half a minute, past
-#: the threshold `conftest.SLOW_TEST_SECONDS` sets, so its cases gate on merge rather
-#: than on every pull request. The other two run in seconds and stay on the PR path.
+#: Reading a suite's check ids runs it. `gap_series` derives `c₂`, `c₄` and `c₆`
+#: symbolically and costs minutes, and `series_kernel` checks its expansion against
+#: `sympy.series` through `σ⁶` and costs minutes too, both far past the threshold
+#: `conftest.SLOW_TEST_SECONDS` sets. `log_ratio_series` stops at first order in `σ` and
+#: costs under a second, so it is what keeps the uniqueness guard on the PR path.
 _SUITE_CASES = [
-    "series_kernel",
+    # Marked per suite, not per test: log_ratio_series runs in well under a second and
+    # is what keeps the uniqueness guard on the pull-request path at all. The other two
+    # carry the sextic expansion and cost minutes.
+    pytest.param("series_kernel", marks=pytest.mark.slow),
     "log_ratio_series",
     pytest.param("gap_series", marks=pytest.mark.slow),
 ]

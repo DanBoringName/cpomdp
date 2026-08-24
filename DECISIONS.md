@@ -3125,3 +3125,232 @@ is settled in its own change before the scoring harness needs a world under `R(x
   raises on that combination, on the same grounds as `InferenceRule.build` refusing an
   unhandled kind. Scaling a state-dependent model's own parameters is a separate
   question and is not answered here.
+
+## ADR-048 — where a world reads state-dependent noise
+
+**Date:** 2026-08-23
+**Status:** Accepted
+**Extends:** ADR-047 (the world and the agent, separated and driven from outside)
+
+ADR-047 had `World` refuse a state-dependent `R(x)` or `Q(x)` rather than pick an
+evaluation point with no number yet measured under either. This picks them. No number is
+measured under `R(x)` yet, which is the condition that lets the choice be made on its
+merits rather than fitted to a result.
+
+### The sensor is read at the state it measures
+
+`R(x)` is a property of the sensor at the state producing the reading, and that state is
+drawn before the reading is taken. There is no ambiguity to resolve: the world knows the
+arrived-at state exactly and reads `R` there.
+
+The filter cannot. It reads `R` at its predicted mean, dropping the `½tr(H_R Σ⁺)` Jensen
+term, which `CallableSensor` already documents as a deliberate first-order choice. Having
+the world read at the same point would hand the world the filter's approximation and
+report a smaller inference gap than the one being measured. The gap between `R(μ⁻)` and
+`R` at the truth is the thing under study, so the world has to sit on the other side of
+it.
+
+### The process noise is read at the mean the step pushes forward to
+
+`Q(x)` is the diffusion of the arrived-at state, which `dynamics.py` records as the
+kernel's convention. A world cannot read it there: the arrived-at state is not known
+until the diffusion it parameterises has been drawn.
+
+Two non-circular readings were available.
+
+**The departed state**, `Q(x_t)`, is the Euler–Maruyama discretisation of an Itô
+diffusion and the standard choice in that literature. It was rejected because the filter
+evaluates at the pushed-forward point, so a world reading the departed state would
+disagree with the filter even where the filter's belief sits exactly on the truth. An
+inference gap that cannot reach zero under perfect inference is measuring the convention
+rather than the inference.
+
+**The pushed-forward mean**, `Q(A·x_t + B·u_t)`, was taken. It is a function of the
+current state and action alone, so the transition stays a well-defined Markov kernel. It
+is also the exact point-mass limit of the filter's `μ⁻`, so the world is what the filter
+converges to as its belief concentrates on the truth, which is the property the
+decomposition needs.
+
+The asymmetry between the two is not an inconsistency. `R`'s evaluation point is
+determined by what the sensor physically measures. `Q`'s is not determined by anything,
+so it is set by the requirement above.
+
+### Consequences
+
+- **A world under `R(x)` exists**, which the reference filter and the gated half of the
+  battery both need. Nothing else in the harness changed.
+- **The fixed-noise path is bit-identical.** One reading measured on the commit before
+  this one, in a worktree of it, reproduces exactly: `1.0105588758439044`. A test pins
+  that value rather than a tolerance around it.
+- **A fixed `R` or `Q` carried as a model object rather than as a matrix now works too.**
+  `World` reads `is_fixed` on both, matching what `KalmanBackend` does, where before it
+  refused any non-`None` `dynamics_noise_model`.
+- **`linearize` is exact here rather than approximate**, since the observation mean is
+  linear in this regime and the Jacobian it returns is the map itself. A sensor with a
+  nonlinear mean would need the mean map instead, and issue #21 is where that lands.
+- **The evaluation points are pinned by test, not by comment.** Each is checked against
+  an independently drawn sample at the point claimed, and against the same draw at the
+  point not claimed.
+
+## ADR-049 — a rationalised parameter is registered with its revision condition bounded
+
+**Date:** 2026-08-23
+**Status:** Accepted
+
+### The instance
+
+`κ_min = 0.1` is declared as the lower bound of the `κ` sweep, and the rule evaluating
+`T` at the `κ` minimising the window width means the floor is the only part of the sweep
+that reaches `T`.
+
+The argument is that D2's second leg needs `κ ≲ 0.1` to resolve, that 0.1 sits below the
+`c₆` zero at `3/13` so the window's upper edge stays defined, and that it holds the
+`μ`-rule inflation at 3×. Every part of that was registered before `c₆` existed and
+before `T` could be evaluated.
+
+That is a defensible reading of an existing constraint. It is not a derivation, and no
+experiment distinguishes 0.1 from a nearby value.
+
+### The decision
+
+**A parameter that is rationalised rather than derived is registered as such, and its
+revision condition is bounded before any result exists.**
+
+**Say the epistemic status.** The registration records `κ_min` as a plausibly weak
+decision in those words. Presenting a chosen number as a forced one is the failure this
+avoids, and it costs nothing to avoid.
+
+**Bound the revision in advance.** "May need revisiting" is honest as an intention and
+useless as a rule: it licenses a change after a disappointing result on the same terms as
+a change after a genuine finding. So the licence is narrowed to a measurement bearing on
+the argument that produced the value, and a gate outcome is excluded by name.
+
+**Say what a revision does to results already obtained.** Nothing. The outcome under the
+declared value stands as obtained, and a re-evaluation is a separate cell carrying both.
+This is ADR-037's treatment of the `tanh` fire generalised: a result is not undone by
+re-running it with inputs chosen after seeing it.
+
+### The incentive is registered too
+
+`κ_min` moves `T`, and `T` has opposite senses for the two things that read it. Lowering
+`κ_min` lowers `T`, which makes GATE-D4 easier to pass and makes D1 and D2 harder to be
+tests at all. Recording that is what lets a later reader check whether it was acted on,
+and the absence of a direction that helps everything is a structural defence rather than
+a rhetorical one.
+
+### Where it is visible
+
+The registration carries the declaration. `Provenance.registered` carries it to every
+printed row once the `T` check exists, that field being one line on what a reviewer finds
+at the registering ref.
+
+It is **not** carried in `warrantlib`. That package is published on its own and knows
+nothing about this programme beyond one historical note. A `κ` belonging to one study has
+no place in a general vocabulary, and the mechanism for saying so from cpomdp already
+exists. Nor is it carried in `research/registered_checks.toml`, which is generated and
+would lose it on the next rewrite.
+
+### Consequences
+
+- **`T` is unblocked on this axis.** What remains is `σ_max` against `c₆`, and the noise
+  model that `research/d2_noise_model_exploration.md` puts in question.
+- **The pattern applies beyond `κ_min`.** `f`, `D` and `k_min` were declared on stated
+  grounds without this treatment, and a later amendment may owe them the same three
+  parts.
+
+## ADR-050 — the code that produced a number is committed beside it
+
+**Date:** 2026-08-23
+**Status:** Accepted
+
+### The failure this closes, which already happened
+
+The scripts that produced the original 28 `c₄` cases were lost. Only prose survived them,
+so the numbers could be read and not checked. `research.checks` exists because of it, and
+`research/gate_d4_registration.md` records the loss rather than passing over it.
+
+That fix was scoped to warranted checks. It leaves out everything that decides a *form*
+rather than reporting a result: the probe that ruled an option out, the calibration that
+fixed a constant, the sweep that showed a parameter did not move. Those reach registrations
+and write-ups too, and until now they lived in a scratch directory.
+
+### The decision
+
+**A number that reached a registration, a write-up or a `PROVED` row has its derivation
+committed and runnable.**
+
+Two homes, and the difference between them is warrant rather than importance.
+
+**`research/src/research/checks/`** for anything carrying one. It emits `CheckReport`s, is
+declared in the manifest, and reconciles against it.
+
+**`research/src/research/explorations/`** for the rest. An exploration reports no warrant
+and appears in no manifest, because it has none to report. It is committed, linted, typed,
+and run by a test, so it cannot rot into a file nobody executes. `explorations/__init__.py`
+states the invariant and a parametrised test enforces it over every module in the package.
+
+### A→B→C, not just C
+
+A reviewer following how a number was reached wants the order: what was tried, what it
+ruled out, what replaced it. So an intermediate step is committed too, **including one
+that turned out wrong**. A superseded exploration keeps its file and gains a dated note
+naming what replaced it, on the terms the protected files already work.
+
+This has bitten twice in the work that prompted it. `research/c6_hand_derivation.md`
+predicted `κ₅` contributes at `σ⁶` and it does not, and the amendment recording that is
+what a reader needs to see beside the correction. `research/c6_window_exploration.md`
+claimed two bias arms were equal where they are a factor of two apart, and the assertion
+in the module is what caught it.
+
+### Assert, do not only print
+
+An exploration's claims are asserted inside it, so running it is checking it. A module
+printing a table nobody verifies has recorded a number without recording whether it is
+true, which is the shape of the failure the standing rule on prose already names.
+
+### Consequences
+
+- **A scratch file is not a record.** Anything under `/tmp` or a session scratchpad is
+  gone by the time a reviewer asks, which is when it is wanted.
+- **The cost is a test per exploration and a line in the write-up naming the module.**
+  Both are cheap beside re-deriving a number whose method was lost.
+- **It does not make an exploration authoritative.** No warrant, no manifest entry, no
+  citation from a check. `research/d2_noise_model_exploration.md` puts a registered term
+  in question and settles nothing, which is what an exploration is for.
+
+## ADR-051 — ADR-048 supersedes ADR-047 on state-dependent noise, and says so
+
+**Date:** 2026-08-23
+**Status:** Accepted
+**Supersedes:** the **Extends** header on ADR-048, and ADR-047's section "`World` refuses
+state-dependent noise, and that is registered as open"
+
+### What was wrong with the labelling
+
+ADR-048 decided that `World` reads a state-dependent `R(x)` and `Q(x)` rather than
+refusing them. ADR-047 had decided it refuses them. That is a reversal, and this record
+keeps **Supersedes** for a reversal and **Extends** for a decision that adds to one still
+standing. ADR-048 carried **Extends**.
+
+The cost is not cosmetic. ADR-047's section reads as current, so the two records state
+opposite rules with nothing between them saying which holds. The same sentence reached
+`CHANGELOG.md`, where it shipped in the Unreleased notes describing behaviour the same
+cycle had already reversed, and is corrected there separately.
+
+### The decision
+
+ADR-048 supersedes ADR-047 on this point and only this point. Everything else in ADR-047
+— the seam between world and agent, the exogenous action sequence, the cut control loop —
+stands unchanged, which is why this is recorded here rather than by retiring ADR-047.
+
+Both are left in place with their original text, per the rule that a decision record is
+appended to and not edited. This entry is the pointer a reader following either one
+arrives at.
+
+### Consequences
+
+- **A reader of ADR-047's refusal section needs this entry to know it is dead.** That is
+  the cost of append-only, and it is paid here rather than by a silent edit.
+- **The convention is now stated where it can be checked**: reversal is *Supersedes*,
+  accumulation is *Extends*. ADR-048's own header is left as written and corrected by
+  this record.

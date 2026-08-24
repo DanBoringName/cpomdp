@@ -685,14 +685,28 @@ what makes the timing checkable.
       of a small rational. Section 7 of the registration holds it, the disclosure that the
       run preceded its registration, and the out-of-sample runs on the other families,
       where `tanh` fires.
-- [ ] `T`, `D` and `k_min` are still outstanding. `T` needs `c₄` along the ridge rather
-      than at the single operating point, which the closed form makes an evaluation rather
-      than a refit.
-- [ ] Subtraction moved the upper edge, and this is an open question the decision created.
-      `σ_max` was defined as where the quartic reaches a fraction `f` of the quadratic. With
-      the quartic subtracted the binding truncation is `c₆`, which is unmeasured. Either
-      redefine `σ_max` against `c₆` or keep `f` as a bound that subtraction makes slack.
-      Registered as open, since choosing now is choosing with the refit's outcome in view.
+- [~] **`T` has a registered form and no value, and is parked until PR-7.** `k_min` was
+      never outstanding and this line said otherwise: the AMENDMENT of 2026-08-07
+      registers `k_min = 10`, `β = 0.05`, D2's interval at `2 ± 0.5` and `X = 0.1`, and
+      registers `D` as an expression in `k` evaluated at `k_min`. What remains is `f*`,
+      re-derived under the sextic edge, which needs a statistical term that two findings
+      put in question. Both turn on the reference filter's error *shape*, which is a
+      property of a filter PR-7 builds. The DECISION of 2026-08-23 records what unparks
+      it and what does not.
+- [x] **The sweep's lower bound.** Declared at `κ_min = 0.1`, rationalised rather than
+      derived, with its revision condition bounded in advance (ADR-049). The argument is
+      D2's second leg, registered before `c₆` existed.
+- [x] `c₆` in closed form, so the binding truncation is no longer unmeasured.
+      `c₆ = −κ(7κ + 9)(13κ − 3)/(48R₀³)` on the ridge, resolved onto an eighteen-term
+      basis with remainder zero, `PROVED` at `EXACT` on two agreeing arms. `c₄` vanishes
+      at `κ = 2` where `σ_max` diverges; `c₆` there is `−529/24`, and the two never
+      vanish together. The derivation is `research/c6_hand_derivation.md`, registered
+      before the suite computed anything.
+- [x] **`σ_max` against `c₆`.** The subtract branch had already fired on a rule
+      registered before its input was visible, so this discharged a consequence rather
+      than taking a choice. The edge is `σ_max⁴ = f·c₂/|c₆|` and `T` goes as `√f` rather
+      than `f`. The registered `f* = 0.0488` was optimised against the quartic and does
+      not carry across.
 
 **The checks that back it live in `research.checks`.** Standalone modules run with
 `--check`, not on the `pytest` path, and each prints under `warrantlib`'s vocabulary.

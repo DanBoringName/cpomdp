@@ -24,6 +24,7 @@ import jax.numpy as jnp
 from jaxtyping import Array, Float64
 from numpy.typing import ArrayLike
 
+from cpomdp._validation import validate_covariance
 from cpomdp.backends.base import InferenceBackend
 from cpomdp.backends.kalman import KalmanBackend
 from cpomdp.types import Belief, LinearGaussianModel
@@ -49,9 +50,12 @@ class World:
 
     ``state`` is readable, so a run can score against the true trajectory.
 
-    A state-dependent ``R(x)`` or ``Q(x)`` is refused at construction. Sampling either
-    needs an evaluation point, the departed state or the arrived-at one, and the two
-    give different trajectories.
+    State-dependent noise is read at the state it belongs to. ``R(x)`` is the sensor's,
+    so it is read at the state the step arrived at, which is the state being measured.
+    ``Q(x)`` is the diffusion of the arrived-at state, which is not known until the
+    diffusion has been drawn, so it is read at the mean the step pushes forward to. That
+    mean is what a filter's ``μ⁻`` estimates, so a world reads where a filter reads once
+    the filter's belief sits on the truth.
     """
 
     def __init__(
@@ -69,25 +73,8 @@ class World:
                 the model prior's mean.
 
         Raises:
-            NotImplementedError: If the model carries a state-dependent ``R(x)`` or
-                ``Q(x)``.
             ValueError: If ``initial_state`` is not a 1-D vector of length ``n``.
         """
-        if model.observation_model is not None and not model.observation_model.is_fixed:
-            raise NotImplementedError(
-                "a state-dependent R(x) has no settled evaluation point here: the "
-                "filter reads it at the predicted mean, and a world that knows its "
-                "own state exactly does not. Pass a fixed observation_noise."
-            )
-        if (
-            model.dynamics_noise_model is not None
-            and not model.dynamics_noise_model.is_fixed
-        ):
-            raise NotImplementedError(
-                "a state-dependent Q(x) has no settled evaluation point here: the "
-                "departed state and the arrived-at state give different trajectories. "
-                "Pass a fixed dynamics_noise."
-            )
         self._model = model
         if initial_state is None:
             state = model.prior.mean
@@ -127,6 +114,9 @@ class World:
         reads the state it arrives at. Both noise draws come from ``key``, so two
         worlds given the same key and the same start produce the same reading.
 
+        A state-dependent ``Q(x)`` is read at the mean this step pushes forward to, and
+        a state-dependent ``R(x)`` at the state drawn around it.
+
         Args:
             action: The action applied over this step, shape ``(p,)``. ``None`` for a
                 process with no control matrix.
@@ -157,15 +147,48 @@ class World:
                 )
             mean_next = mean_next + model.control_matrix @ action
 
+        process = model.dynamics_noise_model
+        if process is None or process.is_fixed:
+            dynamics_noise = model.dynamics_noise
+        else:
+            dynamics_noise = process.noise_at(mean_next)
+            # A process noise is only probed at construction, at one state. The svd
+            # draw below factors through the *singular* values, so a direction that
+            # has gone negative by the state the walk reaches is drawn as |λ| rather
+            # than as NaN: a finite, plausible state sampled from the wrong Q, with
+            # nothing raised. Semi-definite stays legal here, indefinite does not.
+            validate_covariance(dynamics_noise, "dynamics_noise_model.noise_at(x)")
         # svd rather than the cholesky default: dynamics_noise is only required
         # positive *semi*-definite, so a noiseless state dimension is legal here.
         self._state = jax.random.multivariate_normal(
-            key_dynamics, mean_next, model.dynamics_noise, method="svd"
+            key_dynamics, mean_next, dynamics_noise, method="svd"
         )
+
+        sensor = model.observation_model
+        if sensor is None or sensor.is_fixed:
+            observation_matrix = model.observation_matrix
+            observation_noise = model.observation_noise
+        else:
+            # linearize is exact here rather than approximate: the observation mean is
+            # linear in this regime, so the Jacobian it returns is the map itself. The
+            # model probes the sensor's Jacobian against its declared
+            # observation_matrix once, at prior.mean, so a nonlinear-mean sensor
+            # (issue #21) is kept out at construction rather than at every state.
+            observation_matrix, observation_noise = sensor.linearize(self._state)
+            # A sensor noise is only probed at construction, at one state. Where it
+            # loses definiteness at a state the walk reaches, the cholesky draw below
+            # returns NaN, and a NaN reading reaches every agent's belief and every
+            # score with nothing raised. The dynamics draw above takes svd because a
+            # noiseless direction is legal there. This one is not legal anywhere.
+            validate_covariance(
+                observation_noise,
+                "observation_model.linearize(x)[1]",
+                require_definite=True,
+            )
         return jax.random.multivariate_normal(
             key_observation,
-            model.observation_matrix @ self._state,
-            model.observation_noise,
+            observation_matrix @ self._state,
+            observation_noise,
         )
 
 

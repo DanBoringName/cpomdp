@@ -35,8 +35,15 @@ after results are seen shows up in the diff.
   actions is what makes the entropy of the true process cancel between agents, and it
   cuts the control loop: `DrivenRun.control_loop` carries that as a `ModellingChoice`
   with no default, saying what was chosen and where the choice is contestable. A
-  state-dependent `R(x)` or `Q(x)` is refused rather than sampled at an evaluation point
-  nothing has decided yet.
+  state-dependent `R(x)` is read at the state that produced the reading, and `Q(x)` at
+  the predicted mean, rather than at the point the filter evaluates them: the filter
+  drops a Jensen term the world must not drop too, since the distance between them is
+  the inference gap under study (ADR-048, superseding ADR-047's refusal). Both are
+  re-checked on every step, because construction probes them at one state only. The two
+  fail differently and the check follows that: the sensor draw is cholesky, so a noise
+  that loses definiteness returns NaN, while the dynamics draw is svd and returns a
+  finite state drawn from `|Q|`. An indefinite `Q(x)` is refused; a noiseless state
+  direction stays legal.
 - `cpomdp.constructors` — the two axes a model can be wrong along, each declared and
   versioned. `ModelSpec` holds parameters and builds a fresh model per call, sharing no
   array between builds, so two models that agree do so by value rather than by pointing
@@ -197,6 +204,17 @@ after results are seen shows up in the diff.
 
 ### Changed
 
+- **Breaking:** a *fixed* `observation_model` or `dynamics_noise_model` must now restate
+  the model's `observation_noise` / `dynamics_noise` exactly, and a sensor's linearized
+  observation matrix must equal `observation_matrix`. `LinearGaussianModel` previously
+  accepted the two disagreeing and left which one was read to the consumer: the EFE
+  kernel reads the object where the filter reads the field, so a model could score
+  against one noise and filter against another. A state-dependent object may still vary
+  — it is the fixed case that restates the field and must restate it exactly. This is a
+  construction-time break:
+  `LinearGaussianModel(observation_matrix=[[1., 0.]], observation_noise=[[1.]],
+  observation_model=FixedSensor([[1., 0.]], observation_noise=[[0.5]]), ...)` built
+  before and now raises. Pass the same value twice, or drop the redundant field.
 - The `symbolic` CI job reconciles the three symbolic suites against
   `research/registered_checks.toml` instead of comparing three hand-typed strings. The
   strings said `23 registered, 23 tested here, none fired` and two more like it. They

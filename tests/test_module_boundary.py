@@ -76,13 +76,15 @@ def test_the_walk_finds_a_direct_import():
 
 
 def test_the_walk_follows_an_import_of_an_import():
-    # _validation is the second hop. harness imports cpomdp.types, and types is what
-    # names _validation. harness does not, so finding it proves the walk carried on past
-    # the imports written in the file it started from.
+    # `structure` is the second hop. harness imports cpomdp.types, and types is what
+    # names structure. harness does not, so finding it proves the walk carried on past
+    # the imports written in the file it started from. The pair is asserted together:
+    # if harness ever imports structure directly, the first line fails rather than the
+    # second quietly becoming a re-test of a direct import.
     harness = _path_of("harness")
     assert harness is not None
-    assert "_validation" not in _imports_of(harness)
-    assert "_validation" in _closure("harness")
+    assert "structure" not in _imports_of(harness)
+    assert "structure" in _closure("harness")
 
 
 def test_the_walk_stops_where_the_first_party_imports_do():
