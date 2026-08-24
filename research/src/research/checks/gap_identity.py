@@ -59,15 +59,16 @@ from warrantlib import (
     check_summary,
 )
 
-__all__ = ["closed_form", "main", "run_checks"]
+__all__ = ["PROVENANCE", "closed_form", "main", "run_checks"]
 
 #: Where the form of this identity was established, before anything asserted it. The
 #: exploration checks it three ways: scipy quadrature over 45 parameter triples, Monte
 #: Carlo for a general observation matrix, and symbolically.
 _REGISTERED_REF = "fde795e"
 
-#: The commit these checks were first measured at.
-_MEASURED_REF = "0000000"
+#: The commit these checks were first measured at. Filled in by the commit after the
+#: one that landed them, since a commit cannot carry its own hash (ADR-041).
+_MEASURED_REF = "98022da"
 
 #: What a CAS cannot supply: that the expressions below are the ones the analytic claim
 #: is about. Discharged by the exploration, which reaches the same closed form from a
@@ -84,7 +85,7 @@ _ASSUMPTIONS = (
     "non-negativity is not asserted; that is Gibbs' inequality, prover 1",
 )
 
-_PROVENANCE = Provenance(
+PROVENANCE = Provenance(
     registered_at=_REGISTERED_REF,
     measured_at=_MEASURED_REF,
     registered="the closed form for the averaged gap under a fixed R, reached by "
@@ -166,7 +167,7 @@ def _proved(name: str, check_id: str, claim: str, shown: str) -> CheckReport:
                 assumptions=_ASSUMPTIONS,
             ),
         ),
-        provenance=(_PROVENANCE,),
+        provenance=(PROVENANCE,),
     )
 
 

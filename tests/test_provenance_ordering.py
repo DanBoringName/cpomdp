@@ -17,7 +17,7 @@ import subprocess
 
 import pytest
 
-from research.checks import gap_series, series_kernel
+from research.checks import gap_identity, gap_series, series_kernel
 from research.checks.series_kernel import Source
 from warrantlib import Provenance
 
@@ -48,6 +48,14 @@ def _sources():
             value = getattr(module, name)
             if isinstance(value, Source):
                 found.append((name, value.provenance))
+    # `gap_identity` declares a bare `Provenance` rather than a `Source`, since every
+    # reduction in it rests on the same registration. Walked the same way regardless:
+    # what matters is that a declared registration is reachable from here, not which
+    # shape carries it.
+    for name in dir(gap_identity):
+        value = getattr(gap_identity, name)
+        if isinstance(value, Provenance):
+            found.append((f"gap_identity.{name}", value))
     for name in dir(crossover):
         value = getattr(crossover, name)
         if isinstance(value, Provenance):
@@ -92,7 +100,7 @@ def test_the_suites_declare_sources():
     # total: the check suites alone clear 8, so a total-only floor would let the whole
     # demo half vanish and still pass.
     names = {name for name, _ in _sources()}
-    assert len(names) >= 11
+    assert len(names) >= 12
     from_checks = {n for n in names if n.endswith("_SOURCE")}
     assert len(from_checks) >= 9, from_checks
     assert len(names - from_checks) >= 2, names - from_checks
