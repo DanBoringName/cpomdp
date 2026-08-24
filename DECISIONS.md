@@ -3410,3 +3410,70 @@ it against a shape that has not stopped moving.
   it until R6 registers one. Until then it is `COMPUTED`, and the word is not "certified".
 - **The debt is tracked, not remembered.** A GitHub issue points here and is closed by the
   merge, not by the decision.
+
+## ADR-053 — the two gap engines do not overlap where ADR-052 said to compare them
+
+**Date:** 2026-08-24
+**Status:** Accepted
+**Supersedes:** one sentence of ADR-052, "Cross-check the two on a scalar case in a
+test", and nothing else in it
+
+### What ADR-052 assumed
+
+That both engines compute the averaged inference gap over the same domain, so a scalar
+fixed-`R` case would exercise each of them and their agreement would be evidence. The
+closed form under a fixed `R` was the obvious place to meet, since it is the one
+configuration with an answer known independently of either.
+
+That configuration is unreachable for one of the two.
+
+### What is actually true
+
+`research.checks.gap_kernel` freezes `R̂ = R(μ)` by construction. Its agent's plug-in is
+read off the declared family at the prior mean, and nothing in its interface lets a
+caller supply a different one. Under a constant `R` the plug-in *is* the truth, so the
+divergence is zero at every `y` and the averaged gap is zero. Measured at `3.6e-17`,
+which is the quadrature's own floor.
+
+So there is no fixed-`R` configuration in which both engines produce a number worth
+comparing. One of them produces zero by construction, and a comparison against zero
+tests the quadrature and nothing else.
+
+### The decision
+
+The cross-check runs on the state-dependent case, which is where the two genuinely
+overlap. `gap_identity.engines_agree` compares them on `R(x) = 1 + x²` at four spreads
+and requires agreement within `1e-10`. Measured worst is `3.2e-14`.
+
+Its family is declared locally in the check rather than added to `gap_kernel.FAMILIES`.
+That dict is a registered set, and a cross-check has no business extending one to make
+itself possible.
+
+The comparison samples a continuum of spreads, so it reports `CORROBORATED` at
+`BOUNDED`. Adding spreads does not make it a universal, and a test asserts it never
+claims otherwise.
+
+### What this costs, stated rather than smoothed over
+
+**The closed-form identity is not a cross-engine anchor.** ADR-052 implied it could
+become one. It anchors `cpomdp.reference` alone, where the fixed-`R` case is reachable
+and the answer is known. `gap_kernel` is tied to it only indirectly: through the three
+shared conventions, and through agreeing with the other engine on `R(x)`.
+
+That is weaker than two engines each independently matching a known answer. It is what
+is available. A reader comparing the two should know that their agreement rests on a
+case where neither has an independent oracle, and that the oracle exists only on the
+side one of them cannot reach.
+
+### Consequences
+
+- **ADR-052's substance stands.** Two engines, a load-bearing cross-check, and the
+  merge deferred until the `p*` work settles the module boundary. Issue #102 tracks it
+  and this entry does not move its trigger.
+- **A future single engine inherits the harder job.** Whichever survives has to reach
+  both regimes, since the fixed-`R` case is the only one with an oracle and the `R(x)`
+  case is the only one the results are about.
+- **The unreachability is a property of `gap_kernel`'s interface, not a defect.** It was
+  built to measure one registered family at one plug-in rule. Widening it to accept an
+  arbitrary plug-in would change a module carrying registered `c₄` provenance, which is
+  the thing ADR-052 declined to do.
