@@ -3477,3 +3477,83 @@ side one of them cannot reach.
   built to measure one registered family at one plug-in rule. Widening it to accept an
   arbitrary plug-in would change a module carrying registered `c₄` provenance, which is
   the thing ADR-052 declined to do.
+
+## ADR-054 — the Spinello–Stilwell rung: five rungs, and the pole is a units question
+
+**Date:** 2026-08-24
+**Status:** Accepted
+**Extends:** ADR-052 and ADR-053 on the gap the ladder measures
+
+`research/spinello_stilwell_rung.md` holds the open questions this entry rests on, the
+routes that would settle them, and the tests each route owes. This is the decided part.
+
+### The ladder declares five rungs, not four
+
+PR-7 scheduled four: plug-in `R(μ⁻)`, Spinello–Stilwell iterated, belief-smoothed
+`E[R(x)]`, and the exact reference. Between the first two the ladder changes two things
+at once. Rung one's posterior precision is `P⁻⁻¹ + (1/σ)∇ᵀh∇h`. The paper's single-step
+filter (36e) adds `(1/2σ²)∇ᵀσ∇σ` on top of that, and the iterated form (35) then also
+runs Gauss–Newton to convergence. An improvement measured across that pair cannot be
+attributed to either mechanism.
+
+(36) is (35) at a budget of one, so it costs almost nothing to declare it separately.
+Five rungs give two adjacent differences that isolate distinct mechanisms: the
+derivative-of-covariance terms, and the iteration.
+
+This is decided now because R7 is an ordering over the declared set, and a rung added
+after an ordering is seen is what standing rule 7 refuses.
+
+### The warrant for dropping `1/ln σ` is invariance, not convergence
+
+Under a rescaling of the observation, `o → λo`, every term in `s`, `R⁽ᶥ⁾` and `Ū` returns
+to itself except the log-determinant term, which becomes `1/(ln σ + 2 ln λ)`. Seven of
+eight terms are invariant and that one is not, checked symbolically.
+
+The ladder reports a divergence between distributions over the state, which no choice of
+observation units can move. So that term is the sole place an arbitrary unit choice
+enters an estimator whose output is unit-free. It is the same objection the standing
+prohibition on entropy subtraction rests on, and it is checkable by a rescaling test
+rather than argued.
+
+An earlier justification, that `R⁽ᶥ⁾` shapes the Gauss–Newton path and not its fixed
+point, is true and much weaker. It licenses changing the term. It does not say the term
+should not have been there.
+
+### No guard is written until the units question is answered
+
+The pole at `σ = 1` moves with the unit choice: rescaling puts it at `σ = λ⁻²` while
+leaving the fixed point where it was. A `λ` that puts a family's whole reachable `σ` on
+one side of the pole removes the hazard by construction and costs nothing.
+
+That choice is a declaration, not a tuned parameter, and it is declared before any
+number exists. An undeclared choice that happens to avoid a pole is what standing rule 2
+exists to catch.
+
+A guard is written only for a family where no such `λ` exists. Route 2 in the companion
+file decides which families those are, and the registered ridge is the case to check
+first: `σ(μ*) = 2R₀`, so `R₀ = 0.5` puts the pole on the operating point.
+
+### A non-convergent step is `VOID`, not a number
+
+`Ū` is evaluated at the current iterate, so exhausting the budget returns a wrong
+covariance as well as a wrong mean and both halves of the divergence move by an
+unmeasured amount. Approaching the pole from above the step goes to zero, so a truncated
+run returns the prediction looking like a converged posterior. That failure is silent,
+which is why it is routed rather than printed.
+
+### Consequences
+
+- **The paper's `R` is never spelled `R` in cpomdp.** It is a Gauss–Newton Hessian and
+  the tree already uses `R` for what the paper calls `Σ`. The companion file carries the
+  full three-way notation swap.
+- **`p ≤ n` is asserted rather than inherited.** The paper assumes it throughout and
+  cpomdp enforces it nowhere.
+- **The rung has no external numerical validation.** Every figure in the paper's §IV
+  uses the single-step filter, and the iterated scheme is derived but never simulated.
+  The
+  `∇σ = 0` reduction to the ordinary Kalman update is the only independent check
+  available, so the test suite carries more here than it does for the other rungs.
+- **Rung one cannot see the mechanism under test.** The term it discards is non-zero
+  exactly when the noise varies with the state. Reportable in Paper 2 Part 2, stated
+  carefully: the filter's posterior information and expected free energy's epistemic
+  term are related and are not the same object.
