@@ -191,3 +191,36 @@ update exactly, and that is the one place an independent answer exists.
 
 Routes 1, 2 and 4 are prerequisites for the rung. Routes 3, 5 and 6 decide how it
 reports and how many rungs the ladder declares.
+
+### ROUTE 2026-08-24: routes 1 and 2's symbolic half are run, and Q2's premise is measured
+
+`research/src/research/spinello_stilwell/invariance.py`, run with
+
+```text
+uv run --no-sync python -m research.spinello_stilwell.invariance
+```
+
+Three things, asserted inside the module rather than printed:
+
+- **Route 1, symbolic half.** Seven of the eight terms in `s`, `R⁽ᶥ⁾` and `Ū` return to
+  themselves under `o → λo`. Only `(1/4σ²)(1/ln σ)∇σ∇σ` moves, becoming
+  `1/(ln σ + 2 ln λ)`. That is the whole of Q1's claim.
+- **Route 2, symbolic half.** The pole therefore sits at `σ = λ⁻²`. On the ridge,
+  `σ` at the operating point is `2R₀` whatever `κ` is, so `R₀ = ½` puts the pole exactly
+  there at `λ = 1`. Both derived rather than substituted.
+- **Q2's premise, which the original pass asserted without checking.** The converged
+  estimate and the posterior variance are unmoved by the rescaling, to 1e-12 across
+  `λ ∈ {1, ½, 3, 7}`, while the iteration count is not: 6, 9, 8, 8. If rescaling moved
+  the answer, choosing units to clear the pole would be choosing an answer, and it would
+  be a tuned parameter rather than a declared convention. It does not.
+
+The numeric part uses a reference implementation of (35) written for that check alone.
+It is not the rung. It carries no guard at the pole and takes its iteration budget as an
+argument rather than declaring one, both deliberately, so that nothing in it can stand
+in for a decision the rung still owes.
+
+What is **not** run: the empirical half of route 1 (a rescaling sweep of the reported
+gap, which needs the rung), and routes 3 to 6 entirely. The two-sided failure of Q3, the
+budget-exhaustion behaviour of Q7 and the rung-one-versus-(36) separation of Q5 remain
+routes, and no number here bears on any of them.
+
