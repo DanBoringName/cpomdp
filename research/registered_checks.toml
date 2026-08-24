@@ -116,3 +116,15 @@ checks = [
   "gap_series.sextic_l6_absent",
   "gap_series.sextic_live_terms",
 ]
+
+[suites.gap_identity]
+entry_point = "research.checks.gap_identity:run_checks"
+checks = [
+  "gap_identity.closed_form_assembles",
+  "gap_identity.engines_agree",
+  "gap_identity.integrand_is_quadratic",
+  "gap_identity.predictive_is_a_density",
+  "gap_identity.predictive_second_moment",
+  "gap_identity.reverse_is_not_forward",
+  "gap_identity.vanishes_at_the_truth",
+]
