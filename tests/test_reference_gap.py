@@ -188,6 +188,47 @@ def test_a_tight_observation_box_is_reported_not_hidden():
     assert tight.value < wide.value
 
 
+def test_a_state_box_too_small_for_an_extreme_reading_is_reported():
+    # The blind spot `predictive_mass` cannot see. A wide observation box with a
+    # narrow state box drags the exact posterior to the edge on the far readings,
+    # where the joint integrates to far less than p*(y). Those readings carry almost
+    # no weight, so the predictive mass still reads one and only the edge ratio says
+    # anything is wrong.
+    likelihood = FixedNoiseLikelihood([[1.0]], observation_noise=[[0.5]])
+    rule = kalman_rule(2.0)
+    observations = QuadratureGrid(lower=[-30.0], upper=[30.0], counts=[401])
+
+    roomy = averaged_inference_gap(
+        gaussian_on(QuadratureGrid([-40.0], [40.0], [4001]), PRIOR_MEAN, PRIOR_VAR),
+        likelihood,
+        rule,
+        observations,
+    )
+    cramped = averaged_inference_gap(
+        gaussian_on(QuadratureGrid([-9.0], [9.0], [4001]), PRIOR_MEAN, PRIOR_VAR),
+        likelihood,
+        rule,
+        observations,
+    )
+
+    np.testing.assert_allclose(cramped.predictive_mass, 1.0, atol=1e-9)
+    assert roomy.worst_edge_ratio < 1e-6
+    assert cramped.worst_edge_ratio > 0.5
+
+
+def test_a_state_box_wide_enough_reports_a_negligible_edge():
+    states = QuadratureGrid(lower=[-14.0], upper=[14.0], counts=[2801])
+    observations = QuadratureGrid(lower=[-10.0], upper=[10.0], counts=[201])
+    measured = averaged_inference_gap(
+        gaussian_on(states, PRIOR_MEAN, PRIOR_VAR),
+        FixedNoiseLikelihood([[1.0]], observation_noise=[[0.5]]),
+        kalman_rule(2.0),
+        observations,
+    )
+    assert measured.worst_edge_ratio < 1e-9
+    assert measured.worst_edge_ratio >= 0.0
+
+
 def test_the_divergences_are_returned_per_observation():
     # Where the gap lives in y is a property of the gap. A wrong-gain filter is worst
     # on the readings furthest from the prior mean, since that is where the two

@@ -128,10 +128,14 @@ class TestAgreementWithKalmanOverATrajectory:
             np.testing.assert_allclose(posteriors[step].mean, belief.mean, atol=1e-8)
             np.testing.assert_allclose(posteriors[step].cov, belief.cov, atol=1e-8)
 
-    def test_the_error_does_not_grow_over_the_run(self):
-        # Five steps of a recursion each carrying quadrature error. If prediction
-        # leaked or the reuse of one transition matrix were wrong, the disagreement
-        # would compound rather than sit at the level of a single step.
+    def test_every_step_holds_the_same_absolute_bar(self):
+        # This does not test a growth *ratio*, and an earlier version claimed to. The
+        # per-step disagreements run at float epsilon, around 1e-15, so a ratio
+        # between them is noise and asserts nothing. One fixed bar is what is
+        # available: a systematic leak in prediction, or a wrongly reused transition
+        # matrix, accumulates across five steps and breaks it. Measured worst is
+        # ~1.6e-15, so the bar below has three orders of headroom and still fires on
+        # a per-step shift of 1e-11.
         grid = QuadratureGrid(lower=[-14.0], upper=[14.0], counts=[2801])
         kernel, likelihood = scalar_pieces()
         posteriors = filter_sequence(
@@ -145,7 +149,11 @@ class TestAgreementWithKalmanOverATrajectory:
             belief = backend.infer_states(observation, belief)
             errors.append(abs(float(posteriors[step].mean[0] - belief.mean[0])))
 
-        assert max(errors[1:]) <= max(errors[0], 1e-12) * 5.0
+        assert max(errors) < 5e-12, errors
+        # The last step is not systematically worse than the first, which is the part
+        # a leak would break. Stated as a bound rather than a ratio, for the reason
+        # above.
+        assert errors[-1] < 5e-12
 
     def test_a_driven_run_matches_the_kalman_run(self):
         grid = QuadratureGrid(lower=[-14.0], upper=[14.0], counts=[2801])

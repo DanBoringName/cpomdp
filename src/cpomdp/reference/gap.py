@@ -25,6 +25,14 @@ and a half-width of "k standard deviations" sizes a Gaussian tail against one th
 not (``research.checks.predictive_truncation`` measures where a given ``k`` fails).
 The box is declared by the caller and what fell outside it is reported.
 
+Two boxes can be wrong here and they fail differently. A narrow observation box loses
+predictive mass, which ``predictive_mass`` reports. A narrow *state* box is worse,
+because it goes unreported by that number: an extreme reading drags the exact
+posterior toward the edge, and past it the joint integrates to far less than ``p*(y)``
+while the predictive mass, dominated by the core, still reads one.
+``worst_edge_ratio`` is the second reading, and it is the one that catches a state box
+sized from the prior while the observation box was sized for the tails.
+
 Two engines compute this quantity today. ADR-052 records why, and issue #102 tracks
 cutting it back to one once the ``p*`` work settles where that code lives.
 """
@@ -47,16 +55,35 @@ __all__ = ["InferenceGap", "averaged_inference_gap"]
 ApproximatePosterior = Callable[[GridDensity, ArrayLike], GridDensity]
 
 
+def _boundary_mask(grid: QuadratureGrid) -> Float64[Array, "N"]:
+    """Which nodes sit on the box's surface, where a truncated density piles up.
+
+    Exact comparison is safe: the nodes come from ``linspace``, which reproduces both
+    endpoints exactly, so a boundary node equals its corner value bit for bit.
+    """
+    nodes = grid.nodes
+    return jnp.any(
+        (nodes == jnp.asarray(grid.lower)) | (nodes == jnp.asarray(grid.upper)),
+        axis=-1,
+    )
+
+
 @jax.jit
 def _weigh_one_observation(
     prior: GridDensity,
     approximation: GridDensity,
     log_likelihood: Float64[Array, "N"],
-) -> tuple[Float64[Array, ""], Float64[Array, ""]]:
-    """``log p*(y)`` and ``KL(q ‖ p(x|y))`` from one reading's log-likelihood.
+    boundary: Float64[Array, "N"],
+) -> tuple[Float64[Array, ""], Float64[Array, ""], Float64[Array, ""]]:
+    """``log p*(y)``, ``KL(q ‖ p(x|y))`` and the edge ratio for one reading.
 
-    Both come off the same unnormalised product, so the predictive and the posterior
-    cannot disagree about what the model says.
+    The first two come off the same unnormalised product, so the predictive and the
+    posterior cannot disagree about what the model says.
+
+    The third is the posterior's largest density on the box's surface against its
+    largest anywhere. Near zero when the density has decayed before the edge. Near one
+    when the mode itself is at or beyond the edge, which is the state box being too
+    small for this reading and is invisible in the predictive mass.
 
     Compiled because the sweep calls it once per observation node and every operation
     in it is a small array op. Unjitted, the dispatch dominates: the divergence alone
@@ -65,7 +92,9 @@ def _weigh_one_observation(
     across the sweep, so this traces once.
     """
     joint = GridDensity(prior.grid, prior.log_density + log_likelihood)
-    return joint.log_mass, approximation.kl_to(joint)
+    log_density = joint.log_density
+    edge = jnp.max(jnp.where(boundary, log_density, -jnp.inf)) - jnp.max(log_density)
+    return joint.log_mass, approximation.kl_to(joint), jnp.exp(edge)
 
 
 @dataclass(frozen=True)
@@ -79,6 +108,13 @@ class InferenceGap:
         predictive_mass: what ``p*(y)`` integrated to over the declared observation
             box. One when the box caught everything. Below one when it did not, and
             then ``value`` speaks for a conditional the caller did not ask for.
+        worst_edge_ratio: across the sweep, the largest share any exact posterior put
+            at the state box's surface, as its boundary density against its peak.
+            Near zero on a state box wide enough for every reading. Approaching one
+            means some reading pushed the posterior to the edge, where the joint
+            integrates to less than ``p*(y)`` and this ``value`` is built on a
+            corrupted integrand. ``predictive_mass`` does not see it, since the
+            readings that cause it are the ones carrying least weight.
         divergences: ``KL(q ‖ p(x|y))`` at each observation node, in the grid's node
             order. Where the gap concentrates in ``y`` is a property of the gap, not
             a by-product, and it is what a tail-dominated result looks like.
@@ -88,6 +124,7 @@ class InferenceGap:
 
     value: float
     predictive_mass: float
+    worst_edge_ratio: float
     divergences: Float64[Array, "K"]
     observation_grid: QuadratureGrid
 
@@ -128,9 +165,11 @@ def averaged_inference_gap(
     """
     prior = prior.normalise()
     states = prior.grid.nodes
+    boundary = _boundary_mask(prior.grid)
 
     log_predictive = []
     divergences = []
+    edge_ratios = []
     for observation in observation_grid.nodes:
         approximation = approximate_posterior(prior, observation)
         if not approximation.grid.same_lattice_as(prior.grid):
@@ -138,19 +177,22 @@ def averaged_inference_gap(
                 "approximate_posterior must return a belief on the prior's lattice, "
                 f"got {approximation.grid!r} against {prior.grid!r}"
             )
-        log_mass, divergence = _weigh_one_observation(
+        log_mass, divergence, edge_ratio = _weigh_one_observation(
             prior,
             approximation,
             likelihood.log_likelihood(observation, states),
+            boundary,
         )
         log_predictive.append(log_mass)
         divergences.append(divergence)
+        edge_ratios.append(edge_ratio)
 
     predictive = GridDensity(observation_grid, jnp.stack(log_predictive))
     stacked = jnp.stack(divergences)
     return InferenceGap(
         value=float(predictive.expectation(stacked)),
         predictive_mass=float(jnp.exp(predictive.log_mass)),
+        worst_edge_ratio=float(jnp.max(jnp.stack(edge_ratios))),
         divergences=stacked,
         observation_grid=observation_grid,
     )
