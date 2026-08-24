@@ -11,6 +11,12 @@ SEAM = ("harness", "constructors")
 # import to be possible is a test that arrives after the import has been written.
 EVALUATOR = "scoring"
 
+# The reference filter PR-7 builds. It is the independent object the Kalman path is
+# compared against, so it may not reach the thing it is a reference for. The
+# comparison lives in a test; a reference that imported the filter under test would
+# agree with it for reasons that are not evidence.
+REFERENCE = "reference"
+
 PACKAGE = Path(__file__).resolve().parents[1] / "src" / "cpomdp"
 
 
@@ -112,6 +118,40 @@ def test_the_seam_does_not_reach_an_action_selector():
     # them either way.
     assert "selection" not in _closure(*SEAM)
     assert "enumeration" not in _closure(*SEAM)
+
+
+def _reference_modules() -> set[str]:
+    """Every module under ``cpomdp/reference/``, named relative to the package.
+
+    Discovered rather than listed, so a module added to the subpackage is inside the
+    boundary from the moment it exists.
+    """
+    root = PACKAGE / REFERENCE
+    return {
+        ".".join(path.relative_to(PACKAGE).with_suffix("").parts).removesuffix(
+            ".__init__"
+        )
+        for path in root.rglob("*.py")
+    }
+
+
+def test_the_walk_finds_the_reference_subpackage():
+    assert "reference.quadrature" in _reference_modules()
+
+
+@pytest.mark.parametrize(
+    "forbidden",
+    ["backends.kalman", "backends.base", "selection", "enumeration", EVALUATOR],
+)
+def test_the_reference_filter_does_not_reach_the_filter_it_references(forbidden):
+    assert forbidden not in _closure(*_reference_modules())
+
+
+def test_the_reference_filter_reaches_nothing_first_party_at_all():
+    # Stronger than the list above and cheaper to keep true. The substrate is a grid
+    # and a density on it. The moment it needs a model type that is a design change,
+    # and it should read as one in the diff rather than passing quietly.
+    assert _closure(*_reference_modules()) == _reference_modules()
 
 
 def test_the_tree_imports_absolutely():
