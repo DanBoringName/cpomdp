@@ -224,3 +224,48 @@ gap, which needs the rung), and routes 3 to 6 entirely. The two-sided failure of
 budget-exhaustion behaviour of Q7 and the rung-one-versus-(36) separation of Q5 remain
 routes, and no number here bears on any of them.
 
+
+### RESOLVED 2026-08-24: route 2 is run, and only one declared family resists a unit choice
+
+`research/src/research/spinello_stilwell/reachable_noise.py`, run with
+
+```text
+uv run --no-sync python -m research.spinello_stilwell.reachable_noise
+```
+
+The infimum of `R` over the whole state line, per declared family:
+
+| family | `inf R` | clears the pole at |
+| --- | --- | --- |
+| `1 + x²` | 1 | any `λ > 1` |
+| `1.5 + 0.5 tanh(x)` | 1 | any `λ > 1` |
+| `1.5 + 0.5 sin(x)` | 1, **attained** | any `λ > 1` |
+| `2` (fixed) | 2 | already clear at `λ = 1` |
+| ridge, `R₀ = ½` at `μ*` | 0.5 | `λ > 1.5492` |
+| `exp(x)` | 0 | **no `λ`** |
+
+Four of the six never dip below `R = 1`, so the pole is outside their range for any
+`λ > 1`. That was not obvious in advance and it is a property of how they were declared
+rather than of any sweep width.
+
+**`1.5 + 0.5 sin(x)` attains `R = 1` exactly**, wherever `sin(x) = −1`. At `λ = 1` the
+pole is *on* the family, not near it. That single family is what makes the unit choice
+compulsory rather than prudent, and it was already in the registered set before any of
+this was noticed.
+
+**One `λ` covers the entire survey.** Over the reachable window, taken at nine prior
+standard deviations either side of the mean, `λ = 2.5630` puts every family at every
+declared spread a factor 1.2 clear of the pole. A single declared convention suffices,
+which is what keeps this a unit choice rather than a per-cell tuning.
+
+**`exp(x)` is the exception, and it is a real one.** Its infimum over the line is zero,
+so no `λ` clears every state. It is cleared only over a declared box, and the required
+`λ` grows without bound as that box widens: at spread 0.30 the reachable minimum is
+0.183 and needs `λ > 2.56`, and a wider box needs more. So for that family the guard
+question of Q2 stays open, and it is bound to route 3: a run whose iterate escapes the
+declared window can still reach the pole, and Q3 says the approach from above is silent.
+
+What this does **not** settle. The `λ` above is a measurement, not a declaration. What
+gets registered is the owner's call and belongs in an ADR, and until then no rung may
+read a unit choice off this table. Routes 3, 4, 5 and 6 are untouched, and route 4, the
+`∇σ = 0` reduction against the Kalman oracle, remains the rung's only external check.
