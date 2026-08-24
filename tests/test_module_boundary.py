@@ -17,6 +17,11 @@ EVALUATOR = "scoring"
 # agree with it for reasons that are not evidence.
 REFERENCE = "reference"
 
+# The tree's shared construction-time checker. The reference filter is allowed to
+# reach this one module and nothing else first-party, which the two tests below state
+# and justify together.
+SHARED_VALIDATOR = "_validation"
+
 PACKAGE = Path(__file__).resolve().parents[1] / "src" / "cpomdp"
 
 
@@ -147,11 +152,24 @@ def test_the_reference_filter_does_not_reach_the_filter_it_references(forbidden)
     assert forbidden not in _closure(*_reference_modules())
 
 
-def test_the_reference_filter_reaches_nothing_first_party_at_all():
-    # Stronger than the list above and cheaper to keep true. The substrate is a grid
-    # and a density on it. The moment it needs a model type that is a design change,
-    # and it should read as one in the diff rather than passing quietly.
-    assert _closure(*_reference_modules()) == _reference_modules()
+def test_validation_is_a_leaf_and_so_carries_nothing_in():
+    # What makes the allowance below safe rather than a hole. `_validation` is the
+    # tree's shared trust-boundary checker and imports no first-party module, so
+    # reaching it couples the reference to nothing. If it ever grows an import, the
+    # allowance stops being harmless and this fails before that one does.
+    assert _closure(SHARED_VALIDATOR) == {SHARED_VALIDATOR}
+
+
+def test_the_reference_filter_reaches_nothing_first_party_beyond_the_validator():
+    # Stronger than the list above and cheaper to keep true. The moment the reference
+    # needs a model type that is a design change, and it should read as one in the
+    # diff rather than passing quietly.
+    #
+    # `_validation` is the one exception. Duplicating a positive-definiteness check
+    # to keep a closure empty would trade a real invariant for a cosmetic one, and it
+    # carries nothing in — see the test above.
+    allowed = _reference_modules() | {SHARED_VALIDATOR}
+    assert _closure(*_reference_modules()) <= allowed
 
 
 def test_the_tree_imports_absolutely():
