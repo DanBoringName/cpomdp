@@ -3535,3 +3535,101 @@ the record, which is why `research/spinello_stilwell_rung.md` is not in it yet.
 - **The hook is only as real as its installation.** `pre-commit install --hook-type
   commit-msg` is a per-clone step, and this repository had no hooks installed at all when
   the check was written. The CI job is what does not depend on that.
+
+## ADR-055 — the symbolic suites leave the pull-request path
+
+**Date:** 2026-08-25
+**Status:** Accepted
+**Extends:** ADR-045 (the manifest is TOML and says how to regenerate itself)
+**Supersedes:** ADR-045's sentence that `--check` "is what CI runs"
+
+### What CI was paying
+
+The `symbolic suites (c₂ gate)` job ran on every pull request and took between 24 and 32
+minutes. Its two steps, measured on the run of 2026-08-24:
+
+    symbolic suites, reconciled against the manifest   15m 59s
+    the manifest is current                            15m 42s
+
+The second number is the whole finding. `warrantlib.manifest --check` imports each
+suite's entry point and calls it, because a suite's check ids are only readable by
+running it. So the job derived `c₂`, `c₄` and `c₆` twice per pull request, and the second
+derivation existed to answer questions the first had already answered: the pytest plugin
+reconciles both directions as it runs, failing by name on a declared check that stopped
+reporting and failing on a reported check nobody declared.
+
+One question was genuinely only the second step's. `--check` compares the file as text,
+so a layout the writer no longer emits counts as stale even when every id is right. That
+question needs no suite at all. It is answerable from what the file already declares.
+
+### What the job could catch, and when
+
+Nothing under `research/src` imports `cpomdp`. The suites read no data and take no
+measurement. Their inputs are the research package itself, `warrantlib`, and sympy, and
+the job syncs `--locked`, so a sympy change can only reach it through `uv.lock`.
+
+The derivations are fixed. Re-deriving fixed inputs is not a check, and a pull request
+that touched a hook script and a YAML file paid half an hour to re-print `c₆`.
+
+### The decision
+
+Three changes.
+
+`warrantlib.manifest` gains `--layout-only`, which compares the file against what the
+writer would emit from the ids **already declared in it**, running nothing. It answers
+the layout question in 70ms and says in its own output that it did not ask the other one.
+
+That check moves to the `lint` job, where it runs on every pull request unconditionally.
+
+The `symbolic` job gains a path gate. A new `scope` job diffs against the merge base with
+`main` and the symbolic job runs only when `research/`, `packages/warrantlib/`,
+`uv.lock`, `conftest.py` or this workflow changed. On a push to `main` it always runs.
+
+The last two are in the filter because both reach the run. Rootdir is the repository
+root, since `pyproject.toml` carries the ini table, so the symbolic invocation loads the
+root `conftest.py`, which edits `sys.path`, declares `pytest_plugins` and special-cases
+`research/registered_checks.toml` nodeids by name. `ci.yml` carries the job's command,
+its interpreter pin and its action versions. The diff is taken with `--no-renames`: with
+detection on, a file moved out of `research/` prints only its destination, so the move
+that changed the suite set would read as a change somewhere else and the job would sit
+out.
+
+**`pyproject.toml` is deliberately outside the filter, and that leaves one channel
+open.** A dependency edit that does not reach `uv.lock` fails `uv sync --locked` before
+anything runs, and the job names the manifest on its own command line rather than
+reading the `warrant_manifest` ini setting. `[tool.pytest.ini_options]` is neither of
+those. A future `filterwarnings = ["error"]` or an `addopts` edit reaches the symbolic
+run with nothing gating it, and is first seen on the push to `main`. Adding `pyproject.toml` to the
+filter would re-tax every pull request that touches a ruff ignore, which is the cost
+this exists to remove, so the residual is named here rather than closed. Running the job
+under `-c research/pytest.ini` would close it, and would cut `conftest.py` out of the
+run as well, at the price of diverging from the invocation `pyproject.toml` documents
+for local use.
+
+### Consequences
+
+- **A pull request that does not touch the derivation pays nothing**, and the job reports
+  as skipped rather than as passed. A green tick for work that did not happen is the
+  failure this shape avoids.
+- **The filter is exhaustive rather than approximate.** It rests on the suites importing
+  no `cpomdp` and on `--locked` pinning sympy. Both are checkable, and either one ceasing
+  to hold makes the filter wrong, so a change that makes a suite read library code has to
+  come here first.
+- **`--layout-only` states its own boundary.** Asked about a stale file it says the
+  layout drifted and that whether the declared ids are current is a question it does not
+  ask. A flag that quietly answered less than `--check` while printing the same words
+  would be worse than the duplicate run it replaces.
+- **Id currency is no longer asserted on a pull request that skips the job.** That is the
+  trade, and it is safe for the reason above: if `research/` did not change, the ids
+  cannot have. A push to `main` runs the full reconciliation, and so do the release and
+  merge runs through `tests/test_check_ids.py`.
+- **`tests/test_check_ids.py` does not close this gap.** It runs the suites on the merge
+  and release paths and reads their ids, and it asserts nothing about their outcomes. The
+  pytest plugin is what turns a `FIRED` check into a failure, and only the `symbolic` job
+  runs it. A change to `research/checks/` still has to keep that job green.
+- **ADR-045's line about `--check` is dead.** It says `--check` is what CI runs. Nothing
+  in CI runs the bare form now: `lint` runs `--check --layout-only` and the symbolic job
+  reconciles the ids through the pytest plugin. The line keeps its place, per the rule
+  this record is itself subject to, and this entry is the pointer a reader of it arrives
+  at. Every other statement of the same claim was in a file that is not a record, and
+  those were corrected in place.

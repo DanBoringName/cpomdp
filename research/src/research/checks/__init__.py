@@ -12,7 +12,8 @@ report. A declared id that stops being reported fails, naming it, and so does a 
 id nobody declared. A stage dropped from a runner used to leave a shorter run that still
 read green, and a count of the survivors could not say which one had gone (ADR-046).
 
-**Reconcile a run against the manifest.** This is what CI runs, and it changes nothing::
+**Reconcile a run against the manifest.** This is what CI's symbolic job runs, whenever
+a change reaches the derivation, and it changes nothing::
 
     pytest research/registered_checks.toml --warrant-detail
 
@@ -24,6 +25,8 @@ the diff be the review::
 
 Running the rewrite in place of the reconciliation makes the manifest agree with
 whatever the suites currently report, which is the failure the manifest exists to
-catch. ``python -m warrantlib.manifest --check`` is the read-only form, and it is what
-CI uses to notice a manifest nobody regenerated.
+catch. ``python -m warrantlib.manifest --check`` is the read-only form, and it runs
+every suite to read their ids. CI reconciles those ids through the pytest plugin as the
+symbolic job runs them, and asks the leftover layout question with
+``--check --layout-only`` on every pull request, so the bare form here is a local one.
 """

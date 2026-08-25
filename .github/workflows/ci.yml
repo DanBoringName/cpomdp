@@ -37,6 +37,15 @@ jobs:
       # default set and takes matplotlib out again.
       - name: ty (strict types)
         run: uv run --no-sync ty check
+      # The manifest is generated, so a layout the writer no longer emits is stale even
+      # when every declared id is right. Asking that needs only the file, which is why
+      # it sits here at 70ms rather than behind the suites that cost a quarter of an
+      # hour to re-derive. Whether the ids themselves are current is the `symbolic`
+      # job's business (ADR-055).
+      - name: the manifest's layout is current
+        run: >-
+          uv run --no-sync python -m warrantlib.manifest --check --layout-only
+          research/registered_checks.toml
 
   append-only:
     name: append-only (protected files)
@@ -129,8 +138,56 @@ jobs:
           --cov=cpomdp --cov=warrantlib
           --cov-report=term-missing --cov-fail-under=80
 
+  scope:
+    name: what this change reaches
+    runs-on: ubuntu-latest
+    outputs:
+      derivation: ${{ steps.reach.outputs.derivation }}
+    steps:
+      # Full history: the answer is a diff against the merge base with `main`.
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: fetch main
+        run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+      # Nothing under `research/src` imports cpomdp, and the suites read no data. Their
+      # inputs are the research package, warrantlib and sympy, and the job that runs
+      # them syncs `--locked`, so a sympy change can only arrive through `uv.lock`.
+      # That makes this filter exhaustive rather than a guess (ADR-055).
+      #
+      # `conftest.py` and this workflow are in the filter because both reach the run.
+      # Rootdir is the repository root, so the symbolic invocation loads the root
+      # conftest, which edits `sys.path`, declares `pytest_plugins` and special-cases
+      # `research/registered_checks.toml` nodeids by name. This file carries the job's
+      # command, its interpreter pin and its action versions.
+      #
+      # `pyproject.toml` is deliberately not here. A dependency edit that does not reach
+      # `uv.lock` fails `uv sync --locked` before anything else runs. Including it would
+      # re-tax every PR that touches a ruff ignore, which is the cost this filter exists
+      # to remove. `[tool.pytest.ini_options]` is the channel that leaves open, and
+      # ADR-055 names it.
+      - name: does this change reach the derivation
+        id: reach
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "derivation=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          reaches='^(research/|packages/warrantlib/|uv\.lock$|conftest\.py$|\.github/workflows/ci\.yml$)'
+          # `--no-renames`: with detection on, a file moved out of `research/` prints
+          # only its destination, so the move that changed the suite set reads as a
+          # change somewhere else entirely and the job sits out.
+          changed=$(git diff --name-only --no-renames "$(git merge-base HEAD origin/main)")
+          if echo "$changed" | grep -qE "$reaches"; then
+            echo "derivation=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "derivation=false" >> "$GITHUB_OUTPUT"
+          fi
+
   symbolic:
     name: symbolic suites (c₂ gate)
+    needs: scope
+    if: needs.scope.outputs.derivation == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -157,14 +214,13 @@ jobs:
       # when this job ran them directly. The outcome reaches the terminal without it and
       # the reason the check gives does not, so the job would otherwise have kept the
       # verdicts and lost the record.
+      #
+      # Both directions of the reconciliation happen here. A declared check that stops
+      # reporting fails by name, and a check the suite reports that nobody declared
+      # fails too. `manifest --check` used to ask the same two questions in a second
+      # step, and paid a second full derivation of the sextic to do it (ADR-055).
       - name: symbolic suites, reconciled against the manifest
         run: uv run --no-sync pytest research/registered_checks.toml --warrant-detail
-      # The manifest is generated, so a suite gaining or losing a check without it being
-      # rewritten is caught here rather than at the next person's review.
-      - name: the manifest is current
-        run: >-
-          uv run --no-sync python -m warrantlib.manifest --check
-          research/registered_checks.toml
 
   oracle:
     name: rxinfer oracle (Julia)

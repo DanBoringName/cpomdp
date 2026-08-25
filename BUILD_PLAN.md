@@ -259,8 +259,10 @@ Results from the third land in `research/gate_d4_registration.md`, not here.
 
 **Every PR.** `uv run --no-sync pytest -m "not rxinfer and not slow"` green,
 `uv run --no-sync ruff check src/cpomdp tests examples mkdocs_hooks.py` clean,
-`uv run --no-sync ty check` clean, `mkdocs build --strict` green whenever a docstring or
-doc page moves. A new name in `cpomdp.__all__` needs a `docs/api/` page before anything
+`uv run --no-sync ty check` clean,
+`uv run --no-sync python -m warrantlib.manifest --check --layout-only
+research/registered_checks.toml` current, `mkdocs build --strict` green whenever a
+docstring or doc page moves. A new name in `cpomdp.__all__` needs a `docs/api/` page before anything
 can link to it.
 
 ---

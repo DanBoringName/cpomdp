@@ -4,6 +4,7 @@
   "words": [
     "addini",
     "addoption",
+    "addopts",
     "allclose",
     "allpts",
     "archivePrefix",
@@ -65,6 +66,7 @@
     "exitstatus",
     "facecolor",
     "figsize",
+    "filterwarnings",
     "flatnonzero",
     "fnmatch",
     "fontsize",
@@ -147,6 +149,7 @@
     "ndarray",
     "ndim",
     "nodeid",
+    "nodeids",
     "nonfinite",
     "numpy",
     "Okabe",

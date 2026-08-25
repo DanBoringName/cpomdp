@@ -152,14 +152,19 @@ uv run pre-commit run --all-files
 
 The symbolic suites are deliberately not in `testpaths`. `gap_series` derives `c₂` and
 `c₄` symbolically and costs about half a minute, which nobody wants on every run. They
-have their own commands, and their own CI job. Two of them read and change nothing,
-and those are what CI runs:
+have their own commands, and their own CI job:
 
 ```bash
 uv run pytest research/registered_checks.toml                   # reconcile the run
 uv run pytest research/registered_checks.toml --warrant-detail  # + each reason (or -vv)
 uv run python -m warrantlib.manifest --check research/registered_checks.toml
+uv run python -m warrantlib.manifest --check --layout-only research/registered_checks.toml
 ```
+
+The `symbolic` job runs the second, and only when a change reaches the derivation. The
+`lint` job runs the fourth on every pull request, which costs milliseconds. The third
+asks both questions and runs every suite to do it, so it is a local command and CI runs
+it nowhere. ADR-055 has the reasoning.
 
 `pytest` turns each check the manifest declares into an item, so a check that stops
 reporting fails by name and a check nobody declared fails too. `--check` says whether

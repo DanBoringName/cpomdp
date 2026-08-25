@@ -203,7 +203,7 @@ class TestRunningASuite:
 
 
 class TestTheCommandLine:
-    """`--check` is what CI runs, so what it calls current has to be current."""
+    """What the command calls current has to be current, in every form of the ask."""
 
     def _seed(self, tmp_path, checks=()):
         path = tmp_path / "registered_checks.toml"
@@ -265,6 +265,78 @@ class TestTheCommandLine:
         assert "out of date" in printed
         assert "manifest and run agree" not in printed
         assert "layout" in printed
+
+
+class TestAskingAboutTheLayoutAlone:
+    """`--layout-only`, which is the half of the question the file already answers."""
+
+    #: An entry point that raises the moment anything tries to run it. A test that
+    #: passes with this in the file has proved no suite was run.
+    UNRUNNABLE = "warrantlib.nowhere:absent"
+
+    def _seed(self, tmp_path, checks=("b.two", "a.one")):
+        path = tmp_path / "manifest.toml"
+        path.write_text(
+            Manifest(
+                suites=(
+                    Suite(
+                        name="unrunnable",
+                        entry_point=self.UNRUNNABLE,
+                        checks=tuple(checks),
+                    ),
+                )
+            )
+            .relaid()
+            .to_toml()
+        )
+        return path
+
+    def test_it_runs_no_suite(self, tmp_path, capsys):
+        path = self._seed(tmp_path)
+        assert main(["--check", "--layout-only", str(path)]) == 0
+        assert "layout current" in capsys.readouterr().out
+
+    def test_the_same_file_without_the_flag_cannot_be_answered_at_all(self, tmp_path):
+        # The contrast is the point: reaching the ids means importing the suite, and
+        # this one does not import. `--layout-only` never gets that far.
+        path = self._seed(tmp_path)
+        with pytest.raises(ValueError, match="does not import"):
+            main(["--check", str(path)])
+
+    def test_a_layout_the_writer_no_longer_emits_is_named(self, tmp_path, capsys):
+        path = self._seed(tmp_path)
+        path.write_text(path.read_text().replace("\n\n[suites.", "\n[suites."))
+        assert main(["--check", "--layout-only", str(path)]) == 1
+        printed = capsys.readouterr().out
+        assert "out of date" in printed
+        assert "layout" in printed
+
+    def test_ids_declared_out_of_order_are_a_stale_layout(self, tmp_path):
+        path = self._seed(tmp_path)
+        path.write_text(
+            path.read_text().replace('"a.one",\n  "b.two",', '"b.two",\n  "a.one",')
+        )
+        assert main(["--check", "--layout-only", str(path)]) == 1
+
+    def test_writing_says_it_relaid_rather_than_rewrote(self, tmp_path, capsys):
+        # The write path is reachable without `--check`, and it is the cheap repair for
+        # a file the layout step flags. Printing "rewritten" here would report what only
+        # a run of the suites can establish.
+        path = self._seed(tmp_path)
+        stale = path.read_text().replace("\n\n[suites.", "\n[suites.")
+        path.write_text(stale)
+        assert main(["--layout-only", str(path)]) == 0
+        assert "relaid" in capsys.readouterr().out
+        assert path.read_text() != stale
+        assert main(["--check", "--layout-only", str(path)]) == 0
+
+    def test_it_does_not_claim_the_declared_ids_are_current(self, tmp_path, capsys):
+        # The boundary, stated where someone reading the output would need it. Only the
+        # suites can say whether the ids drifted, and this flag does not run them.
+        path = self._seed(tmp_path)
+        path.write_text(path.read_text().replace("\n\n[suites.", "\n[suites."))
+        main(["--check", "--layout-only", str(path)])
+        assert "--layout-only does not ask" in capsys.readouterr().out
 
 
 class TestTheManifestRefusesWhatWouldReadAsChecks:
