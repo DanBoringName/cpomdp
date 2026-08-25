@@ -155,11 +155,17 @@ jobs:
       # them syncs `--locked`, so a sympy change can only arrive through `uv.lock`.
       # That makes this filter exhaustive rather than a guess (ADR-055).
       #
+      # `conftest.py` and this workflow are in the filter because both reach the run.
+      # Rootdir is the repository root, so the symbolic invocation loads the root
+      # conftest, which edits `sys.path`, declares `pytest_plugins` and special-cases
+      # `research/registered_checks.toml` nodeids by name. This file carries the job's
+      # command, its interpreter pin and its action versions.
+      #
       # `pyproject.toml` is deliberately not here. A dependency edit that does not reach
-      # `uv.lock` fails `uv sync --locked` before anything else runs, and the symbolic
-      # job names the manifest on its own command line rather than reading the
-      # `warrant_manifest` ini setting. Including it would re-tax every PR that touches
-      # a ruff ignore, which is the cost this filter exists to remove.
+      # `uv.lock` fails `uv sync --locked` before anything else runs. Including it would
+      # re-tax every PR that touches a ruff ignore, which is the cost this filter exists
+      # to remove. `[tool.pytest.ini_options]` is the channel that leaves open, and
+      # ADR-055 names it.
       - name: does this change reach the derivation
         id: reach
         run: |
@@ -167,8 +173,11 @@ jobs:
             echo "derivation=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          reaches='^(research/|packages/warrantlib/|uv\.lock$)'
-          changed=$(git diff --name-only "$(git merge-base HEAD origin/main)")
+          reaches='^(research/|packages/warrantlib/|uv\.lock$|conftest\.py$|\.github/workflows/ci\.yml$)'
+          # `--no-renames`: with detection on, a file moved out of `research/` prints
+          # only its destination, so the move that changed the suite set reads as a
+          # change somewhere else entirely and the job sits out.
+          changed=$(git diff --name-only --no-renames "$(git merge-base HEAD origin/main)")
           if echo "$changed" | grep -qE "$reaches"; then
             echo "derivation=true" >> "$GITHUB_OUTPUT"
           else

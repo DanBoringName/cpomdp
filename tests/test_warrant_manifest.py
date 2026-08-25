@@ -318,6 +318,18 @@ class TestAskingAboutTheLayoutAlone:
         )
         assert main(["--check", "--layout-only", str(path)]) == 1
 
+    def test_writing_says_it_relaid_rather_than_rewrote(self, tmp_path, capsys):
+        # The write path is reachable without `--check`, and it is the cheap repair for
+        # a file the layout step flags. Printing "rewritten" here would report what only
+        # a run of the suites can establish.
+        path = self._seed(tmp_path)
+        stale = path.read_text().replace("\n\n[suites.", "\n[suites.")
+        path.write_text(stale)
+        assert main(["--layout-only", str(path)]) == 0
+        assert "relaid" in capsys.readouterr().out
+        assert path.read_text() != stale
+        assert main(["--check", "--layout-only", str(path)]) == 0
+
     def test_it_does_not_claim_the_declared_ids_are_current(self, tmp_path, capsys):
         # The boundary, stated where someone reading the output would need it. Only the
         # suites can say whether the ids drifted, and this flag does not run them.

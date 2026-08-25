@@ -404,7 +404,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         argv: command-line arguments, or ``None`` to read ``sys.argv``.
 
     Returns:
-        Zero when the file is current and zero when it was rewritten, since rewriting
+        Zero when the file is current and zero when it was written, since writing
         is the job. ``--check`` returns one on a manifest nobody regenerated, which is
         the form CI runs and the convention a formatter's own check mode follows.
     """
@@ -418,7 +418,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--layout-only",
         action="store_true",
-        help="compare the file's layout, running no suite to do it",
+        help="act on the file's layout alone, running no suite to do it",
     )
     arguments = parser.parse_args(argv)
 
@@ -443,7 +443,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(_staleness(difference, layout_only=arguments.layout_only))
         return 1
     arguments.path.write_text(wanted_text)
-    print(f"{arguments.path}: rewritten, {len(rewritten.checks)} checks declared")
+    # A relaid file and a rewritten one are not the same claim. Printing one line for
+    # both would let the cheap form report what only the derivation can establish.
+    verb = "relaid" if arguments.layout_only else "rewritten"
+    print(f"{arguments.path}: {verb}, {len(rewritten.checks)} checks declared")
     print(difference)
     return 0
 

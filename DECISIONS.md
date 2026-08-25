@@ -3581,11 +3581,29 @@ the layout question in 70ms and says in its own output that it did not ask the o
 That check moves to the `lint` job, where it runs on every pull request unconditionally.
 
 The `symbolic` job gains a path gate. A new `scope` job diffs against the merge base with
-`main` and the symbolic job runs only when `research/`, `packages/warrantlib/` or
-`uv.lock` changed. On a push to `main` it always runs. `pyproject.toml` is deliberately
-outside the filter: a dependency edit that does not reach `uv.lock` fails `uv sync
---locked` before anything runs, and the job names the manifest on its own command line
-rather than reading the `warrant_manifest` ini setting.
+`main` and the symbolic job runs only when `research/`, `packages/warrantlib/`,
+`uv.lock`, `conftest.py` or this workflow changed. On a push to `main` it always runs.
+
+The last two are in the filter because both reach the run. Rootdir is the repository
+root, since `pyproject.toml` carries the ini table, so the symbolic invocation loads the
+root `conftest.py`, which edits `sys.path`, declares `pytest_plugins` and special-cases
+`research/registered_checks.toml` nodeids by name. `ci.yml` carries the job's command,
+its interpreter pin and its action versions. The diff is taken with `--no-renames`: with
+detection on, a file moved out of `research/` prints only its destination, so the move
+that changed the suite set would read as a change somewhere else and the job would sit
+out.
+
+**`pyproject.toml` is deliberately outside the filter, and that leaves one channel
+open.** A dependency edit that does not reach `uv.lock` fails `uv sync --locked` before
+anything runs, and the job names the manifest on its own command line rather than
+reading the `warrant_manifest` ini setting. `[tool.pytest.ini_options]` is neither of
+those. A future `filterwarnings = ["error"]` or an `addopts` edit reaches the symbolic
+run with nothing gating it, and is first seen on the push to `main`. Adding `pyproject.toml` to the
+filter would re-tax every pull request that touches a ruff ignore, which is the cost
+this exists to remove, so the residual is named here rather than closed. Running the job
+under `-c research/pytest.ini` would close it, and would cut `conftest.py` out of the
+run as well, at the price of diverging from the invocation `pyproject.toml` documents
+for local use.
 
 ### Consequences
 
