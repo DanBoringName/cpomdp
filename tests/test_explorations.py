@@ -1,5 +1,6 @@
 import pytest
 
+import research.explorations.averaged_gap_identity as gap_identity
 import research.explorations.c6_window as window
 import research.explorations.noise_model as noise
 import research.explorations.operating_point as point
@@ -15,7 +16,7 @@ def test_the_window_exploration_runs_and_its_assertions_hold(capsys):
     assert "D moves by a factor of 0.895" in printed
 
 
-@pytest.mark.parametrize("module", [window, noise, edge, point])
+@pytest.mark.parametrize("module", [window, noise, edge, point, gap_identity])
 def test_no_exploration_reports_a_warrant(module):
     # The invariant is the package's, stated in explorations/__init__.py, so it is
     # checked over the package rather than over whichever module was written first.
@@ -95,3 +96,28 @@ def test_the_two_edges_never_fail_together():
     assert abs(edge.c6(edge.SEXTIC_ZERO)) < 1e-12
     assert abs(edge.c6(edge.QUARTIC_ZERO)) > 1.0
     assert abs(edge.c4(edge.SEXTIC_ZERO)) > 0.01
+
+
+def test_the_gap_identity_exploration_runs_and_its_assertions_hold(capsys):
+    # Three routes to one formula, each asserted inside the module. This is what
+    # stands behind treating the Gaussian averaged gap as a closed form at all.
+    gap_identity.main()
+    printed = capsys.readouterr().out
+    assert "45 triples" in printed
+    assert "vanishes identically at R_plug = R_true: True" in printed
+    assert "sympy decides non-negativity: None" in printed
+
+
+def test_the_identity_is_general_in_the_observation_matrix():
+    # The hypothesis that bounds what may be claimed. A scalar-only identity and one
+    # general in C are different universals, and only the second licences a general
+    # symbolic check. The non-square case is the one that decides it.
+    shapes = {case[2].shape for case in gap_identity.MULTIVARIATE_CASES}
+    assert (1, 2) in shapes, "a non-square C must be among the cases"
+    assert (2, 2) in shapes
+
+
+def test_a_correct_rule_has_exactly_zero_gap():
+    # Not merely small. The expression cancels, which is why the calibration test in
+    # tests/test_reference_gap.py is entitled to assert a hard zero.
+    assert gap_identity.averaged_gap(0.7, 0.7, 1.3) == 0.0

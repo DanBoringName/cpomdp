@@ -3354,3 +3354,126 @@ arrives at.
 - **The convention is now stated where it can be checked**: reversal is *Supersedes*,
   accumulation is *Extends*. ADR-048's own header is left as written and corrected by
   this record.
+
+## ADR-052 — the averaged inference gap is built twice, on purpose, for now
+
+**Date:** 2026-08-24
+**Status:** Accepted
+
+### The quantity, and the two places it will live
+
+`E_{y∼p*}[ KL(q ‖ p(x|y)) ]` is the averaged inference gap. R6 is a claim about it, and
+PR-7 requires the reference filter to return it directly.
+
+`research.checks.gap_kernel` already computes it, for the scalar GATE-D4 case, by
+`scipy.integrate.quad`. It pins three conventions that were nearly lost once already:
+reverse direction, `R` frozen at the prior mean, and the average taken under the true
+`p*(y)` rather than the agent's plug-in predictive. It is cited from
+`research/c4_hand_derivation.md` and twice from `research/gate_d4_registration.md`, and it
+stands behind the 28 fitted `c₄` cases.
+
+PR-7's version is general: any grid, any pointwise likelihood, any transition kernel, any
+rung of the ladder. It is a different object with the same integral inside it.
+
+### The decision
+
+Build the general one in `cpomdp.reference` and leave `gap_kernel` alone. Cross-check the
+two on a scalar case in a test, so a divergence between them fails rather than propagates.
+
+Two implementations of one quantity is how numbers drift apart, and this record exists
+because that is a real cost being accepted rather than overlooked. It is accepted because
+the alternative is worse right now. Migrating `gap_kernel` onto the new engine edits a
+module carrying registered provenance for numbers already declared, inside a PR whose
+merge gate is about a filter rather than about `c₄`. A refactor there would put the `c₄`
+cases behind a code path that did not exist when they were measured, and no reader could
+afterwards tell which engine produced them.
+
+The conventions are the thing that must not fork. They belong to the ladder and the
+averaging, not to either implementation, and the cross-check test is what holds them
+together until there is one engine.
+
+### When it gets cut
+
+Not on a date. When the `p*` work is finished and it is settled where that code lives and
+how it splits between the library and `research/`. That question is open today: the
+predictive, its truncation and its error shape are all still being decided, and PR-8's `T`
+is parked on the last of them. Deciding the module boundary before those settle would fix
+it against a shape that has not stopped moving.
+
+### Consequences
+
+- **A number is reachable by two routes**, and the cross-check is the only thing making
+  that safe. If it is ever deleted or relaxed, this decision stops being defensible.
+- **`gap_kernel` keeps its provenance intact.** The `c₄` cases stay behind the engine that
+  measured them, which is what the derivation-code rule asks for.
+- **The new engine carries no warrant on arrival.** It computes a number; nothing declares
+  it until R6 registers one. Until then it is `COMPUTED`, and the word is not "certified".
+- **The debt is tracked, not remembered.** A GitHub issue points here and is closed by the
+  merge, not by the decision.
+
+## ADR-053 — the two gap engines do not overlap where ADR-052 said to compare them
+
+**Date:** 2026-08-24
+**Status:** Accepted
+**Supersedes:** one sentence of ADR-052, "Cross-check the two on a scalar case in a
+test", and nothing else in it
+
+### What ADR-052 assumed
+
+That both engines compute the averaged inference gap over the same domain, so a scalar
+fixed-`R` case would exercise each of them and their agreement would be evidence. The
+closed form under a fixed `R` was the obvious place to meet, since it is the one
+configuration with an answer known independently of either.
+
+That configuration is unreachable for one of the two.
+
+### What is actually true
+
+`research.checks.gap_kernel` freezes `R̂ = R(μ)` by construction. Its agent's plug-in is
+read off the declared family at the prior mean, and nothing in its interface lets a
+caller supply a different one. Under a constant `R` the plug-in *is* the truth, so the
+divergence is zero at every `y` and the averaged gap is zero. Measured at `3.6e-17`,
+which is the quadrature's own floor.
+
+So there is no fixed-`R` configuration in which both engines produce a number worth
+comparing. One of them produces zero by construction, and a comparison against zero
+tests the quadrature and nothing else.
+
+### The decision
+
+The cross-check runs on the state-dependent case, which is where the two genuinely
+overlap. `gap_identity.engines_agree` compares them on `R(x) = 1 + x²` at four spreads
+and requires agreement within `1e-10`. Measured worst is `3.2e-14`.
+
+Its family is declared locally in the check rather than added to `gap_kernel.FAMILIES`.
+That dict is a registered set, and a cross-check has no business extending one to make
+itself possible.
+
+The comparison samples a continuum of spreads, so it reports `CORROBORATED` at
+`BOUNDED`. Adding spreads does not make it a universal, and a test asserts it never
+claims otherwise.
+
+### What this costs, stated rather than smoothed over
+
+**The closed-form identity is not a cross-engine anchor.** ADR-052 implied it could
+become one. It anchors `cpomdp.reference` alone, where the fixed-`R` case is reachable
+and the answer is known. `gap_kernel` is tied to it only indirectly: through the three
+shared conventions, and through agreeing with the other engine on `R(x)`.
+
+That is weaker than two engines each independently matching a known answer. It is what
+is available. A reader comparing the two should know that their agreement rests on a
+case where neither has an independent oracle, and that the oracle exists only on the
+side one of them cannot reach.
+
+### Consequences
+
+- **ADR-052's substance stands.** Two engines, a load-bearing cross-check, and the
+  merge deferred until the `p*` work settles the module boundary. Issue #102 tracks it
+  and this entry does not move its trigger.
+- **A future single engine inherits the harder job.** Whichever survives has to reach
+  both regimes, since the fixed-`R` case is the only one with an oracle and the `R(x)`
+  case is the only one the results are about.
+- **The unreachability is a property of `gap_kernel`'s interface, not a defect.** It was
+  built to measure one registered family at one plug-in rule. Widening it to accept an
+  arbitrary plug-in would change a module carrying registered `c₄` provenance, which is
+  the thing ADR-052 declined to do.

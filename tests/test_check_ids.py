@@ -20,7 +20,12 @@ from functools import cache
 import crossover  # examples/ffg, on the path via the root conftest
 import pytest
 
-from research.checks import gap_series, log_ratio_series, series_kernel
+from research.checks import (
+    gap_identity,
+    gap_series,
+    log_ratio_series,
+    series_kernel,
+)
 from research.checks.gap_kernel import SIGMAS, sigma_slug
 
 #: The symbolic suites, keyed by the prefix every id in them must carry, so a check
@@ -29,6 +34,7 @@ _SUITES = {
     "series_kernel": series_kernel.run_checks,
     "log_ratio_series": log_ratio_series.run_checks,
     "gap_series": gap_series.run_checks,
+    "gap_identity": gap_identity.run_checks,
 }
 
 #: Reading a suite's check ids runs it. `gap_series` derives `c₂`, `c₄` and `c₆`
@@ -43,6 +49,9 @@ _SUITE_CASES = [
     pytest.param("series_kernel", marks=pytest.mark.slow),
     "log_ratio_series",
     pytest.param("gap_series", marks=pytest.mark.slow),
+    # 24s: the symbolic identities settle in about a second, and the cross-engine
+    # comparison runs two full quadrature engines at four spreads.
+    pytest.param("gap_identity", marks=pytest.mark.slow),
 ]
 
 
