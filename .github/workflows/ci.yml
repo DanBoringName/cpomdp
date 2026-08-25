@@ -38,6 +38,18 @@ jobs:
       - name: ty (strict types)
         run: uv run --no-sync ty check
 
+  append-only:
+    name: append-only (protected files)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: fetch main
+        run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+      - name: no landed line is rewritten
+        run: python3 protected_files.py
+
   docs:
     name: docs build (strict)
     runs-on: ubuntu-latest

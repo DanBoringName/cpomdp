@@ -71,6 +71,14 @@ repos:
         types: [python]
         files: ^(src|packages/warrantlib/src)/
 
+  - repo: local
+    hooks:
+      - id: protected-files
+        name: protected files are append-only
+        entry: uv run --no-sync python protected_files.py
+        language: system
+        stages: [commit-msg]
+
   # Enforce Conventional Commit messages (feat:, fix:, docs:, ...), matching the
   # style already used in the git history. Runs at the commit-msg stage.
   - repo: https://github.com/compilerla/conventional-pre-commit

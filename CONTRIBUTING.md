@@ -91,6 +91,33 @@ save, point it at ruff yourself. Just don't rely on it. The hooks are what count
   bounce anything that doesn't.
 - a few **hygiene** checks: no trailing whitespace, files end in a newline, YAML and
   TOML parse, no leftover merge-conflict markers.
+- **protected files** stay append-only. `DECISIONS.md` and the two research records
+  may gain lines and may not have one rewritten. The next section says why and what to
+  do instead.
+
+## Protected files
+
+Three files are records of what was known when: `DECISIONS.md`,
+`research/gate_d4_registration.md` and `research/spinello_stilwell_rung.md`. What a
+reader gets from them is the ability to tell a claim made before a result existed from
+one made after. An in-place edit destroys that silently. No diff restores it.
+
+So corrections, qualifications, retractions and new results go in as a new dated entry
+in the file's own convention. The superseded line keeps its place. The new entry says
+what replaced it and why. An ADR that predates a rename keeps the words it was written
+in. ADR-038 records that same principle.
+
+Landed means reached `main`. A block you added on your own branch and then reworked was
+never visible to anyone, so the check compares your work against its merge base with
+`main` rather than against your last commit. Drafting across several commits is left
+alone.
+
+`protected_files.py` is the enforcement and holds the list. The commit-msg hook runs it
+over your index. The `append-only` CI job runs it over the whole pull request.
+
+Typos and broken markdown are the exception. Never a number, a date, a claim or a
+result. Put `[in-place]` in the commit subject to take it, which leaves the exception
+in the log rather than in nobody's memory.
 
 ## The docs site
 
