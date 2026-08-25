@@ -62,7 +62,7 @@ after results are seen shows up in the diff.
   satisfied by a different check arriving in place of the one that went. The manifest
   names both directions: declared and not reported, reported and not declared. Generate
   or refresh one with `python -m warrantlib.manifest <path>`, and ask whether it is
-  current with `--check`, which is the form CI runs. The file compares as text rather
+  current with `--check`. The file compares as text rather
   than as parsed content, so a layout the writer no longer produces counts as stale.
   `--layout-only` asks that half on its own, from the ids the file already declares and
   without running a suite. Reading a suite's ids means running it, so on a project whose

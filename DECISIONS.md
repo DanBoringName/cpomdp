@@ -3541,6 +3541,7 @@ the record, which is why `research/spinello_stilwell_rung.md` is not in it yet.
 **Date:** 2026-08-25
 **Status:** Accepted
 **Extends:** ADR-045 (the manifest is TOML and says how to regenerate itself)
+**Supersedes:** ADR-045's sentence that `--check` "is what CI runs"
 
 ### What CI was paying
 
@@ -3626,3 +3627,9 @@ for local use.
   and release paths and reads their ids, and it asserts nothing about their outcomes. The
   pytest plugin is what turns a `FIRED` check into a failure, and only the `symbolic` job
   runs it. A change to `research/checks/` still has to keep that job green.
+- **ADR-045's line about `--check` is dead.** It says `--check` is what CI runs. Nothing
+  in CI runs the bare form now: `lint` runs `--check --layout-only` and the symbolic job
+  reconciles the ids through the pytest plugin. The line keeps its place, per the rule
+  this record is itself subject to, and this entry is the pointer a reader of it arrives
+  at. Every other statement of the same claim was in a file that is not a record, and
+  those were corrected in place.

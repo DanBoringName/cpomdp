@@ -193,6 +193,10 @@ suites collect as seventy-three items, and the summary says which three so the d
 is not left as arithmetic.
 
 Regenerate the file with `python -m warrantlib.manifest <path>` after a suite changes, and
-ask whether it is current with `--check`, which returns non-zero on a stale one and is
-the form to run in CI. It compares as text, so a layout the writer no longer produces
-counts as stale too.
+ask whether it is current with `--check`, which returns non-zero on a stale one. It
+compares as text, so a layout the writer no longer produces counts as stale too.
+
+Reading a suite's ids means running it, so `--check` costs a full run. `--layout-only`
+restricts either form to the layout question, answers it from the ids the file already
+declares, and runs nothing. It is the form to put on a fast job where the ids are
+reconciled elsewhere.

@@ -203,7 +203,7 @@ class TestRunningASuite:
 
 
 class TestTheCommandLine:
-    """`--check` is what CI runs, so what it calls current has to be current."""
+    """What the command calls current has to be current, in every form of the ask."""
 
     def _seed(self, tmp_path, checks=()):
         path = tmp_path / "registered_checks.toml"

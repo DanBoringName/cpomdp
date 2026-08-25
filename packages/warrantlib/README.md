@@ -123,9 +123,19 @@ a minute costs that once rather than once per row.
 | --- | --- |
 | `python -m warrantlib.manifest <path>` | rewrite it from the suites it names |
 | `python -m warrantlib.manifest --check <path>` | say whether it is current, change nothing, exit non-zero if not |
+| `--layout-only`, with either | act on the layout alone, running no suite |
 
-`--check` is the form to run in CI. It compares the file as text, so a layout the writer
-no longer produces counts as stale too. Adding a suite means adding its
+`--check` compares the file as text, so a layout the writer no longer produces counts as
+stale too. It runs every suite to read their ids, which on a project whose suites are
+expensive is a heavy way to ask about whitespace.
+
+`--layout-only` restricts either form to that half, answering from the ids the file
+already declares. It runs nothing, it says in its own output that it did not ask whether
+the ids are current, and its write form prints `relaid` rather than `rewritten`. Where a
+runner reconciles the declared ids as it runs them, this is the only question left for a
+separate command, and it costs milliseconds.
+
+Adding a suite means adding its
 `[suites.<name>]` table by hand, with no checks, and then rewriting. The new ids land in
 the diff, which is where they get reviewed.
 

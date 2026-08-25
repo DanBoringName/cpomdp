@@ -406,7 +406,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     Returns:
         Zero when the file is current and zero when it was written, since writing
         is the job. ``--check`` returns one on a manifest nobody regenerated, which is
-        the form CI runs and the convention a formatter's own check mode follows.
+        the convention a formatter's own check mode follows.
     """
     parser = argparse.ArgumentParser(description="Rewrite a warrant check manifest.")
     parser.add_argument("path", type=Path, help="the manifest to rewrite")
