@@ -198,10 +198,31 @@ class Manifest:
                 Suite(
                     name=suite.name,
                     entry_point=suite.entry_point,
-                    checks=tuple(sorted(ids)),
+                    checks=tuple(ids),
                 )
             )
-        return Manifest(suites=tuple(suites))
+        return Manifest(suites=tuple(suites)).relaid()
+
+    def relaid(self) -> Manifest:
+        """The same suites and the same ids, in the order the writer emits them.
+
+        Whether a manifest's *ids* are current is a question only the suites can
+        answer. Whether its *layout* is current is answerable from what the file
+        already declares, and this is that half on its own.
+
+        Returns:
+            The same manifest with every suite's checks sorted.
+        """
+        return Manifest(
+            suites=tuple(
+                Suite(
+                    name=suite.name,
+                    entry_point=suite.entry_point,
+                    checks=tuple(sorted(suite.checks)),
+                )
+                for suite in self.suites
+            )
+        )
 
     def to_toml(self) -> str:
         """The manifest as the file holds it.
@@ -354,6 +375,28 @@ def _field(suite: str, entry: Any, name: str) -> Any:
     return entry[name]
 
 
+def _staleness(difference: Reconciliation, *, layout_only: bool) -> str:
+    """Why a manifest is out of date, claiming nothing that was not looked at.
+
+    Args:
+        difference: what the declared ids and the reported ones each had alone.
+        layout_only: whether the suites were run.
+
+    Returns:
+        One line per drifted check, or one line saying where the drift is instead.
+    """
+    if layout_only:
+        return (
+            "the file's layout is not what the writer emits. Whether its declared "
+            "ids are current is a question --layout-only does not ask."
+        )
+    # The ids can agree while the file is stale, so saying they agree here reads as a
+    # contradiction of the line above it. Name the real reason instead.
+    if difference.agrees:
+        return "the declared ids are current, and the file's layout is not"
+    return str(difference)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Rewrite a manifest from the suites it names, or say whether it is current.
 
@@ -372,6 +415,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="report whether it is current, and change nothing",
     )
+    parser.add_argument(
+        "--layout-only",
+        action="store_true",
+        help="compare the file's layout, running no suite to do it",
+    )
     arguments = parser.parse_args(argv)
 
     # Compared as text rather than as parsed manifests. The declared ids can agree
@@ -380,21 +428,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     # file, and `--check` would keep passing on a version nothing produces any more.
     current_text = arguments.path.read_text()
     current = Manifest.from_toml(current_text)
-    rewritten = current.rewritten()
+    # `--layout-only` answers the half of the question the file already carries. The
+    # other half needs the suites, and a runner that reconciles as it runs them has
+    # already asked it, so nothing is served by deriving everything twice to ask again.
+    rewritten = current.relaid() if arguments.layout_only else current.rewritten()
     wanted_text = rewritten.to_toml()
     difference = current.reconcile(rewritten.checks)
     if wanted_text == current_text:
-        print(f"{arguments.path}: current, {len(current.checks)} checks declared")
+        scope = "layout current" if arguments.layout_only else "current"
+        print(f"{arguments.path}: {scope}, {len(current.checks)} checks declared")
         return 0
     if arguments.check:
         print(f"{arguments.path}: out of date")
-        # The ids can agree while the file is stale, so saying they agree here reads as
-        # a contradiction of the line above it. Name the real reason instead.
-        print(
-            difference
-            if not difference.agrees
-            else "the declared ids are current, and the file's layout is not"
-        )
+        print(_staleness(difference, layout_only=arguments.layout_only))
         return 1
     arguments.path.write_text(wanted_text)
     print(f"{arguments.path}: rewritten, {len(rewritten.checks)} checks declared")
