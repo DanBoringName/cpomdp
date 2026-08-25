@@ -38,6 +38,31 @@ jobs:
       - name: ty (strict types)
         run: uv run --no-sync ty check
 
+  append-only:
+    name: append-only (protected files)
+    runs-on: ubuntu-latest
+    steps:
+      # Full history: the check compares the pull request against its merge base with
+      # the base branch, and a shallow clone has the files without the graph to find
+      # it in.
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      # `fetch-depth: 0` already brings the branch down on every event this workflow
+      # runs on. Asking again costs nothing and takes the job's correctness off the
+      # checkout action's defaults. The check refuses to pass rather than compare
+      # nothing, so a fetch that stopped working would fail here loudly.
+      - name: fetch the base branch
+        run: |
+          git fetch --no-tags origin \
+            "+refs/heads/${GITHUB_BASE_REF:-main}:refs/remotes/origin/${GITHUB_BASE_REF:-main}"
+      # Standard library only, so there is no environment to build. With no message
+      # file the check reads `[in-place]` from the subjects already on the branch, so
+      # an exception the commit-msg hook allowed is not refused here for good
+      # (ADR-054).
+      - name: no landed line is rewritten
+        run: python3 protected_files.py
+
   docs:
     name: docs build (strict)
     runs-on: ubuntu-latest

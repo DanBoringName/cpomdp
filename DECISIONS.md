@@ -3477,3 +3477,61 @@ side one of them cannot reach.
   built to measure one registered family at one plug-in rule. Widening it to accept an
   arbitrary plug-in would change a module carrying registered `c₄` provenance, which is
   the thing ADR-052 declined to do.
+
+## ADR-054 — the append-only rule is enforced, and its exception is in the log
+
+**Date:** 2026-08-25
+**Status:** Accepted
+**Extends:** ADR-038 (an ADR keeps the vocabulary it was written in)
+
+### What was unenforced
+
+`DECISIONS.md` and `research/gate_d4_registration.md` are append-only by rule. The rule
+lived in a gitignored `CLAUDE.md` and in whoever was reading it at the time. It had
+already been broken once, by two in-place edits to the registration on 2026-08-17, and
+was caught by review rather than by anything that runs.
+
+ADR-038 records the principle for vocabulary: a record written before a rename keeps the
+words it was written in, because that is what dates it. The same argument covers every
+line in these files, and nothing acted on it.
+
+### The decision
+
+`protected_files.py` holds the list and reads a zero-context diff over it, failing on
+any removed line. Pure additions pass, including an insertion in the middle of a file,
+which is what appending within a section looks like to a diff. The `commit-msg` hook
+runs it over the index. The `append-only` CI job runs it over the pull request.
+
+**Landed means reached the branch the change will land on, not committed.** A block
+added in one commit and reworked in the next has no reader who could have seen the first
+version. Blocking that would train everyone to reach for `--no-verify`, which is how a
+hook stops being enforcement. So the comparison point is the merge base, read from
+`GITHUB_BASE_REF` on a pull request so a stacked branch is judged against the branch
+below it.
+
+**The exception is `[in-place]` in a commit subject.** A subject rather than a trailer,
+because commit messages here are one line. A marker rather than `--no-verify`, because
+it survives into the log where a reviewer meets it. One marked commit clears the branch:
+the diff against the merge base is cumulative, so reading only the message being written
+would oblige every later commit to carry the marker, and a plain append would have to
+call itself an in-place edit to get recorded. CI reads the same subjects.
+
+**A declared path that git is not tracking fails the check.** `git diff` exits zero on a
+pathspec matching nothing, so an entry naming a file that moved or never landed would
+guard nothing and say nothing about it. A record joins the list in the change that lands
+the record, which is why `research/spinello_stilwell_rung.md` is not in it yet.
+
+### Consequences
+
+- **`CONTRIBUTING.md` states the rule**, which `CLAUDE.md` could not: it is gitignored,
+  so the only durable statement of a repository-wide rule was one nobody outside this
+  machine could read.
+- **The exception is visible and countable.** `git log --grep` finds every in-place edit
+  ever taken. `--no-verify` leaves nothing behind at all, which is what made the 2026-08-17
+  breach invisible until someone read the diff.
+- **Rename detection is deliberately not asked for.** The pathspec names the source and
+  not the destination, so a protected file moved out from under the rule reads as a
+  whole-file deletion. Failing on that is the answer wanted, and `-M` would not change it.
+- **The hook is only as real as its installation.** `pre-commit install --hook-type
+  commit-msg` is a per-clone step, and this repository had no hooks installed at all when
+  the check was written. The CI job is what does not depend on that.

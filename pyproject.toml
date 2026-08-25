@@ -156,6 +156,7 @@ include = [
     "tests",
     "examples",
     "mkdocs_hooks.py",
+    "protected_files.py",
     "packages/warrantlib/src",
     "research/src",
 ]
