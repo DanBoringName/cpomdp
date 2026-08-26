@@ -23,15 +23,22 @@ are pytest hooks and a fixture, which pytest finds through the entry point, and 
 them in `__all__` would publish an import path nobody should use.
 
 `cpomdp.warrant` is held to a weaker rule, and deliberately. It exists so import paths
-that predate the split keep working, so it mirrors the names cpomdp itself once
-exported and does not grow as warrantlib does. A name that was never in cpomdp has no
-old path to preserve, and adding one here would build a second public surface to
-maintain past 1.0 (ADR-039).
+that predate the split keep working, so it does not track warrantlib name for name. A
+name with no old path to preserve stays out, because carrying it would build a second
+public surface to maintain past 1.0 (ADR-039).
+
+The exception is a name `Evidence` admits. That alias is re-exported here, so widening
+the union widens what this path accepts whether or not the new members are named on it,
+and a caller annotating against it could be handed a type it had no import for. The
+completeness leaves are carried for that reason and not as a general policy of tracking
+warrantlib. The set below is the whole surface, floor and ceiling both, so either kind
+of drift shows up as a failure rather than as a name nobody meant to publish.
 """
 
 import ast
 import subprocess
 import sys
+import typing
 from pathlib import Path
 
 import cpomdp
@@ -84,18 +91,31 @@ def test_cpomdp_warrant_re_exports_every_name_it_carries():
 
 def test_the_shim_carries_the_vocabulary_cpomdp_once_exported():
     # The subset rule above is satisfied by a shim that has lost a name, which is the
-    # breakage it exists to prevent. This is the floor it may not fall below.
+    # breakage it exists to prevent. This is the floor it may not fall below, and the
+    # ceiling too: growing it is a decision about cpomdp's public surface, so it is made
+    # by editing this set rather than by an import going unnoticed.
     assert set(cpomdp.warrant.__all__) == {
+        "AxisDeclaration",
         "CheckReport",
         "CompletenessCertificate",
+        "CompletenessEvidence",
         "Evidence",
         "Outcome",
+        "ProductCompletenessCertificate",
         "Provenance",
         "SymbolicReduction",
         "Tier",
         "Warrant",
         "check_summary",
     }
+
+
+def test_every_member_of_the_evidence_union_is_nameable_from_the_shim():
+    # The reason the completeness leaves are here at all. `Evidence` is re-exported, so
+    # a caller annotating against it can be handed any member; one it cannot import from
+    # the same path is a type it can receive and not name.
+    for member in typing.get_args(cpomdp.warrant.Evidence):
+        assert member.__name__ in cpomdp.warrant.__all__, member.__name__
 
 
 def test_top_level_names_are_the_warrantlib_objects():
