@@ -550,17 +550,34 @@ class ProductCompletenessCertificate(CompletenessEvidence):
     axes: tuple[AxisDeclaration, ...]
 
     def _validate_declaration(self) -> None:
-        """Reject a product over no axes.
+        """Reject axes that are not a tuple of `AxisDeclaration`, or are absent.
 
         Raises:
-            ValueError: if ``axes`` is empty. An empty product is one, which would
-                declare a cardinality of one over a set nobody named.
+            ValueError: if ``axes`` is not a tuple, is empty, or holds anything but
+                `AxisDeclaration`. A list round-trips unequal, since a record reads
+                back as a tuple, and anything without a ``size`` reaches
+                ``domain_declared`` as an `AttributeError` rather than as the
+                `ValueError` every other malformed field here raises. An empty product
+                is one, which would declare a cardinality over a set nobody named.
         """
+        if not isinstance(self.axes, tuple):
+            raise ValueError(
+                f"axes were passed as {type(self.axes).__name__}. Axes are a tuple, so "
+                "a certificate compares equal to the one a record reads back. Wrap a "
+                "single axis: (axis,)."
+            )
         if not self.axes:
             raise ValueError(
                 "a product certificate needs at least one axis; a product over none is "
                 "1, which declares a cardinality over a set nobody named"
             )
+        for axis in self.axes:
+            if not isinstance(axis, AxisDeclaration):
+                raise ValueError(
+                    f"a product certificate carries a {type(axis).__name__} as an "
+                    "axis. Each axis is an AxisDeclaration, which is what makes it "
+                    "named, sized and versioned rather than merely counted."
+                )
 
     @property
     def domain_declared(self) -> bool:
@@ -568,16 +585,32 @@ class ProductCompletenessCertificate(CompletenessEvidence):
         return self.expected == prod(axis.size for axis in self.axes)
 
     @property
-    def set_description(self) -> str:
-        """The cross the count is checked against, naming every axis and version."""
-        factors = " × ".join(
+    def _factors(self) -> str:
+        """The declared axes, each with its size and version."""
+        return " × ".join(
             f"{axis.name} {axis.size} ({axis.version})" for axis in self.axes
         )
-        return f"{factors} = {prod(axis.size for axis in self.axes)}"
+
+    @property
+    def set_description(self) -> str:
+        """The cross the count is checked against, naming every axis and version.
+
+        The product the axes give, not the count the certificate declares. This is the
+        right-hand side of the disagreement the domain error reports.
+        """
+        return f"{self._factors} = {prod(axis.size for axis in self.axes)}"
 
     def __str__(self) -> str:
-        """The certificate as a one-line warrant string in its own vocabulary."""
-        return f"{self.warrant.value} ({self.set_description}, visited {self.visited})"
+        """The certificate as a one-line warrant string in its own vocabulary.
+
+        The count rendered is ``expected``, the declared one, so a certificate whose
+        declaration disagrees with its axes shows the disagreement rather than hiding
+        it behind the product. The tree leaf renders its own ``expected`` likewise.
+        """
+        return (
+            f"{self.warrant.value} ({self._factors} = {self.expected}, "
+            f"visited {self.visited})"
+        )
 
 
 Evidence = CompletenessEvidence | SymbolicReduction
@@ -685,9 +718,11 @@ class CheckReport:
                 if not isinstance(item, _EVIDENCE_TYPES):
                     raise ValueError(
                         f"check {self.name!r} carries a "
-                        f"{type(item).__name__} as evidence. There are two kinds, one "
-                        "per decisive prover: a CompletenessCertificate for an "
-                        "exhaustive enumeration (Prover 3 · enumeration), a "
+                        f"{type(item).__name__} as evidence. There are two "
+                        "families, one per decisive prover: a CompletenessEvidence for "
+                        "an exhaustive enumeration (Prover 3 · enumeration), whose "
+                        "leaves are CompletenessCertificate over a tree and "
+                        "ProductCompletenessCertificate over a cross, and a "
                         "SymbolicReduction for a theorem or a symbolic identity "
                         "(Provers 1 and 2). Anything "
                         "else satisfies the PROVED precondition by being present and "

@@ -18,13 +18,19 @@ from dataclasses import FrozenInstanceError, dataclass, is_dataclass
 from pathlib import Path
 from typing import Any
 
+import jsonschema
 import pytest
 
+import warrantlib
 from warrantlib import (
     AxisDeclaration,
+    CheckReport,
     CompletenessCertificate,
     CompletenessEvidence,
+    Outcome,
     ProductCompletenessCertificate,
+    Provenance,
+    Tier,
     Warrant,
     report_from_dict,
     report_to_dict,
@@ -32,6 +38,31 @@ from warrantlib import (
 from warrantlib._serialise import _EVIDENCE_CODECS
 
 FIXTURES = Path(__file__).parent / "fixtures" / "warrantlib"
+
+#: The schema warrantlib ships, which is the consumer contract a record is judged by.
+REPORT_SCHEMA = json.loads(
+    (Path(warrantlib.__file__).parent / "report.schema.json").read_text()
+)
+
+
+def _report_carrying(evidence):
+    """The narrowest `PROVED` report that can carry one piece of evidence."""
+    return CheckReport(
+        name="a decided universal",
+        check_id="contract.decided",
+        warrant=Warrant.PROVED,
+        outcome=Outcome.NOT_TRIGGERED,
+        tier=Tier.EXACT,
+        detail="the declared domain was enumerated in full",
+        evidence=(evidence,),
+        provenance=(
+            Provenance(
+                registered_at="a76cf1b",
+                measured_at="9baaa22",
+                registered="the bar this was measured against",
+            ),
+        ),
+    )
 
 
 @dataclass(frozen=True)
@@ -140,6 +171,44 @@ class TestEveryLeafHoldsTheContract:
         record = _EVIDENCE_CODECS[tag].to_record(certificate)
         assert record["kind"] == tag
         assert _EVIDENCE_CODECS[tag].from_record(record) == certificate
+
+
+@pytest.mark.parametrize("cls", LEAF_CASES)
+class TestEveryLeafCrossesTheWire:
+    """Through the public functions and against the shipped schema, not the codecs.
+
+    Exercising `to_record` and `from_record` directly leaves `_evidence_to_dict`, its
+    exact-class dispatch, and the schema branch for the kind all unrun. A wrong `const`,
+    a missing `required` entry or a dispatch that never matches would ship green.
+    """
+
+    def test_the_record_validates_against_the_shipped_schema(self, cls):
+        record = report_to_dict(_report_carrying(_built(_LEAVES[cls])))
+        jsonschema.validate(record, REPORT_SCHEMA)
+
+    def test_the_report_round_trips_through_the_public_functions(self, cls):
+        report = _report_carrying(_built(_LEAVES[cls]))
+        assert report_from_dict(report_to_dict(report)) == report
+
+    def test_the_record_carries_the_kind_the_registry_names(self, cls):
+        record = report_to_dict(_report_carrying(_built(_LEAVES[cls])))
+        tag = next(tag for tag, codec in _EVIDENCE_CODECS.items() if codec.cls is cls)
+        assert record["evidence"][0]["kind"] == tag
+
+
+@pytest.mark.parametrize("cls", LEAF_CASES)
+def test_the_render_shows_the_declared_count_not_a_recomputed_one(cls):
+    # Only a certificate whose declaration disagrees with its domain can see this, and
+    # a PROVED one cannot disagree. The render is what a reader is shown, so a leaf that
+    # quietly substitutes its own arithmetic reports a count nobody declared.
+    leaf = _LEAVES[cls]
+    disagreeing = _built(
+        leaf,
+        warrant=Warrant.CORROBORATED,
+        expected=leaf.cardinality + 1,
+        visited=1,
+    )
+    assert str(leaf.cardinality + 1) in str(disagreeing), str(disagreeing)
 
 
 def test_the_base_refuses_a_leaf_that_validates_itself():

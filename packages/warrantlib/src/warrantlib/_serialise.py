@@ -45,7 +45,7 @@ behaviour. A record whose version this module does not know is refused.
 An evidence *kind* is additive under one version and does not move it. The ``kind``
 field self-describes, and a reader meeting an unknown one refuses it by name, which is
 the designed failure rather than a gap. The version moves when the record envelope
-changes. ``_from_dict`` compares it exactly, so an undocumented bump orphans every
+changes. ``report_from_dict`` compares it exactly, so an undocumented bump orphans every
 record already in a ledger.
 """
 
@@ -312,6 +312,13 @@ def report_to_dict(report: CheckReport) -> dict[str, Any]:
 
     Args:
         report: the report to write.
+
+    Raises:
+        TypeError: if the report carries evidence no kind writes. `CheckReport` admits
+            any `CompletenessEvidence`, so a leaf defined outside this package
+            constructs and reaches here. `_evidence_from_dict` refuses an unknown
+            *kind* with a `ValueError`; this is the other direction and an unknown
+            *class*, which is why the two differ.
 
     Returns:
         The record.

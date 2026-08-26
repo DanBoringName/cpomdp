@@ -185,8 +185,13 @@ the other two rather than ranking them.
 `CheckReport` is what a check emits. Frozen, because editing a report after the check ran
 is editing the finding. It refuses `PROVED` with nothing behind it.
 
-Evidence comes in two kinds, one per decisive prover. `CompletenessCertificate` backs an
-exhaustive enumeration, recording the domain it covered against the count it visited.
+Evidence comes in two families, one per decisive prover. `CompletenessEvidence` backs an
+exhaustive enumeration, recording the domain it covered against the count it visited. Its
+leaves differ only in the shape of that domain: `CompletenessCertificate` over a tree,
+`|A|^H` on one versioned action set, and `ProductCompletenessCertificate` over a cross,
+the product of declared `AxisDeclaration` axes. A bare count separates neither, since 81
+is `9**2` and `3**4` and 12 is `3 x 4` and `2 x 6`, so both carry their factors and their
+versions.
 `SymbolicReduction` backs a theorem or a symbolic identity, and names where the symbolic
 setup was checked by hand against the analytic problem it stands for. A CAS establishes
 that one expression equals another. Whether those are the right expressions is a human

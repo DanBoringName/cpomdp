@@ -12,8 +12,10 @@ an alias.
 ``Tier``, which vary independently: a run can be green throughout and have decided
 nothing, and the summary says so.
 
-``CompletenessCertificate`` and ``SymbolicReduction`` are the two evidence kinds a
-``PROVED`` report carries, one per decisive prover. ``Provenance`` is the other thing it
+``CompletenessEvidence`` and ``SymbolicReduction`` are the two evidence families a
+``PROVED`` report carries, one per decisive prover. The first has a leaf per domain
+shape: ``CompletenessCertificate`` over a tree, ``ProductCompletenessCertificate`` over
+a cross of ``AxisDeclaration``. ``Provenance`` is the other thing it
 carries: which ref registered the claim, and which one measured it.
 
 A report carries two names. ``name`` is prose and is reworded whenever the wording
