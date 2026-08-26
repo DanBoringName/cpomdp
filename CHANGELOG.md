@@ -56,6 +56,16 @@ after results are seen shows up in the diff.
   `model` pointing at the model being scored, so a degradation is never an anonymous
   mismatch between two models.
 
+- `warrantlib.CompletenessEvidence` (warrantlib 0.3.0) — the two predicates a `PROVED`
+  completeness claim rests on, held once in a base, with a leaf per domain shape under
+  it. `CompletenessCertificate` keeps its name, its fields and its rendering, and is now
+  the tree leaf, `|A|^H` over one versioned action set. `ProductCompletenessCertificate`
+  is the cross, carrying an `AxisDeclaration` per axis so 3 x 4 and 2 x 6 are not both
+  reported as 12. A leaf defining its own `__post_init__` is refused at class creation,
+  since it would shadow the gate. Evidence now crosses the wire through a tag/class
+  registry, and a kind extends under the same `SCHEMA_VERSION` because `kind`
+  self-describes and unknown-kind refusal is the designed failure.
+
 - `warrantlib.manifest` (warrantlib 0.3.0) — the checks a suite is registered to report,
   declared in a generated TOML file and reconciled against what a run actually produced.
   A count could say a suite got shorter. It could not say which check left, and it was

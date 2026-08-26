@@ -28,15 +28,25 @@ A report carries two names. `name` is prose and reads in a summary line, so it i
 
 A check that never ran carries no warrant. `CORROBORATED` means sampling-grade evidence was obtained, so attributing it to a falsifier that sampled nothing claims evidence that does not exist. The warrant is `None` there and prints as `—`, enforced at construction.
 
-A `PROVED` report needs evidence, enforced at construction. There are two kinds, one per decisive prover. `CompletenessCertificate` backs an exhaustive enumeration over a finite domain. `SymbolicReduction` backs a theorem or a symbolic identity (Provers 1 and 2), which decide by argument and enumerate nothing, so a certificate is the wrong evidence for them rather than a missing one. The weaker levels need none, because a bound and a sample carry their story in `detail`. Report `PROVED` with nothing behind it and the constructor raises.
+A `PROVED` report needs evidence, enforced at construction. There are two families, one per decisive prover. `CompletenessEvidence` backs an exhaustive enumeration over a finite domain, and its leaves differ only in the shape of that domain. `SymbolicReduction` backs a theorem or a symbolic identity (Provers 1 and 2), which decide by argument and enumerate nothing, so a certificate is the wrong evidence for them rather than a missing one. The weaker levels need none, because a bound and a sample carry their story in `detail`. Report `PROVED` with nothing behind it and the constructor raises.
 
-Those two are the only things the evidence tuple accepts. A path naming where the proof lives is the plausible substitute, and it satisfies a presence check exactly as well as a certificate does. So the constructor checks every item's kind. Checking only the first would let a claim over several enumerations carry one certificate and three references to a write-up. The weaker levels are held to the same rule. They need no evidence, so a tuple on one of them is something the report says it is carrying.
+Those two families are the only things the evidence tuple accepts. A path naming where the proof lives is the plausible substitute, and it satisfies a presence check exactly as well as a certificate does. So the constructor checks every item's kind. Checking only the first would let a claim over several enumerations carry one certificate and three references to a write-up. The weaker levels are held to the same rule. They need no evidence, so a tuple on one of them is something the report says it is carrying.
 
 ::: warrantlib.Outcome
 
 ::: warrantlib.Tier
 
+A completeness claim has two predicates and several possible domains. `CompletenessEvidence` holds the predicates: `expected` is the declared set's own cardinality, and `visited` reaches it. Each leaf under it says what its domain means and nothing else, so the `PROVED` gate is written once and a leaf cannot weaken it by forgetting to run it.
+
+`CompletenessCertificate` is a tree, `|A|^H` over one versioned action set. `ProductCompletenessCertificate` is a cross, the product of declared axes. A bare count distinguishes neither: 81 is `9**2` and `3**4`, and 12 is `3 x 4` and `2 x 6`. Both carry their factors and their versions, so an addition after results are seen shows up in the diff.
+
+::: warrantlib.CompletenessEvidence
+
 ::: warrantlib.CompletenessCertificate
+
+::: warrantlib.AxisDeclaration
+
+::: warrantlib.ProductCompletenessCertificate
 
 ::: warrantlib.CheckReport
 
@@ -66,9 +76,9 @@ What the type cannot do is order two refs. Equality is checkable in a string and
 
 ## The evidence union
 
-`Evidence` names the two kinds together. `CheckReport.evidence` is annotated as a tuple of it, so the admissible types are declared once, and a caller building reports of its own has a name to annotate against.
+`Evidence` names the completeness base and the symbolic reduction together. `CheckReport.evidence` is annotated as a tuple of it, so the admissible types are declared once, and a caller building reports of its own has a name to annotate against.
 
-The union and the runtime guard are separate declarations. A third evidence kind needs a member added to both. A type added to one alone annotates as evidence and then refuses to construct, or constructs and reads as evidence of a kind nothing declared.
+The union and the runtime guard are separate declarations. A kind outside the completeness family needs a member added to both. A type added to one alone annotates as evidence and then refuses to construct, or constructs and reads as evidence of a kind nothing declared. A new completeness leaf needs neither, since both already name the base, and needs a serialiser entry instead.
 
 ::: warrantlib.Evidence
 

@@ -34,10 +34,13 @@ from warrantlib._serialise import (
     report_to_dict,
 )
 from warrantlib._vocabulary import (
+    AxisDeclaration,
     CheckReport,
     CompletenessCertificate,
+    CompletenessEvidence,
     Evidence,
     Outcome,
+    ProductCompletenessCertificate,
     Provenance,
     SymbolicReduction,
     Tier,
@@ -47,10 +50,13 @@ from warrantlib._vocabulary import (
 
 __all__ = [
     "SCHEMA_VERSION",
+    "AxisDeclaration",
     "CheckReport",
     "CompletenessCertificate",
+    "CompletenessEvidence",
     "Evidence",
     "Outcome",
+    "ProductCompletenessCertificate",
     "Provenance",
     "SymbolicReduction",
     "Tier",
