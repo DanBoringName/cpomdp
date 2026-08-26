@@ -11,10 +11,12 @@ The standard library is the only dependency.
 
 import re
 import unicodedata
+from abc import ABC, abstractmethod
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
+from math import prod
 
 
 class Warrant(Enum):
@@ -341,24 +343,108 @@ class Provenance:
 
 
 @dataclass(frozen=True)
-class CompletenessCertificate:
-    """Evidence an enumeration was exhaustive: ``expected`` vs ``visited`` (ADR-030).
+class CompletenessEvidence(ABC):
+    """Evidence a finite domain was enumerated in full, whatever shape the domain is.
 
-    Two independent facts, and a ``PROVED`` warrant needs both. **Domain**:
-    ``expected == action_set_size ** horizon``, so the set quantified over is the
-    declared one. **Coverage**: ``visited == expected``, so it was enumerated in full.
-    They come apart wherever ``visited`` is a loop-carried counter rather than an
-    array's length, which is where a padding bug lives, and coverage alone is what
-    carries the Prover 3 · enumeration licence.
+    Two independent facts, and a ``PROVED`` claim needs both. **Domain**: ``expected``
+    is the declared set's own cardinality, so the set quantified over is the declared
+    one.
+    **Coverage**: ``visited == expected``, so it was enumerated in full. They come apart
+    wherever ``visited`` is a loop-carried counter rather than an array's length, which
+    is where a padding bug lives, and coverage alone is what carries the Prover 3 ·
+    enumeration licence.
+
+    A leaf says what its domain means and nothing else. The gate is held here once, so a
+    leaf cannot weaken it by forgetting to run it. A leaf defining its own
+    ``__post_init__`` is refused at class creation for the same reason.
+
+    A partial enumeration sampled its set, so its warrant is ``CORROBORATED``. Pairing
+    ``PROVED`` with a shortfall does not construct.
+
+    Args:
+        expected: the count the claim was obliged to visit, supplied rather than
+            derived, so the domain check compares two routes.
+        visited: how many it actually visited.
+        warrant: the prover class the enumeration earns.
+
+    Raises:
+        ValueError: if the warrant is ``PROVED`` and either precondition fails.
+    """
+
+    expected: int
+    visited: int
+    warrant: Warrant
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        """Refuse a leaf that validates itself.
+
+        Args:
+            **kwargs: whatever the class statement passed along.
+
+        Raises:
+            TypeError: if the leaf's own body defines ``__post_init__``.
+        """
+        super().__init_subclass__(**kwargs)
+        if "__post_init__" in cls.__dict__:
+            raise TypeError(
+                f"{cls.__name__} defines __post_init__, and validation lives in "
+                "CompletenessEvidence. A leaf that defines its own shadows the base's, "
+                "so the PROVED preconditions stop running and no test of that leaf "
+                "would notice. Override _validate_declaration instead."
+            )
+
+    def __post_init__(self) -> None:
+        """Reject a ``PROVED`` certificate failing domain or coverage."""
+        self._validate_declaration()
+        if self.warrant is not Warrant.PROVED:
+            return
+        if not self.domain_declared:
+            raise ValueError(
+                f"a PROVED certificate must quantify over the declared set, got "
+                f"expected={self.expected} against {self.set_description}. "
+                "The count and the set have come apart."
+            )
+        if not self.complete:
+            raise ValueError(
+                f"a PROVED certificate must be complete, got expected="
+                f"{self.expected} against visited={self.visited}. A partial "
+                "enumeration sampled its set, so its warrant is CORROBORATED."
+            )
+
+    def _validate_declaration(self) -> None:  # noqa: B027
+        """Check the leaf's own fields, before either precondition is asked.
+
+        A hook rather than a ``__post_init__`` because leaves may not define one. The
+        base does nothing here, and that is the right default rather than an omission:
+        a leaf whose fields cannot be malformed has nothing to check. Not abstract for
+        the same reason, which is what the ``B027`` suppression above records.
+        """
+
+    @property
+    @abstractmethod
+    def domain_declared(self) -> bool:
+        """Whether ``expected`` is the cardinality the declared domain gives."""
+
+    @property
+    @abstractmethod
+    def set_description(self) -> str:
+        """The declared set in one line, for the error that says it disagrees."""
+
+    @property
+    def complete(self) -> bool:
+        """Whether every expected member was visited."""
+        return self.expected == self.visited
+
+
+@dataclass(frozen=True)
+class CompletenessCertificate(CompletenessEvidence):
+    """A domain enumerated as a tree: ``expected == |A|^H`` (ADR-030).
 
     The certificate names its set. ``expected`` on its own conflates the base with the
     exponent — 81 is ``9**2`` and ``3**4`` — so a bare count is not self-describing and
     two certificates over different sets cannot be told apart. Carrying the size, the
     horizon and the version fixes that at the type rather than in the surrounding prose
     (standing prohibition 9).
-
-    A partial enumeration sampled its set, so its warrant is ``CORROBORATED``. Pairing
-    ``PROVED`` with a shortfall does not construct.
 
     Args:
         expected: the policy count the search was obliged to visit — ``|A|^H``,
@@ -373,31 +459,9 @@ class CompletenessCertificate:
         ValueError: if the warrant is ``PROVED`` and either precondition fails.
     """
 
-    expected: int
-    visited: int
-    warrant: Warrant
     action_set_size: int
     horizon: int
     action_set_version: str
-
-    def __post_init__(self) -> None:
-        """Reject a ``PROVED`` certificate failing domain or coverage."""
-        if self.warrant is not Warrant.PROVED:
-            return
-        if not self.domain_declared:
-            raise ValueError(
-                f"a PROVED certificate must quantify over the declared set, got "
-                f"expected={self.expected} against |A|^H = "
-                f"{self.action_set_size}^{self.horizon} = "
-                f"{self.action_set_size**self.horizon} for set "
-                f"{self.action_set_version!r}. The count and the set have come apart."
-            )
-        if not self.complete:
-            raise ValueError(
-                f"a PROVED certificate must be complete, got expected="
-                f"{self.expected} against visited={self.visited}. A partial "
-                "enumeration sampled its set, so its warrant is CORROBORATED."
-            )
 
     @property
     def domain_declared(self) -> bool:
@@ -405,9 +469,13 @@ class CompletenessCertificate:
         return self.expected == self.action_set_size**self.horizon
 
     @property
-    def complete(self) -> bool:
-        """Whether every expected policy was visited."""
-        return self.expected == self.visited
+    def set_description(self) -> str:
+        """The tree the count is checked against, and the set it was declared on."""
+        return (
+            f"|A|^H = {self.action_set_size}^{self.horizon} = "
+            f"{self.action_set_size**self.horizon} for set "
+            f"{self.action_set_version!r}"
+        )
 
     def __str__(self) -> str:
         """The certificate as a one-line warrant string in its own vocabulary."""
@@ -418,7 +486,138 @@ class CompletenessCertificate:
         )
 
 
-Evidence = CompletenessCertificate | SymbolicReduction
+@dataclass(frozen=True)
+class AxisDeclaration:
+    """One axis of a product domain: what it is, how many, and which version.
+
+    Args:
+        name: what the axis ranges over, non-empty.
+        size: its member count, at least one.
+        version: the declared set's version tag, non-empty, so a member added after
+            results are seen shows up in the diff (standing prohibition 9).
+
+    Raises:
+        ValueError: on an empty name, an empty version, or a size below one.
+    """
+
+    name: str
+    size: int
+    version: str
+
+    def __post_init__(self) -> None:
+        """Reject an unnamed, unversioned or empty axis."""
+        if not isinstance(self.name, str) or not self.name:
+            raise ValueError(
+                "name must be a non-empty string — an axis nobody can name is not a "
+                "declared set"
+            )
+        if not isinstance(self.version, str) or not self.version:
+            raise ValueError(
+                f"version must be a non-empty string — the axis {self.name!r} is "
+                "declared and versioned"
+            )
+        if self.size < 1:
+            raise ValueError(
+                f"the axis {self.name!r} has size {self.size}; an axis with no members "
+                "contributes nothing to enumerate and empties the product"
+            )
+
+
+@dataclass(frozen=True)
+class ProductCompletenessCertificate(CompletenessEvidence):
+    """A domain enumerated as a cross: ``expected`` is the product of the axis sizes.
+
+    A product needs its factors for the reason a tree needs its base and exponent. 12 is
+    ``3 × 4`` and ``2 × 6``, so a bare count says neither which axes were crossed nor
+    which version of each. Every axis carries its own version, so an axis that gained a
+    member after results were seen shows up in the diff (standing prohibition 9).
+
+    One axis is legal. A ladder or a seed list is a product of one, and reporting it
+    here keeps it in the same vocabulary as the cross it will later join.
+
+    Args:
+        expected: the cell count the enumeration was obliged to visit, supplied rather
+            than derived, so the domain check compares two routes.
+        visited: how many it actually visited.
+        warrant: the prover class the enumeration earns.
+        axes: the declared axes, at least one.
+
+    Raises:
+        ValueError: if ``axes`` is not a tuple, is empty, or holds anything but an
+            `AxisDeclaration`, or if the warrant is ``PROVED`` and either precondition
+            fails. The shape checks are `ValueError` rather than `TypeError` because
+            every other malformed field here is, and because the failures they replace
+            are a silent unequal round-trip and an `AttributeError` raised from inside
+            ``domain_declared``.
+    """
+
+    axes: tuple[AxisDeclaration, ...]
+
+    def _validate_declaration(self) -> None:
+        """Reject axes that are not a tuple of `AxisDeclaration`, or are absent.
+
+        Raises:
+            ValueError: if ``axes`` is not a tuple, is empty, or holds anything but
+                `AxisDeclaration`. A list round-trips unequal, since a record reads
+                back as a tuple, and anything without a ``size`` reaches
+                ``domain_declared`` as an `AttributeError` rather than as the
+                `ValueError` every other malformed field here raises. An empty product
+                is one, which would declare a cardinality over a set nobody named.
+        """
+        if not isinstance(self.axes, tuple):
+            raise ValueError(
+                f"axes were passed as {type(self.axes).__name__}. Axes are a tuple, so "
+                "a certificate compares equal to the one a record reads back. Wrap a "
+                "single axis: (axis,)."
+            )
+        if not self.axes:
+            raise ValueError(
+                "a product certificate needs at least one axis; a product over none is "
+                "1, which declares a cardinality over a set nobody named"
+            )
+        for axis in self.axes:
+            if not isinstance(axis, AxisDeclaration):
+                raise ValueError(
+                    f"a product certificate carries a {type(axis).__name__} as an "
+                    "axis. Each axis is an AxisDeclaration, which is what makes it "
+                    "named, sized and versioned rather than merely counted."
+                )
+
+    @property
+    def domain_declared(self) -> bool:
+        """Whether ``expected`` is the product of the declared axis sizes."""
+        return self.expected == prod(axis.size for axis in self.axes)
+
+    @property
+    def _factors(self) -> str:
+        """The declared axes, each with its size and version."""
+        return " × ".join(
+            f"{axis.name} {axis.size} ({axis.version})" for axis in self.axes
+        )
+
+    @property
+    def set_description(self) -> str:
+        """The cross the count is checked against, naming every axis and version.
+
+        The product the axes give, not the count the certificate declares. This is the
+        right-hand side of the disagreement the domain error reports.
+        """
+        return f"{self._factors} = {prod(axis.size for axis in self.axes)}"
+
+    def __str__(self) -> str:
+        """The certificate as a one-line warrant string in its own vocabulary.
+
+        The count rendered is ``expected``, the declared one, so a certificate whose
+        declaration disagrees with its axes shows the disagreement rather than hiding
+        it behind the product. The tree leaf renders its own ``expected`` likewise.
+        """
+        return (
+            f"{self.warrant.value} ({self._factors} = {self.expected}, "
+            f"visited {self.visited})"
+        )
+
+
+Evidence = CompletenessEvidence | SymbolicReduction
 """What backs a ``PROVED`` claim, one member per decisive prover the suite runs.
 
 A completeness certificate decides by exhausting a finite domain. A symbolic reduction
@@ -428,7 +627,7 @@ wrong evidence for it rather than a missing one.
 
 #: The evidence classes as a tuple ``isinstance`` accepts. Both are defined here, so the
 #: guard reads them at module scope.
-_EVIDENCE_TYPES = (CompletenessCertificate, SymbolicReduction)
+_EVIDENCE_TYPES = (CompletenessEvidence, SymbolicReduction)
 
 
 @dataclass(frozen=True)
@@ -449,11 +648,13 @@ class CheckReport:
         tier: what the check was measured against.
         detail: why it reports what it reports, in one line. Required, so a report
             cannot be a bare outcome with extra fields.
-        evidence: what backs the claim, as a tuple of ``CompletenessCertificate`` and
+        evidence: what backs the claim, as a tuple of ``CompletenessEvidence`` and
             ``SymbolicReduction``. Required non-empty when the warrant is ``PROVED``
             and unused otherwise. A tuple rather than one item because a claim
             quantified over several enumerations rests on all their certificates, and
-            carrying one of them understates what was checked.
+            carrying one of them understates what was checked. Which completeness leaf
+            each one is says what shape its domain had, and nothing here branches on
+            it.
         provenance: which ref registered the claim and which one measured it, as a
             tuple. Required non-empty when the warrant is ``PROVED``, unused otherwise.
             A tuple on the same argument the evidence is one: a claim resting on two
@@ -521,9 +722,11 @@ class CheckReport:
                 if not isinstance(item, _EVIDENCE_TYPES):
                     raise ValueError(
                         f"check {self.name!r} carries a "
-                        f"{type(item).__name__} as evidence. There are two kinds, one "
-                        "per decisive prover: a CompletenessCertificate for an "
-                        "exhaustive enumeration (Prover 3 · enumeration), a "
+                        f"{type(item).__name__} as evidence. There are two "
+                        "families, one per decisive prover: a CompletenessEvidence for "
+                        "an exhaustive enumeration (Prover 3 · enumeration), whose "
+                        "leaves are CompletenessCertificate over a tree and "
+                        "ProductCompletenessCertificate over a cross, and a "
                         "SymbolicReduction for a theorem or a symbolic identity "
                         "(Provers 1 and 2). Anything "
                         "else satisfies the PROVED precondition by being present and "

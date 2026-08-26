@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "check_id": "gap_series.c2_closed_form",
+  "name": "c₂ reduces to the registered closed form",
+  "warrant": "PROVED",
+  "outcome": "NOT TRIGGERED",
+  "tier": "exact",
+  "detail": "the CAS reduces the residual to zero",
+  "evidence": [
+    {
+      "kind": "symbolic_reduction",
+      "claim": "c₂ equals the quoted constant",
+      "correspondence": "hand derivation, section 3",
+      "assumptions": [
+        "the expansion is formal, not convergent"
+      ]
+    }
+  ],
+  "provenance": [
+    {
+      "registered_at": "a76cf1b",
+      "measured_at": "9baaa22",
+      "registered": "the coefficient's closed form"
+    }
+  ]
+}

@@ -14,15 +14,18 @@ The standard library is the only dependency, and nothing here touches a filesyst
 The caller decides where the bytes go.
 """
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any, TypeVar
 
 from warrantlib._vocabulary import (
+    AxisDeclaration,
     CheckReport,
     CompletenessCertificate,
     Evidence,
     Outcome,
+    ProductCompletenessCertificate,
     Provenance,
     SymbolicReduction,
     Tier,
@@ -38,13 +41,128 @@ Bumped whenever a field is added, removed or renamed, or an enum value changes
 spelling. Enum *members* are additive: a new one is readable by an older version only
 in the sense that the older version refuses it by name, which is the intended
 behaviour. A record whose version this module does not know is refused.
+
+An evidence *kind* is additive under one version and does not move it. The ``kind``
+field self-describes, and a reader meeting an unknown one refuses it by name, which is
+the designed failure rather than a gap. The version moves when the record envelope
+changes. ``report_from_dict`` compares it exactly, so an undocumented bump orphans every
+record already in a ledger.
 """
 
 #: The discriminator each evidence kind serialises under. `Evidence` is a union, and a
-#: record without a tag is two dataclasses with disjoint fields that a reader has to
-#: guess between. Guessing is what this module refuses to do.
+#: record without a tag is a set of dataclasses with disjoint fields that a reader has
+#: to guess between. Guessing is what this module refuses to do.
 _CERTIFICATE_KIND = "completeness_certificate"
+_PRODUCT_CERTIFICATE_KIND = "product_completeness_certificate"
 _REDUCTION_KIND = "symbolic_reduction"
+
+
+@dataclass(frozen=True)
+class _Codec:
+    """How one evidence class crosses the wire, both ways.
+
+    Args:
+        cls: the class the tag names.
+        to_record: the class to a record, tag included.
+        from_record: a record of that tag back to the class.
+    """
+
+    cls: type
+    to_record: Callable[[Any], dict[str, Any]]
+    from_record: Callable[[Mapping[str, Any]], Any]
+
+
+def _certificate_to_record(item: CompletenessCertificate) -> dict[str, Any]:
+    """A tree certificate as a record."""
+    return {
+        "kind": _CERTIFICATE_KIND,
+        "expected": item.expected,
+        "visited": item.visited,
+        "warrant": item.warrant.value,
+        "action_set_size": item.action_set_size,
+        "horizon": item.horizon,
+        "action_set_version": item.action_set_version,
+    }
+
+
+def _certificate_from_record(data: Mapping[str, Any]) -> CompletenessCertificate:
+    """A tree certificate from its record."""
+    return CompletenessCertificate(
+        expected=_require(data, "expected"),
+        visited=_require(data, "visited"),
+        warrant=_member(Warrant, _require(data, "warrant"), "evidence warrant"),
+        action_set_size=_require(data, "action_set_size"),
+        horizon=_require(data, "horizon"),
+        action_set_version=_require(data, "action_set_version"),
+    )
+
+
+def _product_to_record(item: ProductCompletenessCertificate) -> dict[str, Any]:
+    """A product certificate as a record, every axis carried."""
+    return {
+        "kind": _PRODUCT_CERTIFICATE_KIND,
+        "expected": item.expected,
+        "visited": item.visited,
+        "warrant": item.warrant.value,
+        "axes": [
+            {"name": axis.name, "size": axis.size, "version": axis.version}
+            for axis in item.axes
+        ],
+    }
+
+
+def _product_from_record(
+    data: Mapping[str, Any],
+) -> ProductCompletenessCertificate:
+    """A product certificate from its record."""
+    return ProductCompletenessCertificate(
+        expected=_require(data, "expected"),
+        visited=_require(data, "visited"),
+        warrant=_member(Warrant, _require(data, "warrant"), "evidence warrant"),
+        axes=tuple(
+            AxisDeclaration(
+                name=_require(axis, "name"),
+                size=_require(axis, "size"),
+                version=_require(axis, "version"),
+            )
+            for axis in _sequence(data, "axes")
+        ),
+    )
+
+
+def _reduction_to_record(item: SymbolicReduction) -> dict[str, Any]:
+    """A symbolic reduction as a record."""
+    return {
+        "kind": _REDUCTION_KIND,
+        "claim": item.claim,
+        "correspondence": item.correspondence,
+        "assumptions": list(item.assumptions),
+    }
+
+
+def _reduction_from_record(data: Mapping[str, Any]) -> SymbolicReduction:
+    """A symbolic reduction from its record."""
+    return SymbolicReduction(
+        claim=_require(data, "claim"),
+        correspondence=_require(data, "correspondence"),
+        assumptions=_sequence(data, "assumptions"),
+    )
+
+
+#: Every evidence kind this module can write and read. A future kind is one entry, and
+#: the refusal below names what it knows from these keys rather than from a hand-written
+#: list that can fall behind them.
+_EVIDENCE_CODECS: dict[str, _Codec] = {
+    _CERTIFICATE_KIND: _Codec(
+        CompletenessCertificate, _certificate_to_record, _certificate_from_record
+    ),
+    _PRODUCT_CERTIFICATE_KIND: _Codec(
+        ProductCompletenessCertificate, _product_to_record, _product_from_record
+    ),
+    _REDUCTION_KIND: _Codec(
+        SymbolicReduction, _reduction_to_record, _reduction_from_record
+    ),
+}
 
 
 def _require(data: Mapping[str, Any], field: str) -> Any:
@@ -125,27 +243,23 @@ def _evidence_to_dict(item: Evidence) -> dict[str, Any]:
     """One evidence item as a record, tagged with its kind.
 
     Args:
-        item: the certificate or the reduction.
+        item: the evidence.
 
     Returns:
         The record.
+
+    Raises:
+        TypeError: if nothing in the registry writes that class. A leaf the vocabulary
+            defines and this module cannot write is a claim a ledger silently loses.
     """
-    if isinstance(item, CompletenessCertificate):
-        return {
-            "kind": _CERTIFICATE_KIND,
-            "expected": item.expected,
-            "visited": item.visited,
-            "warrant": item.warrant.value,
-            "action_set_size": item.action_set_size,
-            "horizon": item.horizon,
-            "action_set_version": item.action_set_version,
-        }
-    return {
-        "kind": _REDUCTION_KIND,
-        "claim": item.claim,
-        "correspondence": item.correspondence,
-        "assumptions": list(item.assumptions),
-    }
+    for codec in _EVIDENCE_CODECS.values():
+        if type(item) is codec.cls:
+            return codec.to_record(item)
+    raise TypeError(
+        f"no evidence kind writes {type(item).__name__}. Exact class rather than "
+        "isinstance: a subclass written under its parent's tag loses its own fields "
+        "and reads back as the parent, which is a different claim."
+    )
 
 
 def _evidence_from_dict(data: Mapping[str, Any]) -> Evidence:
@@ -155,32 +269,21 @@ def _evidence_from_dict(data: Mapping[str, Any]) -> Evidence:
         data: the record.
 
     Returns:
-        The certificate or the reduction.
+        The evidence.
 
     Raises:
         ValueError: if the record carries no kind, or a kind with no class.
     """
     kind = _require(data, "kind")
-    if kind == _CERTIFICATE_KIND:
-        return CompletenessCertificate(
-            expected=_require(data, "expected"),
-            visited=_require(data, "visited"),
-            warrant=_member(Warrant, _require(data, "warrant"), "evidence warrant"),
-            action_set_size=_require(data, "action_set_size"),
-            horizon=_require(data, "horizon"),
-            action_set_version=_require(data, "action_set_version"),
+    codec = _EVIDENCE_CODECS.get(kind)
+    if codec is None:
+        known = ", ".join(repr(tag) for tag in _EVIDENCE_CODECS)
+        raise ValueError(
+            f"evidence record has kind={kind!r}, which is none of {known}. There is "
+            f"one kind per decisive prover, and another would have to be a class here "
+            f"before a record could name it."
         )
-    if kind == _REDUCTION_KIND:
-        return SymbolicReduction(
-            claim=_require(data, "claim"),
-            correspondence=_require(data, "correspondence"),
-            assumptions=_sequence(data, "assumptions"),
-        )
-    raise ValueError(
-        f"evidence record has kind={kind!r}, which is neither {_CERTIFICATE_KIND!r} "
-        f"nor {_REDUCTION_KIND!r}. There is one kind per decisive prover, and a third "
-        f"would have to be a class here before a record could name it."
-    )
+    return codec.from_record(data)
 
 
 def _provenance_to_dict(item: Provenance) -> dict[str, Any]:
@@ -209,6 +312,13 @@ def report_to_dict(report: CheckReport) -> dict[str, Any]:
 
     Args:
         report: the report to write.
+
+    Raises:
+        TypeError: if the report carries evidence no kind writes. `CheckReport` admits
+            any `CompletenessEvidence`, so a leaf defined outside this package
+            constructs and reaches here. `_evidence_from_dict` refuses an unknown
+            *kind* with a `ValueError`; this is the other direction and an unknown
+            *class*, which is why the two differ.
 
     Returns:
         The record.

@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0",
+  "check_id": "crossover.argmin_decided",
+  "name": "crossover argmin is decided over the declared action set",
+  "warrant": "PROVED",
+  "outcome": "NOT TRIGGERED",
+  "tier": "exact",
+  "detail": "every policy in the declared set was scored",
+  "evidence": [
+    {
+      "kind": "completeness_certificate",
+      "expected": 81,
+      "visited": 81,
+      "warrant": "PROVED",
+      "action_set_size": 3,
+      "horizon": 4,
+      "action_set_version": "crossover-v1"
+    }
+  ],
+  "provenance": [
+    {
+      "registered_at": "a76cf1b",
+      "measured_at": "9baaa22",
+      "registered": "the enumerated argmin"
+    }
+  ]
+}
