@@ -14,13 +14,13 @@ Two axes, and both must be stated to fix a claim's status. **Warrant** says how 
 
 | Warrant | Earned by | Evidence required |
 | --- | --- | --- |
-| `PROVED` | theorem (Prover 1) · symbolic identity (Prover 2) · finite domain exhausted (Prover 3 · enumeration) | a `SymbolicReduction` or a `CompletenessCertificate`. Without one the enumeration is a sample wearing a decision's label |
+| `PROVED` | theorem (Prover 1) · symbolic identity (Prover 2) · finite domain exhausted (Prover 3 · enumeration) | a `SymbolicReduction` or a `CompletenessEvidence`. Without one the enumeration is a sample wearing a decision's label |
 | `CERTIFIED` | validated numerics over a compact domain (Prover 3 · validated) | the proved bound, quoted with the claim |
 | `CORROBORATED` | sampling a continuum (Prover 3 · sample) | none. Settles existence, refutes a universal by counterexample, decides no universal at any sample count |
 
-`warrantlib` enforces that table at construction, so the evidence column is a precondition rather than a convention. `CheckReport` refuses `PROVED` with an empty evidence tuple, and refuses any item in that tuple that is not one of the two kinds.
+`warrantlib` enforces that table at construction, so the evidence column is a precondition rather than a convention. `CheckReport` refuses `PROVED` with an empty evidence tuple, and refuses any item in that tuple that is not one of the two families.
 
-Neither kind substitutes for the other. A completeness certificate says a finite domain was enumerated in full, at `expected == |A|^H` and `visited == expected` over a named action set. A reduction decides by argument and enumerates nothing, so a certificate is the wrong evidence for it rather than a missing one. A claim resting on an identity asserted over an enumerated family carries both.
+Neither family substitutes for the other. A completeness certificate says a finite domain was enumerated in full, at `visited == expected` over a domain the certificate names. Its leaves differ only in that domain's shape: `CompletenessCertificate` is a tree, `expected == |A|^H` over one versioned action set, and `ProductCompletenessCertificate` is a cross, the product of declared axes each carrying its own version. A reduction decides by argument and enumerates nothing, so a certificate is the wrong evidence for it rather than a missing one. A claim resting on an identity asserted over an enumerated family carries both.
 
 `SymbolicReduction` records the claim in words, where the symbolic setup was hand derived against the analytic problem it stands for, and the conditions the identity is contingent on. That correspondence is the human obligation Prover 2 carries below. A CAS establishes that one expression equals another and has nothing to say about whether those are the expressions the analytic claim is about. That step is recorded, not assumed. A field that is not text, one holding only whitespace, one holding only zero-width characters, and one carrying a line break all fail to construct, in `assumptions` entry by entry. A field nobody can fill honestly is the signal to report `CORROBORATED` and say why in the check's detail.
 

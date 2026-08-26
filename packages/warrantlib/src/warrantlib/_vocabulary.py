@@ -543,8 +543,12 @@ class ProductCompletenessCertificate(CompletenessEvidence):
         axes: the declared axes, at least one.
 
     Raises:
-        ValueError: on no axes, or if the warrant is ``PROVED`` and either precondition
-            fails.
+        ValueError: if ``axes`` is not a tuple, is empty, or holds anything but an
+            `AxisDeclaration`, or if the warrant is ``PROVED`` and either precondition
+            fails. The shape checks are `ValueError` rather than `TypeError` because
+            every other malformed field here is, and because the failures they replace
+            are a silent unequal round-trip and an `AttributeError` raised from inside
+            ``domain_declared``.
     """
 
     axes: tuple[AxisDeclaration, ...]
