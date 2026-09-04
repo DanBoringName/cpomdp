@@ -36,12 +36,16 @@ from research.spinello_stilwell import scheme
 from research.spinello_stilwell.invariance import WorkedCase
 
 __all__ = [
+    "BOX_EDGES",
+    "BULK_EDGES",
+    "OPERATING_CURVATURES",
     "PROBE_BUDGET",
     "PROBE_TOLERANCE",
     "SLOPES",
     "SLOW_CASE",
     "TRUNCATION_GRID",
     "convergence_counts",
+    "counts_over_the_operating_range",
     "departure_at_budget",
     "main",
     "modification_cost",
@@ -93,6 +97,58 @@ SLOPES: dict[str, Callable[[float], float]] = {
     "sin": lambda state: 0.5 * math.cos(state),
     "constant": lambda _: 0.0,
 }
+
+
+#: The curvatures the operating-range sweep covers. `1` is the declared quadratic
+#: family and the rest bracket it, since no curvature range is registered anywhere yet
+#: and D2 sweeps this axis.
+OPERATING_CURVATURES = (0.1, 1.0, 5.0, 20.0, 100.0)
+
+#: Where the reading sits, in predictive standard deviations off the prior mean. The
+#: gap sweeps an observation box nine of these wide, so the rung is called at every one
+#: of them. The bulk carries the predictive mass and the edge carries almost none, and
+#: they are counted apart because they answer different questions: what a declared
+#: budget has to cover, and where it has to report `VOID` instead.
+BULK_EDGES = (0.0, 1.0, 2.0)
+BOX_EDGES = (4.5, 9.0)
+
+
+def counts_over_the_operating_range(
+    tolerance: float, *, log_block: bool = False
+) -> dict[float, tuple[int, int]]:
+    """The worst iteration count per curvature, in the bulk and out at the box edge.
+
+    The declared spreads give the prior. `R(x) = 1 + kappa x^2` gives the noise, so the
+    predictive spread is `sqrt(P + R(mu))` and the reading is placed in units of it.
+
+    Args:
+        tolerance: stop when the step falls below this, relative to the prior spread.
+        log_block: keep the `r3` block of (35d). False is the modification.
+
+    Returns:
+        For each curvature, the worst count in the bulk and the worst at the edge.
+    """
+    worst = {}
+    for curvature in OPERATING_CURVATURES:
+        counts = {"bulk": 0, "edge": 0}
+        for spread in SIGMAS:
+            predictive = math.sqrt(spread**2 + 1.0 + curvature)
+            for where, offsets in (("bulk", BULK_EDGES), ("edge", BOX_EDGES)):
+                for offset in offsets:
+                    _, _, taken = scheme.iterate(
+                        observation=1.0 + offset * predictive,
+                        prior_mean=1.0,
+                        prior_variance=spread**2,
+                        base_noise=1.0,
+                        curvature=curvature,
+                        scale=1.0,
+                        log_block=log_block,
+                        tolerance=tolerance,
+                        max_iterations=PROBE_BUDGET,
+                    )
+                    counts[where] = max(counts[where], taken)
+        worst[curvature] = (counts["bulk"], counts["edge"])
+    return worst
 
 
 def noise_at_of(family: NoiseFamily) -> scheme.NoiseAt:
@@ -281,12 +337,37 @@ def main() -> None:
     for key, family in FAMILIES.items():
         row = " ".join(f"{counts[key, spread]:>6}" for spread in SIGMAS)
         print(f"  {family.name:<24} {row}")
-    worst = max(counts.values())
-    print(f"\nWorst cell: {worst} iterations. No cell reached the probe budget.")
+    survey_worst = max(counts.values())
+    print(f"\nWorst cell: {survey_worst} iterations. No cell reached the probe budget.")
     # A budget is read off this. The declaration is an ADR's to make, and what it has
     # to cover is the worst cell here rather than the typical one.
-    assert worst < PROBE_BUDGET, worst
+    assert survey_worst < PROBE_BUDGET, survey_worst
     assert max(counts.values()) > min(counts.values()), counts
+
+    print("\nWhat the whole operating range needs, not only the declared families.")
+    for tolerance in (1e-14, 1e-12):
+        print(f"  tolerance {tolerance:.0e}")
+        print(f"  {'kappa':>7} {'worst in the bulk':>19} {'worst at the box edge':>23}")
+        worst = counts_over_the_operating_range(tolerance)
+        for curvature, (bulk, edge) in worst.items():
+            print(f"  {curvature:>7} {bulk:>19} {edge:>23}")
+        print(
+            f"    bulk {max(bulk for bulk, _ in worst.values())},"
+            f" edge {max(edge for _, edge in worst.values())}"
+        )
+    tight = counts_over_the_operating_range(1e-12)
+    # The numbers a budget declaration reads. The declared families understate this by
+    # a factor of six, because they are run at a reading two spreads out and the gap
+    # runs the rung all the way to its box edge.
+    assert max(bulk for bulk, _ in tight.values()) == 23, tight
+    assert max(edge for _, edge in tight.values()) == 65, tight
+    assert all(edge > bulk for bulk, edge in tight.values()), tight
+    # The edge is where the count runs away and it is also where nothing is weighed.
+    edge_weight = math.exp(-0.5 * BOX_EDGES[-1] ** 2)
+    print(
+        f"\n  Predictive weight at the box edge, against the centre: {edge_weight:.2e}"
+    )
+    assert edge_weight < 1e-17, edge_weight
 
     print("\nWhat the deletion costs at a finite budget, on the slow case.")
     print(f"{'budget':>8} {'mean gap':>18} {'variance gap':>20}")
@@ -311,8 +392,11 @@ def main() -> None:
         f" {len(TRUNCATION_GRID)} declared cells."
     )
     print("    `VOID` is the right routing for a step that did not converge.")
-    print(f"  - The declared grid's worst cell needs {worst} iterations at 1e-14.")
-    print("    A declared budget has to cover that cell, not the median one.")
+    print(
+        f"  - The declared grid's worst cell needs {survey_worst} iterations at 1e-14."
+    )
+    print("    Over the whole operating range at 1e-12 it is 23 in the bulk and 65")
+    print("    at the box edge, where the predictive weight is 2.6e-18.")
     print("  - The two curvatures differ only before convergence. Run out, they agree")
     print("    to machine precision, so the deletion moves no fixed point.")
 

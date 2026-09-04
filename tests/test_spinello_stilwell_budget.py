@@ -60,6 +60,25 @@ class TestTheBudget:
         assert max(counts.values()) == 10, counts
         assert counts["constant", 0.06] == 2, counts
 
+    def test_the_operating_range_needs_far_more_than_the_declared_families(self):
+        # The declared families are run at a reading two spreads out. The gap runs the
+        # rung to its box edge, nine predictive spreads, and the count follows.
+        worst = budget.counts_over_the_operating_range(1e-12)
+        assert max(bulk for bulk, _ in worst.values()) == 23, worst
+        assert max(edge for _, edge in worst.values()) == 65, worst
+        assert all(edge > bulk for bulk, edge in worst.values()), worst
+
+    def test_a_tighter_tolerance_costs_iterations_at_every_curvature(self):
+        # What 1e-14 buys over 1e-12, in the currency a budget is spent in.
+        tight = budget.counts_over_the_operating_range(1e-14)
+        loose = budget.counts_over_the_operating_range(1e-12)
+        assert all(
+            tight[curvature][where] >= loose[curvature][where]
+            for curvature in budget.OPERATING_CURVATURES
+            for where in (0, 1)
+        )
+        assert max(bulk for bulk, _ in tight.values()) == 27, tight
+
     def test_the_two_curvatures_agree_once_both_converge(self):
         # ADR-057's "surgical" in numbers: a difference before convergence and none
         # after, so the deletion moves no fixed point.
