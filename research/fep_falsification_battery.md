@@ -213,9 +213,9 @@ raising a parameter until the result fires. Require the sign flip at the registe
 
 **D1 · fidelity-ladder ordering** · SEVERE · R7 · toolbox C, D · tier `BOUNDED` · **PR-9 · v0.5**, gated on GATE-D4
 
-- Predict: along plug-in `R(μ⁻)` → Spinello–Stilwell iterated → belief-smoothed
-  `E[R(x)]` → exact reference, the inference gap decreases at a certified tolerance, ε
-  non-constant throughout.
+- Predict: along plug-in `R(μ⁻)` → modified Spinello–Stilwell iterated (ADR-057) →
+  belief-smoothed `E[R(x)]` → exact reference, the inference gap decreases at a certified
+  tolerance, ε non-constant throughout.
 - Falsify: non-monotone ordering. Registered as a *conjecture with a predicted
   direction*, not a theorem: higher approximation order does not imply monotone KL to the
   exact posterior, and Rmk 3 calls the smoothed rule a refinement only in the

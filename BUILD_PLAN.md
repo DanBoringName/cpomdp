@@ -631,10 +631,11 @@ The hard item, and it is shared.
       one. If Q(x) falls out of the internal interfaces at no cost, let it. Do not
       document it, write examples against it, or claim it in release notes (issue #56).
 - [ ] Rule ladder, common interface, **five rungs** (ADR-056): plug-in `R(μ⁻)`,
-      Spinello–Stilwell single-step (36), Spinello–Stilwell iterated (35), belief-smoothed
-      `E[R(x)]`, exact reference at the top. Swappable in one line. (36) is (35) at a
-      budget of one, so declaring it separately costs almost nothing and buys two adjacent
-      differences that isolate distinct mechanisms.
+      Spinello–Stilwell single-step (36) and iterated (35), both with the documented
+      modification of ADR-057, belief-smoothed `E[R(x)]`, exact reference at the top.
+      Swappable in one line. (36) is (35) at a budget of one, so declaring it separately
+      costs almost nothing and buys two adjacent differences that isolate distinct
+      mechanisms.
 - [ ] The rule list is **declared and versioned**, like `FiniteActionSet`. A rung added
       after results are seen shows up in the diff.
 - [ ] Five rungs is a finite declared set, so the ladder carries a completeness
