@@ -148,15 +148,18 @@ def iterate(
     prior_variance: float,
     base_noise: float,
     curvature: float,
-    scale: float = 1.0,
-    tolerance: float = 1e-14,
-    max_iterations: int = 200,
+    scale: float,
+    tolerance: float,
+    max_iterations: int,
     *,
     log_block: bool = True,
 ) -> tuple[float, float, int]:
     """Spinello-Stilwell (35) for a scalar linear-mean sensor, in rescaled units.
 
     `R(x) = base_noise + curvature * x^2` and `h(x) = x`, both rescaled by `scale`.
+    The budget and the tolerance have no defaults. A probe runs at some budget and
+    says which, and the rung's own stays undeclared (ADR-056). Exhausting the budget
+    is reported through the count returned, which then equals `max_iterations`.
 
     Args:
         observation: the reading, in unrescaled units.
@@ -170,8 +173,9 @@ def iterate(
         log_block: keep the `r3` block of (35d). False is the modification.
 
     Returns:
-        The converged estimate in unrescaled state units, the posterior variance, and
-        the number of iterations taken.
+        The estimate in unrescaled state units, the posterior variance, and the number
+        of iterations taken. A count equal to `max_iterations` is a run that did not
+        converge, and the caller decides what that means.
     """
     reading = scale * observation
     prior_precision = 1.0 / prior_variance

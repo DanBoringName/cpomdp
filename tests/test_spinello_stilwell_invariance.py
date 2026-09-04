@@ -6,7 +6,8 @@ Running the module is checking it: every claim it prints is asserted inside it.
 import pytest
 
 from research.checks.gap_kernel import FAMILIES, SIGMAS
-from research.spinello_stilwell import invariance, reachable_noise
+from research.spinello_stilwell import invariance, reachable_noise, scheme
+from research.spinello_stilwell.invariance import AT_THE_PROBE_BUDGET
 
 
 def test_it_runs_and_its_assertions_hold(capsys):
@@ -27,7 +28,7 @@ def test_the_converged_estimate_is_unit_free():
     # What Q2 rests on. If rescaling moved the answer, picking units to clear the pole
     # would be picking an answer.
     estimates = [
-        invariance.iterate(**invariance.CASE, scale=scale)[0]
+        invariance.iterate(**invariance.CASE, scale=scale, **AT_THE_PROBE_BUDGET)[0]
         for scale in invariance.SCALES
     ]
     assert max(estimates) - min(estimates) < 1e-12
@@ -37,10 +38,11 @@ def test_the_iteration_count_is_not_unit_free():
     # The other half: the path does move, which is why the pole is reachable in some
     # units and not others.
     counts = {
-        invariance.iterate(**invariance.CASE, scale=scale)[2]
+        invariance.iterate(**invariance.CASE, scale=scale, **AT_THE_PROBE_BUDGET)[2]
         for scale in invariance.SCALES
     }
     assert len(counts) > 1, counts
+    assert all(count < invariance.PROBE_BUDGET for count in counts), counts
 
 
 def test_it_reports_no_warrant():
@@ -50,16 +52,27 @@ def test_it_reports_no_warrant():
     assert not any(name.endswith("_SOURCE") for name in dir(invariance))
 
 
+@pytest.mark.parametrize("iterate", [invariance.iterate, scheme.iterate])
 @pytest.mark.parametrize("owed", ["max_iterations", "tolerance"])
-def test_the_rung_s_open_decisions_stay_arguments(owed):
+def test_the_rung_s_open_decisions_stay_arguments(iterate, owed):
     # The budget and the tolerance are undeclared on purpose: ADR-056 routes them to a
-    # measurement that has not been made. Baking either in here would settle by default
-    # what the record says is open.
+    # measurement that has not been made. A default here would settle by default what
+    # the record says is open, so every caller has to say which budget it ran at.
     import inspect
 
-    parameter = inspect.signature(invariance.iterate).parameters[owed]
-    assert parameter.default is not inspect.Parameter.empty
+    parameter = inspect.signature(iterate).parameters[owed]
+    assert parameter.default is inspect.Parameter.empty
     assert not hasattr(invariance, owed.upper())
+    assert not hasattr(scheme, owed.upper())
+
+
+def test_a_run_that_exhausts_the_budget_says_so():
+    # The count coming back equal to the budget is the only signal, so it has to be
+    # there. Tolerance zero can never be met, so the run spends the whole budget.
+    _, _, taken = scheme.iterate(
+        **invariance.CASE, scale=1.0, tolerance=0.0, max_iterations=3, log_block=True
+    )
+    assert taken == 3
 
 
 class TestReachableNoise:

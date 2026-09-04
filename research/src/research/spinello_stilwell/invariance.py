@@ -13,7 +13,8 @@ nobody has run, and nothing here converts one into a result.
    unit choice alone decides where it falls. Symbolic.
 3. The converged estimate and the posterior variance are nonetheless unmoved by the
    rescaling, while the iteration count is not. Numeric, on the linear-mean scalar
-   case, using a reference implementation of (35) written for this check alone.
+   case, at the probe budget and tolerance stated below, every run converging within
+   it.
 
 Point 3 is what Q2 rests on: if rescaling moved the answer, choosing units to clear the
 pole would be choosing an answer, and it would be a tuned parameter rather than a
@@ -26,7 +27,18 @@ import sympy as sp
 
 from research.spinello_stilwell import scheme
 
-__all__ = ["CASE", "SCALES", "WorkedCase", "iterate", "main", "term_invariance"]
+__all__ = [
+    "AT_THE_PROBE_BUDGET",
+    "CASE",
+    "PROBE_BUDGET",
+    "PROBE_TOLERANCE",
+    "SCALES",
+    "ProbeBudget",
+    "WorkedCase",
+    "iterate",
+    "main",
+    "term_invariance",
+]
 
 
 def term_invariance() -> dict[str, bool]:
@@ -85,15 +97,16 @@ def iterate(
     prior_variance: float,
     base_noise: float,
     curvature: float,
-    scale: float = 1.0,
-    tolerance: float = 1e-14,
-    max_iterations: int = 200,
+    scale: float,
+    tolerance: float,
+    max_iterations: int,
 ) -> tuple[float, float, int]:
     """Spinello-Stilwell (35) for a scalar linear-mean sensor, in rescaled units.
 
     The printed scheme, so `scheme.iterate` with its `r3` block kept. Route 1 asks what
     rescaling moves in the paper's own filter, and a variant of it would answer a
-    different question.
+    different question. No default budget or tolerance, for the reason `scheme.iterate`
+    gives.
 
     Args:
         observation: the reading, in unrescaled units.
@@ -146,6 +159,26 @@ CASE: WorkedCase = {
 #: happened to work in one direction would show.
 SCALES = (1.0, 0.5, 3.0, 7.0)
 
+#: The budget the probes here and in `repair` run to convergence at, and the relative
+#: step below which a run counts as converged. These are the probes' numbers and are
+#: printed with every result they produce. The rung's budget is a different thing,
+#: undeclared until an ADR declares it (ADR-056), and nothing reads it off these.
+PROBE_BUDGET = 200
+PROBE_TOLERANCE = 1e-14
+
+
+class ProbeBudget(TypedDict):
+    """The two stopping arguments every call of `iterate` has to pass."""
+
+    tolerance: float
+    max_iterations: int
+
+
+AT_THE_PROBE_BUDGET: ProbeBudget = {
+    "tolerance": PROBE_TOLERANCE,
+    "max_iterations": PROBE_BUDGET,
+}
+
 
 def main() -> None:
     """Run the three checks and assert each."""
@@ -172,11 +205,15 @@ def main() -> None:
     print("  ridge: R0 = 1/2 puts the pole on the operating point at lambda = 1")
 
     print("\n=== Q2: rescaling moves the path and not the answer ===")
-    reference = iterate(**CASE, scale=1.0)
+    print(f"  probe budget {PROBE_BUDGET}, tolerance {PROBE_TOLERANCE:g}")
+    reference = iterate(**CASE, scale=1.0, **AT_THE_PROBE_BUDGET)
     print(f"  {'lambda':>8} {'estimate':>20} {'posterior var':>18} {'iters':>7}")
     counts = set()
     for scale in SCALES:
-        estimate, variance, taken = iterate(**CASE, scale=scale)
+        estimate, variance, taken = iterate(**CASE, scale=scale, **AT_THE_PROBE_BUDGET)
+        # Exhausting the budget would be a wrong covariance as well as a wrong mean
+        # (Q7), so a run that did not converge is not a row in this table.
+        assert taken < PROBE_BUDGET, (scale, taken)
         counts.add(taken)
         print(f"  {scale:>8} {estimate:>20.15f} {variance:>18.15f} {taken:>7}")
         assert abs(estimate - reference[0]) < 1e-12, scale

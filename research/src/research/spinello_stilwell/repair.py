@@ -29,7 +29,14 @@ and `spread` is cpomdp's.
 from itertools import pairwise
 
 from research.spinello_stilwell import scheme
-from research.spinello_stilwell.invariance import CASE, SCALES, WorkedCase
+from research.spinello_stilwell.invariance import (
+    AT_THE_PROBE_BUDGET,
+    CASE,
+    PROBE_BUDGET,
+    PROBE_TOLERANCE,
+    SCALES,
+    WorkedCase,
+)
 
 __all__ = [
     "FIXED_NOISE_CASE",
@@ -104,9 +111,10 @@ def fixed_noise_departure(*, log_block: bool, scale: float) -> tuple[float, floa
     Returns:
         The absolute departure in the mean and in the variance.
     """
-    estimate, variance, _ = scheme.iterate(
-        **FIXED_NOISE_CASE, scale=scale, log_block=log_block
+    estimate, variance, taken = scheme.iterate(
+        **FIXED_NOISE_CASE, **AT_THE_PROBE_BUDGET, scale=scale, log_block=log_block
     )
+    assert taken < PROBE_BUDGET, (scale, log_block, taken)
     oracle_mean, oracle_variance = scheme.kalman_update(
         FIXED_NOISE_CASE["observation"],
         FIXED_NOISE_CASE["prior_mean"],
@@ -128,9 +136,9 @@ def pole_is_reachable_at_fixed_noise() -> bool:
     """
     on_the_pole: WorkedCase = {**FIXED_NOISE_CASE, "base_noise": 1.0}
     try:
-        scheme.iterate(**on_the_pole, scale=1.0, log_block=True)
+        scheme.iterate(**on_the_pole, **AT_THE_PROBE_BUDGET, scale=1.0, log_block=True)
     except ZeroDivisionError:
-        scheme.iterate(**on_the_pole, scale=1.0, log_block=False)
+        scheme.iterate(**on_the_pole, **AT_THE_PROBE_BUDGET, scale=1.0, log_block=False)
         return True
     return False
 
@@ -159,7 +167,9 @@ def main() -> None:
         "=== Test 1: does the reported estimate depend on the observation's units ==="
     )
     converged = {
-        name: estimate_spread(log_block=block, max_iterations=200, tolerance=1e-14)
+        name: estimate_spread(
+            log_block=block, max_iterations=PROBE_BUDGET, tolerance=PROBE_TOLERANCE
+        )
         for name, block in (("printed", True), ("modified", False))
     }
     single = {

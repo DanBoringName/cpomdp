@@ -288,6 +288,22 @@ budget-exhaustion behaviour of Q7 and the rung-one-versus-(36) separation of Q5 
 routes, and no number here bears on any of them.
 
 
+### AMENDMENT 2026-09-04: the budget those numbers ran at is stated
+
+The entry above says the reference implementation "takes its iteration budget as an
+argument rather than declaring one". It did, and it also gave that argument a default
+of 200 with a tolerance of `1e-14`, and `main()` passed neither, so every number in the
+table was produced at a budget the record did not state. Review caught it.
+
+Now: `scheme.iterate` and `invariance.iterate` have no default budget or tolerance,
+every caller passes both, and the probes' own are named `PROBE_BUDGET = 200` and
+`PROBE_TOLERANCE = 1e-14` in `invariance.py` and printed beside every table they
+produce. Every run in the table above converged within that budget, asserted, since a
+run that exhausts it returns a count equal to the budget and Q7 says such a run's
+covariance is wrong as well as its mean. The rung's budget stays undeclared (ADR-056).
+The test that polices it asserted the wrong thing, that a default existed, and now
+asserts that none does.
+
 ### RESOLVED 2026-08-24: route 2 is run, and only one declared family resists a unit choice
 
 `research/src/research/spinello_stilwell/reachable_noise.py`, run with

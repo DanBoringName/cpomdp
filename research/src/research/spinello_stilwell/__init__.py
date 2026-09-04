@@ -6,6 +6,7 @@ worked on paper first, and `research/spinello_stilwell_hand_derivation.md` is th
 of that notebook typed up.
 
 This package holds what has actually been checked, and nothing in it is the rung: no
-module here declares an iteration budget, guards the pole, or reports a warrant. A
-route that has not been run has no module.
+module here declares the rung's iteration budget, guards the pole, or reports a
+warrant. A probe runs at a budget of its own and prints it beside every number it
+produces. A route that has not been run has no module.
 """

@@ -11,7 +11,7 @@ from itertools import pairwise
 
 import pytest
 
-from research.spinello_stilwell import repair, scheme
+from research.spinello_stilwell import invariance, repair, scheme
 
 
 def test_it_runs_and_its_assertions_hold(capsys):
@@ -30,7 +30,9 @@ class TestUnitDependence:
         # not: run to convergence both variants land on the same estimate in every unit,
         # which is what route 1's numeric half already measured for the printed one.
         span = repair.estimate_spread(
-            log_block=log_block, max_iterations=200, tolerance=1e-14
+            log_block=log_block,
+            max_iterations=invariance.PROBE_BUDGET,
+            tolerance=invariance.PROBE_TOLERANCE,
         )
         assert span < 1e-15, span
 
