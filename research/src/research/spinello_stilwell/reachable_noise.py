@@ -25,7 +25,7 @@ import math
 
 import numpy as np
 
-from research.checks.gap_kernel import FAMILIES, SIGMAS, NoiseFamily
+from research.checks.gap_kernel import FAMILIES, SIGMAS, X_WINDOW_LADDER, NoiseFamily
 
 __all__ = [
     "MARGIN",
@@ -37,10 +37,11 @@ __all__ = [
 ]
 
 #: How far out the prior the reachable set is taken to run, in prior standard
-#: deviations. The gap quadrature already sizes its `y` grid at nine, and the
-#: Gauss-Newton iterate is not confined to the prior's bulk, so a narrower reach would
-#: understate the hazard rather than measure it.
-REACH_IN_SPREADS = 9.0
+#: deviations. The gap quadrature's state window starts at the foot of
+#: `X_WINDOW_LADDER`, so that is the narrowest reach the reference already treats as
+#: the state's range, and a reach narrower than it would understate the hazard rather
+#: than measure it.
+REACH_IN_SPREADS = X_WINDOW_LADDER[0]
 
 #: How far clear of the pole a unit choice has to put the reachable set. A factor rather
 #: than an absolute, since the pole is multiplicative in the rescaling.

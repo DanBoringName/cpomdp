@@ -114,7 +114,13 @@ class TestReachableNoise:
         ]
         needed = max(reachable_noise.clearing_scale(low) for low in floors)
         assert all(needed**2 * low >= reachable_noise.MARGIN - 1e-9 for low in floors)
-        assert 2.5 < needed < 2.6, needed
+        # Set by exp(x) at the widest declared spread, over twelve prior spreads.
+        assert 4.0 < needed < 4.05, needed
+
+    def test_the_reach_is_the_foot_of_the_reference_s_state_window(self):
+        # The gap quadrature treats that many prior spreads as the state's range, so
+        # a narrower survey would understate what the iterate can reach.
+        assert reachable_noise.REACH_IN_SPREADS == 12.0
 
     def test_the_ridge_operating_point_sits_below_the_pole(self):
         floor = reachable_noise._infimum_over_the_line(reachable_noise.RIDGE)
