@@ -666,27 +666,35 @@ Run so far:
 - [x] The derivation's three tests, in `research.spinello_stilwell.repair`. Test 1 came
       out different from the notes' prediction and the correction is recorded under Q1.
 
+Decided (ADR-057):
+
+- [x] The shipped rungs (36) and (35) run `R_mod`, the paper's scheme with the `r₃`
+      block of (35d) removed. Named as modified wherever it appears.
+- [x] No `λ` is declared. The deleted block was the only term a rescaling moved, so the
+      shipped scheme has no pole to clear and a unit convention would change nothing it
+      reports. Route 2's table stays as the measurement it was. `exp(x)` needs no box
+      and no guard for the pole. Q2, Q3 and Q4 close for the shipped rung.
+
 Still owed, roughly in order:
 
-- [ ] **Declare `λ` in an ADR.** Route 2 measured that `λ ≈ 4.02` clears the declared
-      set and then stopped, because what gets registered is a declaration and not a
-      measurement. No rung may read a unit choice off that table. The ADR also has to
-      dispose of `exp(x)`, whose infimum over the line is zero, so no `λ` clears it and
-      the guard question of Q2 stays open for that family alone.
 - [ ] Routes 3 and 5, the two-sided failure probe near `σ = 1` and the budget-exhaustion
-      probe. Both are runnable now against `research.spinello_stilwell.scheme`, which
-      carries no guard and takes its budget as an argument. They confirm ADR-056's `VOID`
-      routing rather than decide it.
-- [ ] Decide the modification. It is derived and its three tests pass. Nothing has
-      compared a modified against an unmodified **gap**, which needs the reference
-      lattice and a rung with a declared budget.
+      probe, on the printed scheme in `research/` where it still runs. Both are runnable
+      now against `research.spinello_stilwell.scheme`, which carries no guard and takes
+      its budget as an argument. They confirm ADR-056's `VOID` routing rather than
+      decide it, and they carry the unrun comparison of modified against printed
+      iterates.
+- [ ] Declare the iteration budget and the tolerance. Both are arguments today and
+      `test_the_rung_s_open_decisions_stay_arguments` pins that they stay so until an
+      ADR says otherwise.
+- [ ] Route 1's empirical half, now a cost measurement: the shipped rung's gap against
+      the printed scheme's at the declared budget. Needs the reference lattice.
 - [ ] Route 6, the rung-one-versus-(36) separation. Needs the ladder to exist.
 - [ ] Route 7, section IV's constants evaluated. Decides nothing the rung needs, only
       whether Paper 2 may say the published runs never cashed the term in.
 
 **Merge gate:** agreement with the closed-form Kalman posterior in the fixed-R case, where
-the Kalman filter *is* the exact Bayesian filter. Each rung evaluates. The ladder
-enumerates completely.
+the Kalman filter *is* the exact Bayesian filter, and a reported gap that does not move
+under `o → λo` (ADR-057). Each rung evaluates. The ladder enumerates completely.
 
 ## PR-8 — Certified discretisation bound · GATE-D4 · tag v0.4.5
 
