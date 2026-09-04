@@ -659,8 +659,9 @@ Run so far:
       the log-determinant term does not. The empirical half, a rescaling sweep of the
       reported **gap**, still needs the rung.
 - [x] Route 2. Four of the six declared families never dip below `R = 1`. Two of them,
-      `1 + x²` and `1.5 + 0.5 sin(x)`, attain it exactly, which is what makes a unit
-      choice compulsory rather than prudent. One `λ` clears every family except `exp(x)`.
+      `1 + x²` and `1.5 + 0.5 sin(x)`, attain it exactly, so a units-only repair would
+      have had to move the pole and not merely widen a margin. One `λ` clears every
+      family except `exp(x)`.
 - [x] Route 4, the `∇σ = 0` reduction against the Kalman oracle. Exact in every unit
       choice, for the printed scheme and the modification alike. This is the rung's only
       external check, since the paper simulates (36) and never (35).
