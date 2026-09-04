@@ -253,10 +253,24 @@ def gaussian_kl(
     factor_b = _cholesky_or_refuse(cov_b, "cov_b")
 
     # Singular values of L_b⁻¹ L_a squared are the eigenvalues of cov_b⁻¹ cov_a.
-    ratios = np.linalg.svd(np.linalg.solve(factor_b, factor_a), compute_uv=False) ** 2
-    shape_term = _excess_over_log(ratios - 1.0)
-    shift = np.linalg.solve(factor_b, mean_a - mean_b)
+    ratios = np.linalg.svd(_forward_substitute(factor_b, factor_a), compute_uv=False)
+    shape_term = _excess_over_log(ratios**2 - 1.0)
+    shift = _forward_substitute(factor_b, mean_a - mean_b)
     return float(0.5 * (shape_term.sum() + shift @ shift))
+
+
+def _forward_substitute(lower: np.ndarray, rhs: np.ndarray) -> np.ndarray:
+    """``lower⁻¹ · rhs`` for a lower-triangular ``lower``, row by row.
+
+    A general solve pivots and leaves a ``1e-16`` residue where the factor is solved
+    against itself, which the series then squares into a divergence of ``1e-32``
+    between identical Gaussians. Substitution in row order returns the identity
+    exactly there, so identical inputs read ``0.0`` rather than something small.
+    """
+    solution = np.zeros_like(rhs, dtype=float)
+    for row in range(lower.shape[0]):
+        solution[row] = (rhs[row] - lower[row, :row] @ solution[:row]) / lower[row, row]
+    return solution
 
 
 # Below this, ``x − log1p(x)`` is itself a cancellation: the two agree to nearly every

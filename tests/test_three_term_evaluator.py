@@ -56,8 +56,15 @@ MEAN_B = np.array([0.0, -1.0, 2.5])
 COV_B = np.array([[1.5, -0.1, 0.0], [-0.1, 1.3, 0.4], [0.0, 0.4, 0.9]])
 
 
-def test_identical_gaussians_diverge_by_exactly_zero():
-    assert gaussian_kl(MEAN_A, COV_A, MEAN_A, COV_A) == 0.0
+@pytest.mark.parametrize(
+    "cov",
+    [COV_A, np.array([[0.5, 0.1], [0.1, 0.3]]), np.array([[2.0, -0.7], [-0.7, 0.9]])],
+)
+def test_identical_gaussians_diverge_by_exactly_zero(cov):
+    # Including correlated 2x2 cases, where a pivoting solve of the factor against
+    # itself leaves a residue that squares to 1e-32.
+    mean = np.zeros(cov.shape[0])
+    assert gaussian_kl(mean, cov, mean, cov) == 0.0
 
 
 def test_the_scalar_closed_form():
