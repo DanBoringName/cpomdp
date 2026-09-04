@@ -20,10 +20,11 @@ pole would be choosing an answer, and it would be a tuned parameter rather than 
 declared convention.
 """
 
-import math
 from typing import TypedDict
 
 import sympy as sp
+
+from research.spinello_stilwell import scheme
 
 __all__ = ["CASE", "SCALES", "WorkedCase", "iterate", "main", "term_invariance"]
 
@@ -90,10 +91,9 @@ def iterate(
 ) -> tuple[float, float, int]:
     """Spinello-Stilwell (35) for a scalar linear-mean sensor, in rescaled units.
 
-    A reference implementation for this check alone. It is not the shipped rung, it
-    carries no guard at the pole, and it takes its iteration budget as an argument
-    rather than declaring one. `R(x) = base_noise + curvature * x^2` and `h(x) = x`,
-    both rescaled by `scale`.
+    The printed scheme, so `scheme.iterate` with its `r3` block kept. Route 1 asks what
+    rescaling moves in the paper's own filter, and a variant of it would answer a
+    different question.
 
     Args:
         observation: the reading, in unrescaled units.
@@ -109,39 +109,17 @@ def iterate(
         The converged estimate in unrescaled state units, the posterior variance, and
         the number of iterations taken.
     """
-    reading = scale * observation
-    prior_precision = 1.0 / prior_variance
-    estimate = prior_mean
-    taken = 0
-    while taken < max_iterations:
-        taken += 1
-        noise = scale**2 * (base_noise + curvature * estimate**2)
-        mean_slope = scale
-        noise_slope = scale**2 * 2.0 * curvature * estimate
-        residual = reading - scale * estimate
-
-        gradient = (
-            -(residual / noise) * mean_slope
-            + (1.0 / (2.0 * noise)) * (1.0 - residual**2 / noise) * noise_slope
-        )
-        gauss_newton = (
-            mean_slope**2 / noise
-            + (residual / (2.0 * noise**2)) * 2.0 * mean_slope * noise_slope
-            + (1.0 / (4.0 * noise**2))
-            * (residual**2 / noise + 1.0 / math.log(noise))
-            * noise_slope**2
-        )
-        step = (prior_precision * (estimate - prior_mean) + gradient) / (
-            prior_precision + gauss_newton
-        )
-        estimate -= step
-        if abs(step) < tolerance * math.sqrt(prior_variance):
-            break
-
-    noise = scale**2 * (base_noise + curvature * estimate**2)
-    noise_slope = scale**2 * 2.0 * curvature * estimate
-    fisher = scale**2 / noise + noise_slope**2 / (2.0 * noise**2)
-    return estimate, 1.0 / (prior_precision + fisher), taken
+    return scheme.iterate(
+        observation=observation,
+        prior_mean=prior_mean,
+        prior_variance=prior_variance,
+        base_noise=base_noise,
+        curvature=curvature,
+        scale=scale,
+        tolerance=tolerance,
+        max_iterations=max_iterations,
+        log_block=True,
+    )
 
 
 class WorkedCase(TypedDict):

@@ -79,6 +79,28 @@ choice enters an estimator whose output is unit-free.
 reports which quantities move. **Test.** The converged estimate and the reported gap are
 invariant under rescaling once the term is removed, and are not before.
 
+### AMENDMENT 2026-09-04: the reported estimate moves at a finite budget, not at the fixed point
+
+The Route entry of 2026-08-24 measured the converged estimate as unmoved by rescaling.
+The test this question asks for was still written as though the printed scheme fails it,
+which cannot both be true. `research/src/research/spinello_stilwell/repair.py` settles
+which.
+
+Run to convergence, the printed scheme spans `0.0` across `λ ∈ {1, ½, 3, 7}` and so does
+the modification. Neither is unit-dependent there. At a budget of one the printed
+estimate spans `2.955e-05` over the same four choices and the modification spans
+`1.11e-16`.
+
+So the test above is right that a unit-dependent report is the defect and wrong about
+where it appears. It appears at a finite budget, and a budget of one is the single-step
+filter (36) that ADR-056 declares as its own rung. The consequence is a strengthening
+rather than a retraction: the term makes a rung the ladder **reports** unit-dependent,
+which is a worse fault than making an iteration path unit-dependent.
+
+What this does not settle. The gap itself has still never been computed through a rung,
+so the test as this question words it, on the reported gap rather than on the estimate,
+remains unrun. Routes 3, 5, 6 and 7 are untouched.
+
 ## Q2. Ask whether the pole is a units artefact before writing any guard
 
 `R⁽ᶥ⁾` is singular at `σ = 1`. Under rescaling the pole sits at `σ = λ⁻²`, so the unit

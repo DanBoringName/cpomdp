@@ -1,16 +1,22 @@
 # The Spinello–Stilwell rung: the hand derivation
 
 `research/spinello_stilwell_hand_derivation.pdf` came first. It is a scan of the
-notebook worked the derivation in, dated 31/08/2026 to 04/09/2026. It is the original. This is a typed up version of that scan by AI-Claude Opus: the same steps, in the same order, under the
-notes' own numbering, so the two read side by side.
+notebook the derivation was worked in, dated 31/08/2026 to 04/09/2026. It is the
+original. This is a typed up version of that scan by AI-Claude Opus: the same steps, in
+the same order, under the notes' own numbering, so the two read side by side.
+
+The steps transcribe the scan and stop where it stops. The dated sections at the foot
+are not in the scan and were added after the code ran. Each says what in the scan it
+corrects. Where a step and the scan disagree, the scan is what happened and the step
+has the transcription error.
 
 `research/spinello_stilwell_rung.md` records what the paper leaves open. This file
 records what was derived from it: where equations (35c), (35d) and (35e) come from, which
 block of (35d) fails to be a square, and what deleting that block costs. ADR-056 carries
 the part that is decided.
 
-Nothing here is a measured result. Two claims are marked unrun below and stay that way
-until a module produces them.
+Nothing in the steps is a measured result. Two claims are marked unrun below and stay
+that way until a module produces them.
 
 ## The paper
 
@@ -398,6 +404,10 @@ first use in Paper 2.
 
 **Three tests, with what each is blind to stated beside it.**
 
+> **Superseded.** Test 1's row is wrong about where the failure appears. The RESULT
+> and CLARIFICATION of 2026-09-04 at the foot of this document carry the measurement
+> and the reason. Read those first.
+
 | # | Test | Blind to |
 | --- | --- | --- |
 | 1 | Gap invariant under `y → λy`. Fails unmodified by the predicted `2 ln λ` shift, passes modified | a wrong fixed point that is nonetheless unit-free |
@@ -411,3 +421,116 @@ three rather than picking the strongest.
 derivation exists. It has a known EKF lineage through Bell and Cathey. One change is
 declared, with a cost Python can monitor. Deriving a fresh filter would trade all three
 for the appearance of independence.
+
+## RESULT 2026-09-04: the three tests, run
+
+`research/src/research/spinello_stilwell/repair.py`, run with
+
+```text
+uv run --no-sync python -m research.spinello_stilwell.repair
+```
+
+and asserted from `tests/test_spinello_stilwell_repair.py`. The scheme itself moved to
+`scheme.py` so the printed form and the modification are one implementation with a flag,
+rather than two copies of (35) that can drift apart.
+
+**Test 1 is not the test step 10 predicted.** The table above says the unmodified filter
+fails by the `2 ln λ` shift. It does not. Run to convergence the printed scheme is
+already unit-free: the estimate spans 0.0 across `λ ∈ {1, ½, 3, 7}`, and so does the
+modification. Route 1's numeric half had measured that for the printed scheme in August
+and the argument at step 7 did not absorb it.
+
+The dependence is real and it bites at a **finite budget**. At a budget of one the
+printed estimate spans `2.955e-05` over the same four unit choices, while the
+modification spans `1.11e-16`, which is machine zero. A budget of one is the single-step
+filter (36), and ADR-056 declares that as a rung of its own. So the defect belongs to a
+rung the ladder reports, not to a path nobody sees. That makes the test sharper than the
+one the notes asked for, and it also means the warrant at step 7 has to be stated as
+being about the reported rung rather than about the fixed point.
+
+**Test 2 is exact.** At `∇σ = 0` both variants reproduce the Kalman posterior with a
+departure of `0.0` in the mean and `0.0` in the variance, at every `λ` tried. Bit for
+bit, not to a tolerance. The rung's only external check is discharged in the one regime
+where an oracle exists.
+
+One thing the run turned up that the notes did not anticipate: with `∇σ = 0` **and**
+`σ = 1`, the printed fourth term of (35d) is `0/0` and the scheme has no value. The
+modification reduces to Kalman there as it does everywhere else. So the pole reaches
+even the fixed-noise reduction, and in the printed form the rung's only external check
+is not evaluable on it.
+
+**Test 3 behaves as argued.** The printed (35d) and the modification converge as the
+noise grows, the relative difference falling from `5.45e-01` at `σ = 2` to `7.24e-08` at
+`σ = 10⁶`. At `σ = 0.9` the printed curvature is `-9.74`, negative, while the
+modification is `+1.98`. That sign flip is the blindness the table claims for this test,
+pinned by a check rather than left as a caveat.
+
+**Still unrun.** The gap itself, which needs the reference lattice and a rung with a
+declared budget. Routes 3, 5, 6 and 7 of `research/spinello_stilwell_rung.md`. Nothing
+here reports a warrant, and the modification remains a derived proposal rather than a
+decided one.
+
+## CLARIFICATION 2026-09-04: why test 1 could not fail by `2 ln λ`
+
+This section is not in the scan as claude found it later when tasked to verify my tests and hand derivation. I agree with its findings. The scan ends at step 10 predicting that the
+unmodified gap fails invariance by a `2 ln λ` shift, and the RESULT above measured that
+prediction wrong. What follows is the reason the predicted failure was never available,
+derived at the keyboard after `repair.py` ran. The scan keeps its prediction, since it
+records what was believed before the code existed, and the Q1 amendment in
+`research/spinello_stilwell_rung.md` is the correction of record.
+
+**The unit change is an additive constant in the objective.** Rescale the observation.
+The mismatch term cancels and the normaliser splits:
+
+```text
+ℓ_λ(x) = ½ξᵀP⁻¹ξ + ½(λζ)²/(λ²σ) + ½ ln(λ²σ) = ℓ(x) + ln λ
+```
+
+That constant is the entire effect. A constant in `x` moves neither the mode nor the
+normalised posterior, and a KL between distributions over the state cannot see it.
+Step 7 had every substitution needed for that one line and never wrote it.
+
+**Exactly one object fails to treat the shift as a constant.** Trace
+`ln σ → ln σ + 2 ln λ` through the three places `r₃` reaches:
+
+| where `r₃` lands | value | under `σ → λ²σ` |
+| --- | --- | --- |
+| objective, `r₃²` | `ln σ` | gains a constant the argmin ignores |
+| gradient, `r₃ ∂r₃` | `σ'/2σ` | the logs already cancelled, nothing to shift |
+| curvature, `(∂r₃)ᵀ(∂r₃)` | `σ'ᵀσ'/(4σ² ln σ)` | the shift lands in the denominator and sticks |
+
+The square root is why. `(ln σ)^½` is not affine in `ln σ`, so squaring its Jacobian
+turns an additive shift into a change of value. That gives the deleted block a second
+independent characterisation beside step 6's: the one piece of the scheme that is not a
+real square, and the one piece non-affine in the quantity the unit choice shifts.
+
+**The curvature steers and does not choose.** `M = P⁻¹ + R` shapes the step. The
+stopping condition is `g = 0`, and `g` is invariant, so its root is the same in every
+unit system. `Ū` contains no `ln σ` and is evaluated at that root. Run to convergence,
+the printed scheme therefore reports a unit-free `(x̂, P₊)` with the term still in it.
+Only the path moves. The route 1 numbers of 2026-08-24 already had the iteration counts
+at 6, 9, 8, 8 across four unit choices while the answer sat still, and step 10's test
+was written without absorbing them.
+
+**A finite budget reports an iterate, and iterates are steered.** Stop at a budget of
+one and the reported mean is a single `M`-preconditioned step, so the unit dependence
+reaches the report. A budget of one is (36). ADR-056 declares it as a rung, so the
+number that moves is one the ladder publishes. The spreads in the RESULT above are the
+conviction, and the modification's machine-zero spread is the acquittal beside it.
+Step 7's sentence that one facet reports two gaps survives with a qualifier: true at
+every finite budget, false at convergence, and the gap itself stays unmeasured until
+the rung exists.
+
+**A gap that did shift by `2 ln λ` would mean the ladder is broken.** An additive
+constant survives into a reported divergence only where the number was computed from
+unnormalised log-densities, which is the entropy-subtraction family of defects the
+standing prohibition exists for. A normalised KL cannot inherit the normaliser's
+constant. The ladder's own construction is what made the predicted failure
+unobservable, and the prediction failing is that construction working.
+
+Two limits. Each variant's converged answer being unit-free does not discharge step 8's
+claim that printed and modified share a fixed point, since that comparison is across
+variants at one unit choice and stays with routes 3 and 5. And the unit-dependent
+iteration count is a cost result in its own right: the unmodified iterated rung's
+per-decision compute depends on the observation's units, which RFC-001's energy
+accounting has to care about even where the report is clean.

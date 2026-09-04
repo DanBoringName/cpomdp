@@ -52,7 +52,7 @@ def test_it_reports_no_warrant():
 
 @pytest.mark.parametrize("owed", ["max_iterations", "tolerance"])
 def test_the_rung_s_open_decisions_stay_arguments(owed):
-    # The budget and the tolerance are undeclared on purpose: ADR-054 routes them to a
+    # The budget and the tolerance are undeclared on purpose: ADR-056 routes them to a
     # measurement that has not been made. Baking either in here would settle by default
     # what the record says is open.
     import inspect
