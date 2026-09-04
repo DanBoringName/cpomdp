@@ -227,6 +227,19 @@ raising a parameter until the result fires. Require the sign flip at the registe
   four computed numbers in an order, which is not a result in either direction.
 - Does not buy: weaker content than D2's exponent. The qualitative half.
 
+### AMENDMENT 2026-09-04: D1's ladder is five rungs
+
+ADR-056 declares the ladder as five rungs, inserting the paper's single-step filter
+(36) between plug-in `R(μ⁻)` and the iterated scheme, so that the derivative-of-
+covariance terms and the iteration are two adjacent differences rather than one. The
+prediction above is therefore over plug-in `R(μ⁻)` → single-step (36) → iterated (35) →
+belief-smoothed `E[R(x)]` → exact reference, monotone throughout at the certified
+tolerance, and `NOT_RESOLVED` between any adjacent pair whose bars overlap. The two
+middle rungs run the modified scheme ADR-057 ships. The prediction's direction and its
+falsifier are unchanged, and "four computed numbers" in the warrant constraint reads
+five. Registered here before any rung exists, since an ordering
+seen before the set is fixed is what standing rule 7 refuses.
+
 **D2 · scaling exponent** · SEVERE · R8 · toolbox C, F · tier `BOUNDED` · **PR-9 · v0.5**, gated on GATE-D4
 
 - Predict: `gap ∝ (curvature of R) × (belief spread)²`. Sweep both factors
