@@ -3719,6 +3719,10 @@ which is why it is routed rather than printed.
 **Date:** 2026-09-04
 **Status:** Accepted
 **Extends:** ADR-056, whose units question this answers
+**Supersedes:** two sentences of ADR-056's section "No guard is written until the
+units question is answered" — "That choice is a declaration, not a tuned parameter,
+and it is declared before any number exists", and "A guard is written only for a
+family where no such `λ` exists" — and nothing else in it
 
 `research/spinello_stilwell_hand_derivation.md` is the scan of the notebook typed up.
 Its step 6 names the block that fails, step 8 argues the deletion is surgical, and
