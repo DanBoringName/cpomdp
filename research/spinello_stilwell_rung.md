@@ -348,3 +348,32 @@ What this does **not** settle. The `λ` above is a measurement, not a declaratio
 gets registered is the owner's call and belongs in an ADR, and until then no rung may
 read a unit choice off this table. Routes 3, 4, 5 and 6 are untouched, and route 4, the
 `∇σ = 0` reduction against the Kalman oracle, remains the rung's only external check.
+
+### AMENDMENT 2026-09-04: two families attain the pole, and the reach was too narrow
+
+Two corrections to the entry above, both from review of the pull request that landed it.
+
+**`1 + x²` attains `R = 1` too**, at the origin, and the table's own `inf R` column
+already said so while the marker and the prose withheld it. The claim that `sin` is the
+single family making the unit choice compulsory is false. Over the declared grid it is
+the quadratic that reaches the pole in more cells: both priors sit at `x = 1`, the
+quadratic's minimum is one unit away and the sine's nearest is at `−π/2`, so the
+windows reach the first in five cells of six and the second in two. The quadratic is
+the family carrying the registered `c₄` provenance, so the family that forced the unit
+choice was the registered one and not a bystander.
+
+**The reach cited the wrong axis.** Nine was the gap quadrature's `y` grid, in
+predictive standard deviations. The quadrature's *state* window starts at twelve prior
+standard deviations (`X_WINDOW_LADDER[0]`), so nine was narrower than the range the
+reference already treats as the state's, against the constant's own stated principle.
+`REACH_IN_SPREADS` now reads that foot. At twelve, `exp(x)` at spread `0.30` reaches
+down to `0.0743` and the single `λ` covering the survey is **`4.0195`**, not `2.5630`.
+The margin convention is also now one convention: the four families that never dip
+below one clear at `λ > √1.2 = 1.0954` with the declared margin, where the entry above
+said "any `λ > 1`" for those and quoted the ridge with the margin included.
+
+Nothing in the entry's conclusion changes: one `λ` still covers every family but
+`exp(x)`, and `exp(x)` still has no `λ` over the line. The unit-choice ADR still owed
+above may make the number moot for the shipped rung. The correction is recorded because
+the entry stated it as a result. `research.spinello_stilwell.reachable_noise` asserts
+the corrected claims and `tests/test_spinello_stilwell_invariance.py` pins them.
