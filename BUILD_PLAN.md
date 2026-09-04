@@ -630,17 +630,59 @@ The hard item, and it is shared.
 - [ ] Written against a **general transition kernel**, not a hard-coded linear-Gaussian
       one. If Q(x) falls out of the internal interfaces at no cost, let it. Do not
       document it, write examples against it, or claim it in release notes (issue #56).
-- [ ] Rule ladder, common interface: plug-in `R(μ⁻)`, Spinello–Stilwell iterated,
-      belief-smoothed `E[R(x)]`, exact reference at the top. Swappable in one line.
+- [ ] Rule ladder, common interface, **five rungs** (ADR-056): plug-in `R(μ⁻)`,
+      Spinello–Stilwell single-step (36), Spinello–Stilwell iterated (35), belief-smoothed
+      `E[R(x)]`, exact reference at the top. Swappable in one line. (36) is (35) at a
+      budget of one, so declaring it separately costs almost nothing and buys two adjacent
+      differences that isolate distinct mechanisms.
 - [ ] The rule list is **declared and versioned**, like `FiniteActionSet`. A rung added
       after results are seen shows up in the diff.
-- [ ] Four rungs is a finite declared set, so the ladder carries a completeness
+- [ ] Five rungs is a finite declared set, so the ladder carries a completeness
       certificate too (Route 2). That is what lets R7 reach a decided ordering rather than
       a sampled one.
 - [ ] **Compute and print the R6 gap here, at `COMPUTED`, before certification.** GATE-D4
       compares the certified bound against that number by the pre-agreed factor, so the
       gate cannot be evaluated until the uncertified signal exists. This ordering is easy
       to miss and it blocks PR-8.
+
+### The two Spinello–Stilwell rungs
+
+Durable record: `research/spinello_stilwell_rung.md` for the questions the paper leaves
+open and the routes that settle them, `research/spinello_stilwell_hand_derivation.md`
+with the scan beside it for the derivation of (35c) to (35e) and the modification, and
+ADR-056 for what is decided.
+
+Run so far:
+
+- [x] Route 1's symbolic half. Seven of eight terms survive an observation rescaling and
+      the log-determinant term does not. The empirical half, a rescaling sweep of the
+      reported **gap**, still needs the rung.
+- [x] Route 2. Four of the six declared families never dip below `R = 1`. Two of them,
+      `1 + x²` and `1.5 + 0.5 sin(x)`, attain it exactly, which is what makes a unit
+      choice compulsory rather than prudent. One `λ` clears every family except `exp(x)`.
+- [x] Route 4, the `∇σ = 0` reduction against the Kalman oracle. Exact in every unit
+      choice, for the printed scheme and the modification alike. This is the rung's only
+      external check, since the paper simulates (36) and never (35).
+- [x] The derivation's three tests, in `research.spinello_stilwell.repair`. Test 1 came
+      out different from the notes' prediction and the correction is recorded under Q1.
+
+Still owed, roughly in order:
+
+- [ ] **Declare `λ` in an ADR.** Route 2 measured that `λ ≈ 4.02` clears the declared
+      set and then stopped, because what gets registered is a declaration and not a
+      measurement. No rung may read a unit choice off that table. The ADR also has to
+      dispose of `exp(x)`, whose infimum over the line is zero, so no `λ` clears it and
+      the guard question of Q2 stays open for that family alone.
+- [ ] Routes 3 and 5, the two-sided failure probe near `σ = 1` and the budget-exhaustion
+      probe. Both are runnable now against `research.spinello_stilwell.scheme`, which
+      carries no guard and takes its budget as an argument. They confirm ADR-056's `VOID`
+      routing rather than decide it.
+- [ ] Decide the modification. It is derived and its three tests pass. Nothing has
+      compared a modified against an unmodified **gap**, which needs the reference
+      lattice and a rung with a declared budget.
+- [ ] Route 6, the rung-one-versus-(36) separation. Needs the ladder to exist.
+- [ ] Route 7, section IV's constants evaluated. Decides nothing the rung needs, only
+      whether Paper 2 may say the published runs never cashed the term in.
 
 **Merge gate:** agreement with the closed-form Kalman posterior in the fixed-R case, where
 the Kalman filter *is* the exact Bayesian filter. Each rung evaluates. The ladder
