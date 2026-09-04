@@ -12,8 +12,8 @@ has the transcription error.
 
 `research/spinello_stilwell_rung.md` records what the paper leaves open. This file
 records what was derived from it: where equations (35c), (35d) and (35e) come from, which
-block of (35d) fails to be a square, and what deleting that block costs. ADR-056 carries
-the part that is decided.
+block of (35d) fails to be a square, and what deleting that block costs. ADR-056 and
+ADR-057 carry the part that is decided; ADR-057 is where the deletion is adopted.
 
 Nothing in the steps is a measured result. Two claims are marked unrun below and stay
 that way until a module produces them.

@@ -651,7 +651,7 @@ The hard item, and it is shared.
 Durable record: `research/spinello_stilwell_rung.md` for the questions the paper leaves
 open and the routes that settle them, `research/spinello_stilwell_hand_derivation.md`
 with the scan beside it for the derivation of (35c) to (35e) and the modification, and
-ADR-056 for what is decided.
+ADR-056 and ADR-057 for what is decided.
 
 Run so far:
 
