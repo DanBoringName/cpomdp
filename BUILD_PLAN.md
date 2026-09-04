@@ -629,28 +629,38 @@ budget cannot be declared before the probe that sizes it exists. Nothing here to
 `src/`. Everything runs against `research.spinello_stilwell.scheme`, which carries no
 guard and takes its budget as an argument.
 
-- [ ] **Route 3, the two-sided failure.** Above the pole the Gauss-Newton step shrinks to
-      zero, so a truncated run returns the prediction and it reads as converged. Below the
-      pole the curvature is negative and the step points uphill. Both sides on the printed
-      scheme, on the registered ridge, where `R₀ = 0.5` puts the pole on the operating
-      point. The module prints the iterate either side and asserts both signs.
-- [ ] **Route 5, budget exhaustion.** `Ū` is evaluated at the current iterate, so cutting
-      the budget moves the covariance as well as the mean. Measure both departures against
-      the budget on a case that does not converge inside it. That is what makes `VOID` a
-      decision rather than a preference.
-- [ ] **The modified iterate against the printed one.** ADR-057 argues the deletion is
-      surgical and the argument is symbolic today. Same case, same budget, both
-      curvatures, the departure tabulated per iterate.
-- [ ] **A convergence-count survey** over the declared family grid at the modified
-      curvature. A budget is read off this. Nothing else in the tree measures it.
-- [ ] **Then the ADR**, declaring the iteration budget and the tolerance, in a commit
-      after the survey that produced the number. `test_the_rung_s_open_decisions_stay_arguments`
-      moves from "no default anywhere" to "the probes still take arguments, and the
-      declared constants live where the ladder reads them".
-- [ ] `RESULT` entries appended under Q3 and Q7 of `research/spinello_stilwell_rung.md`.
+- [x] **Route 3, the two-sided failure**, in `research.spinello_stilwell.pole_failure`.
+      The pole has no value at all: the printed curvature raises `ZeroDivisionError` at
+      `σ = 1`. Above it the step collapses in proportion to the distance, which makes the
+      stall conditional on the tolerance rather than absolute: at `1e-8` off the pole any
+      relative tolerance above `2.84e-7` stops the run on its first iteration and reports
+      the prediction, wrong by `0.049`. Below it the sum crosses zero at
+      `x = 0.694474243706`, the step runs to `8.8e6`, and past the crossing it climbs the
+      objective.
+- [x] **Route 5, budget exhaustion**, in `research.spinello_stilwell.budget`. Both halves
+      move on all twelve declared cells, and on the widest prior at the strongest
+      curvature the covariance is the worse error, `0.425` against the mean's `0.357`.
+      `VOID` is a decision and not a preference.
+- [x] **The modified iterate against the printed one.** The mean differs by `3.2e-3` at a
+      budget of one, `6.7e-6` by five, and exactly `0` run out. That last number is
+      ADR-057's "surgical".
+- [x] **A convergence-count survey.** The declared families need 10 iterations at
+      `1e-14`. Over the whole operating range at `1e-12` it is 23 in the bulk and 65 at
+      the observation box's edge, because the gap calls the rung at every node of a box
+      nine predictive spreads wide.
+- [x] **The ADR**, ADR-058: budget 64, tolerance `1e-12` relative to the prior spread,
+      and the rung differentiates `R` by automatic differentiation rather than by a
+      difference. A difference floors convergence above the declared tolerance, which
+      route 5 measured.
+- [x] `ROUTE` entries appended under Q3 and Q7 of `research/spinello_stilwell_rung.md`,
+      and Q7 closed on the declaration.
 
 **Merge gate:** every number printed is asserted in the module that prints it. Nothing
 here acquires a warrant, and no module gains a `run_checks`.
+
+**Left open for PR-7**, from ADR-058's consequences: one node at the box edge exhausts
+the budget at `κ = 100`, carrying `2.6e-18` of the centre's predictive weight. Whether a
+voided node drops out, voids the gap, or widens the budget is the ladder's decision.
 
 ## PR-7 — Exact reference filter and the rule ladder
 
@@ -736,7 +746,7 @@ Decided (ADR-057):
 
 Still owed, split across three PRs:
 
-- **PR-7a** takes routes 3 and 5 and declares the budget. Runnable now, `research/` only.
+- **PR-7a** took routes 3 and 5 and declared the budget in ADR-058. Done.
 - **PR-7** builds the five rungs behind the seam, under the rung contract above.
 - **PR-7b** measures the ordering and prints the R6 gap. PR-8 waits on that number.
 
