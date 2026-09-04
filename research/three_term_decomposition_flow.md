@@ -58,3 +58,32 @@ by exactly zero.
 Both functions refuse state-dependent noise. Under `R(x)` the predictive is a scale
 mixture with no covariance that describes it, and scoring that is the reference
 filter's job at PR-9, not a formula's.
+
+## The inference gap is an average with a closed form
+
+`inference_gap_step` takes two functions of the reading: the cell's filter step at its
+current belief, and the exact step under the cell's own model at the exact filter's
+belief. Every Gaussian filter step is affine in `y`, with a covariance that never sees
+the reading, so the average over `y ∼ p*(y | u)` collapses to
+
+```
+E_y[KL] = KL at y = m*  +  ½ · tr(Σ_p⁻¹ · D · S* · Dᵀ)
+```
+
+with `D` the difference of the two gains and `S*` the true predictive covariance. The
+trace is a Frobenius norm of a whitened `D`, so the whole thing is squares and
+`λ − 1 − ln λ` terms, like the divergence it is built on.
+
+The gains are not asked for. A backend exposes `infer_states` and nothing about how it
+got there, so the step is probed: `m + 1` calls read the map off unit offsets, and one
+more call in the opposite direction checks the map predicts it. A step that is not
+affine, or whose covariance moves with the reading, is refused. The closed form then
+cannot be applied to a rule it does not describe, which matters more than the probe's
+cost (it is an instrument, not the agent's per-cycle path).
+
+Three oracles hold it. The scalar closed form `test_reference_gap` already uses. The
+grid engine in `cpomdp.reference`, on the fixed-`R` case that ADR-053 says is the one
+both engines can reach, agreeing to `1e-6` with an integrator that knows nothing about
+gains. And a two-dimensional case with the gains written out by formula and the
+average taken by the textbook trace. The exact rule scores `0.0` exactly, since it and
+the exact step are one computation.

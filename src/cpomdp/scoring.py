@@ -12,6 +12,7 @@ version of each was declared. `ProductCompletenessCertificate` carries both, whi
 what makes two runs over different crosses tellable apart (standing prohibition 9).
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
@@ -31,9 +32,18 @@ __all__ = [
     "Decomposition",
     "build_cross",
     "gaussian_kl",
+    "inference_gap_step",
     "misspecification_step",
     "observation_predictive",
 ]
+
+#: One filter step with its belief and action fixed: the reading in, the posterior out.
+StepUpdate = Callable[[np.ndarray], Belief]
+
+# How far a probed update may sit from the affine map read off it, relative to the
+# map's own size. Rounding across three probes sits near 1e-15; a rule that is not
+# affine misses by orders.
+_AFFINE_TOLERANCE = 1e-9
 
 #: What each axis is called on the certificate. Declared here rather than written at the
 #: construction site, so the two runs a ledger joins cannot disagree about the names.
@@ -381,3 +391,110 @@ def _require_fixed_noise(model: LinearGaussianModel) -> None:
                 f"the model's {slot} is state-dependent; the closed-form terms here "
                 f"are for fixed noise only"
             )
+
+
+def inference_gap_step(
+    agent_update: StepUpdate,
+    exact_update: StepUpdate,
+    true_mean: ArrayLike,
+    true_cov: ArrayLike,
+) -> float:
+    """``E_{y∼p*}[ D_KL[q(y) ‖ p(x|y)] ]`` for one step, in nats, in closed form.
+
+    ``q(y)`` is what the cell's filter believes after reading ``y`` and ``p(x|y)`` is
+    the exact posterior under the cell's own model after the same reading. Both are
+    read off their updates as affine maps in ``y``, which every Gaussian filter step
+    is: the mean is a gain times the innovation and the covariance does not see the
+    reading at all. The average then has a closed form. With ``D`` the difference of
+    the two gains and ``S`` the true predictive covariance::
+
+        E_y[KL] = KL at y = true_mean  +  ½ · tr(Σ_p⁻¹ · D · S · Dᵀ)
+
+    The trace is a Frobenius norm of a whitened ``D``, so like the divergence it is
+    built from squares and cannot read small by cancellation.
+
+    Args:
+        agent_update: The cell's filter step at its current belief, ``y`` in and its
+            posterior out.
+        exact_update: The exact step under the cell's model at that filter's current
+            belief, ``y`` in and the exact posterior out.
+        true_mean: The mean of ``p*(y | u)`` for this step, shape ``(m,)``.
+        true_cov: Its covariance, shape ``(m, m)``, positive definite.
+
+    Returns:
+        The averaged gap. ``0.0`` exactly when the two updates are one computation.
+
+    Raises:
+        ValueError: If either update is not affine in the reading, or if its
+            covariance depends on the reading. The closed form does not apply, and a
+            number from it would be a formula applied to the wrong object.
+    """
+    centre = np.asarray(true_mean, dtype=float)
+    agent = _affine_in_observation(agent_update, centre, "agent_update")
+    exact = _affine_in_observation(exact_update, centre, "exact_update")
+    at_centre = gaussian_kl(agent.mean, agent.cov, exact.mean, exact.cov)
+    drift = agent.gain - exact.gain  # D
+    whitened = np.linalg.solve(
+        _cholesky_or_refuse(exact.cov, "the exact posterior covariance"),
+        drift @ _cholesky_or_refuse(np.asarray(true_cov, dtype=float), "true_cov"),
+    )
+    return float(at_centre + 0.5 * np.sum(whitened**2))
+
+
+@dataclass(frozen=True)
+class _AffineStep:
+    """A filter step read as ``mean(y) = mean + gain · (y − centre)``, fixed ``cov``."""
+
+    centre: np.ndarray
+    mean: np.ndarray
+    gain: np.ndarray
+    cov: np.ndarray
+
+
+def _affine_in_observation(
+    update: StepUpdate, centre: np.ndarray, name: str
+) -> _AffineStep:
+    """Read an update's gain off ``m + 1`` probes, then check a further probe agrees.
+
+    The unit offsets recover the gain exactly when the map is affine. The last probe
+    moves the other way along every axis at once, so it coincides with none of them,
+    and is what catches a map that is not affine: the closed form built on the gain
+    is then refused rather than applied.
+    """
+    base = update(centre)
+    mean, cov = np.asarray(base.mean, dtype=float), np.asarray(base.cov, dtype=float)
+    columns = []
+    for axis in range(centre.shape[0]):
+        offset = np.zeros_like(centre)
+        offset[axis] = 1.0
+        probed = update(centre + offset)
+        _require_same_covariance(probed, cov, name)
+        columns.append(np.asarray(probed.mean, dtype=float) - mean)
+    gain = np.stack(columns, axis=1) if columns else np.zeros((mean.shape[0], 0))
+
+    offset = -np.ones_like(centre)
+    probed = update(centre + offset)
+    _require_same_covariance(probed, cov, name)
+    predicted = mean + gain @ offset
+    scale = 1.0 + np.abs(predicted).max() + np.abs(gain).sum()
+    if not np.allclose(
+        np.asarray(probed.mean, dtype=float),
+        predicted,
+        rtol=0.0,
+        atol=_AFFINE_TOLERANCE * scale,
+    ):
+        raise ValueError(
+            f"{name} is not affine in the reading: its mean at a probe misses the map "
+            f"read off unit offsets by more than {_AFFINE_TOLERANCE:g} of its size. "
+            f"The closed-form average is for a Gaussian filter step and does not apply."
+        )
+    return _AffineStep(centre=centre, mean=mean, gain=gain, cov=cov)
+
+
+def _require_same_covariance(probed: Belief, cov: np.ndarray, name: str) -> None:
+    """Refuse an update whose posterior covariance moved with the reading."""
+    if not np.array_equal(np.asarray(probed.cov, dtype=float), cov):
+        raise ValueError(
+            f"{name}'s posterior covariance depends on the reading; the closed-form "
+            f"average is for a Gaussian filter step, whose covariance does not."
+        )

@@ -6,12 +6,18 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from cpomdp.backends.degraded import WrongFixedRBackend
+from cpomdp.backends.kalman import KalmanBackend
 from cpomdp.observation import CallableSensor
+from cpomdp.reference.gap import averaged_inference_gap
+from cpomdp.reference.likelihood import FixedNoiseLikelihood
+from cpomdp.reference.quadrature import GridDensity, QuadratureGrid
 from cpomdp.scoring import (
     _SERIES_BELOW,
     Decomposition,
     _excess_over_log,
     gaussian_kl,
+    inference_gap_step,
     misspecification_step,
     observation_predictive,
 )
@@ -206,3 +212,154 @@ def test_the_term_reads_the_beliefs_it_is_handed_and_not_the_prior():
     truth, model = _model(), _model()
     shifted = Belief(mean=[0.9, -0.2], cov=BELIEF.cov)
     assert misspecification_step(truth, BELIEF, model, shifted, ACTION) > 0.0
+
+
+# --- the inference gap --------------------------------------------------------------
+
+
+def _scalar_model(true_noise: float) -> LinearGaussianModel:
+    """A static scalar state under a fixed noise, so one step is the whole story."""
+    return LinearGaussianModel(
+        dynamics_matrix=[[1.0]],
+        observation_matrix=[[1.0]],
+        dynamics_noise=[[0.0]],
+        observation_noise=[[true_noise]],
+        prior=Belief(mean=[0.3], cov=[[0.8]]),
+    )
+
+
+def _averaged_gaussian_gap(true_noise, plugin_noise, prior_var=0.8):
+    """The closed form `test_reference_gap` holds the grid engine to, restated here."""
+    gain = prior_var / (prior_var + true_noise)
+    plugin_gain = prior_var / (prior_var + plugin_noise)
+    exact_var = (1.0 - gain) * prior_var
+    approx_var = (1.0 - plugin_gain) * prior_var
+    innovation_var = prior_var + true_noise
+    return (
+        0.5 * np.log(exact_var / approx_var)
+        + (approx_var + (plugin_gain - gain) ** 2 * innovation_var) / (2 * exact_var)
+        - 0.5
+    )
+
+
+def _step(backend, belief, action=None):
+    return lambda y: backend.infer_states(y, belief, action)
+
+
+def test_the_exact_rule_has_no_gap_at_all():
+    model = _model()
+    exact = KalmanBackend(model)
+    true_mean, true_cov = observation_predictive(model, BELIEF, ACTION)
+    measured = inference_gap_step(
+        _step(exact, BELIEF, ACTION), _step(exact, BELIEF, ACTION), true_mean, true_cov
+    )
+    assert measured == 0.0
+
+
+@pytest.mark.parametrize("magnitude", [-0.5, 0.6, 3.0])
+def test_a_wrong_fixed_noise_matches_the_scalar_closed_form(magnitude):
+    true_noise = 0.5
+    model = _scalar_model(true_noise)
+    true_mean, true_cov = observation_predictive(model, model.prior, None)
+    measured = inference_gap_step(
+        _step(WrongFixedRBackend(model, magnitude=magnitude), model.prior),
+        _step(KalmanBackend(model), model.prior),
+        true_mean,
+        true_cov,
+    )
+    assert measured == pytest.approx(
+        _averaged_gaussian_gap(true_noise, true_noise * (1 + magnitude)), rel=1e-12
+    )
+
+
+def test_the_closed_form_agrees_with_the_grid_engine():
+    # The other engine, on the one case both can reach (ADR-053). The grid integrates
+    # KL(q ‖ p(x|y)) against p*(y) numerically and knows nothing about gains, so its
+    # agreement is evidence about the closed form rather than about the probing.
+    true_noise, magnitude = 0.5, 0.6
+    model = _scalar_model(true_noise)
+    agent = WrongFixedRBackend(model, magnitude=magnitude)
+    states = QuadratureGrid(lower=[-14.0], upper=[14.0], counts=[2801])
+    observations = QuadratureGrid(lower=[-16.0], upper=[16.0], counts=[401])
+
+    def gaussian_on(grid, mean, var):
+        x = np.asarray(grid.nodes)[:, 0]
+        return GridDensity(
+            grid, -0.5 * (np.log(2 * np.pi * var) + (x - mean) ** 2 / var)
+        )
+
+    def rule(prior, observation):
+        belief = agent.infer_states(np.asarray(observation), model.prior, None)
+        return gaussian_on(prior.grid, float(belief.mean[0]), float(belief.cov[0, 0]))
+
+    on_grid = averaged_inference_gap(
+        gaussian_on(states, 0.3, 0.8),
+        FixedNoiseLikelihood([[1.0]], observation_noise=[[true_noise]]),
+        rule,
+        observations,
+    )
+    true_mean, true_cov = observation_predictive(model, model.prior, None)
+    closed = inference_gap_step(
+        _step(agent, model.prior),
+        _step(KalmanBackend(model), model.prior),
+        true_mean,
+        true_cov,
+    )
+    assert closed == pytest.approx(on_grid.value, rel=1e-6)
+
+
+def test_the_two_dimensional_case_matches_the_textbook_expectation():
+    # Gains by formula rather than by probing, and the average by the textbook trace,
+    # so both halves of the closed form are checked against something that shares
+    # nothing with them.
+    model, magnitude = _model(), 0.5
+    dynamics, sensor = np.array([[1.0, DT], [0.0, 1.0]]), np.array([[1.0, 0.0]])
+    noise = np.array([[1e-2]])
+    cov_pred = dynamics @ np.asarray(BELIEF.cov) @ dynamics.T + 1e-4 * np.eye(2)
+    innovation_cov = sensor @ cov_pred @ sensor.T + noise  # S
+    exact_gain = cov_pred @ sensor.T @ np.linalg.inv(innovation_cov)  # K
+    wrong_gain = (
+        cov_pred
+        @ sensor.T
+        @ np.linalg.inv(sensor @ cov_pred @ sensor.T + noise * (1 + magnitude))
+    )
+    exact_cov = (np.eye(2) - exact_gain @ sensor) @ cov_pred
+    wrong_cov = (np.eye(2) - wrong_gain @ sensor) @ cov_pred
+    drift = wrong_gain - exact_gain
+    precision = np.linalg.inv(exact_cov)
+    expected = 0.5 * (
+        np.trace(precision @ wrong_cov)
+        - 2
+        + np.linalg.slogdet(exact_cov)[1]
+        - np.linalg.slogdet(wrong_cov)[1]
+        + np.trace(precision @ drift @ innovation_cov @ drift.T)
+    )
+
+    true_mean, true_cov = observation_predictive(model, BELIEF, ACTION)
+    measured = inference_gap_step(
+        _step(WrongFixedRBackend(model, magnitude=magnitude), BELIEF, ACTION),
+        _step(KalmanBackend(model), BELIEF, ACTION),
+        true_mean,
+        true_cov,
+    )
+    assert measured == pytest.approx(expected, rel=1e-12)
+
+
+def test_an_update_that_is_not_affine_is_refused():
+    def bent(y):
+        return Belief(mean=[float(y[0]) ** 2, 0.0], cov=np.eye(2))
+
+    exact = _step(KalmanBackend(_model()), BELIEF, ACTION)
+    true_mean, true_cov = observation_predictive(_model(), BELIEF, ACTION)
+    with pytest.raises(ValueError, match="agent_update is not affine"):
+        inference_gap_step(bent, exact, true_mean, true_cov)
+
+
+def test_an_update_whose_covariance_reads_the_observation_is_refused():
+    def widening(y):
+        return Belief(mean=[float(y[0]), 0.0], cov=np.eye(2) * (1 + float(y[0]) ** 2))
+
+    exact = _step(KalmanBackend(_model()), BELIEF, ACTION)
+    true_mean, true_cov = observation_predictive(_model(), BELIEF, ACTION)
+    with pytest.raises(ValueError, match="covariance depends on the reading"):
+        inference_gap_step(widening, exact, true_mean, true_cov)
