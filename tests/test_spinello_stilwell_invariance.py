@@ -95,8 +95,8 @@ class TestReachableNoise:
     @pytest.mark.parametrize("key", ["quadratic", "sin"])
     def test_two_families_attain_the_pole_exactly(self, key):
         # 1 + x^2 reaches 1.0 at the origin and 1.5 + 0.5 sin(x) where sin(x) = -1.
-        # At lambda = 1 the pole is on both families rather than near them, which is
-        # what makes the unit choice compulsory rather than prudent.
+        # At lambda = 1 the pole is on both families rather than near them, so a
+        # units-only repair would have had to move it, not merely widen a margin.
         floor = reachable_noise._infimum_over_the_line(FAMILIES[key])
         assert abs(floor - 1.0) < 1e-6, floor
 
@@ -114,14 +114,13 @@ class TestReachableNoise:
         assert cells == {"quadratic": 5, "sin": 2}, cells
 
     def test_the_exponential_cannot_be_cleared_over_the_whole_line(self):
-        # Its infimum is zero, so no lambda puts every state clear. This is the one
-        # family where a guard is still owed, and route 3 is where the consequence of
-        # an iterate escaping the declared window gets measured.
+        # Its infimum is zero, so no lambda puts every state clear. That is why
+        # ADR-057 removed the block instead: the shipped rung has no pole to guard.
         floor = reachable_noise._infimum_over_the_line(FAMILIES["exponential"])
         assert floor < 1e-9, floor
 
     def test_one_scale_clears_every_family_over_the_reachable_window(self):
-        # The result that makes a single declared unit choice possible.
+        # What a declared unit choice would have rested on. ADR-057 declares none.
         surveyed = {**FAMILIES, reachable_noise.RIDGE.key: reachable_noise.RIDGE}
         floors = [
             reachable_noise.reachable_noise(family, spread)[0]

@@ -12,8 +12,8 @@ has the transcription error.
 
 `research/spinello_stilwell_rung.md` records what the paper leaves open. This file
 records what was derived from it: where equations (35c), (35d) and (35e) come from, which
-block of (35d) fails to be a square, and what deleting that block costs. ADR-056 carries
-the part that is decided.
+block of (35d) fails to be a square, and what deleting that block costs. ADR-056 and
+ADR-057 carry the part that is decided; ADR-057 is where the deletion is adopted.
 
 Nothing in the steps is a measured result. Two claims are marked unrun below and stay
 that way until a module produces them.
@@ -534,3 +534,12 @@ variants at one unit choice and stays with routes 3 and 5. And the unit-dependen
 iteration count is a cost result in its own right: the unmodified iterated rung's
 per-decision compute depends on the observation's units, which RFC-001's energy
 accounting has to care about even where the report is clean.
+
+## ADOPTED 2026-09-04: the modification ships
+
+ADR-057 takes step 6's deletion for rungs (36) and (35), on step 8's argument and the
+RESULT above. The rung is named as modified at first use in Paper 2, as step 10 asks.
+No `λ` is declared: the deleted block was the only term step 7's table moved, so the
+shipped scheme has no pole and a unit convention would change nothing it reports.
+Step 8's "provably descends" is taken as a descent direction at every step, which is
+what a positive definite step matrix gives, and no more.

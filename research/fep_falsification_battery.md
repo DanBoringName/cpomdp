@@ -234,10 +234,10 @@ ADR-056 declares the ladder as five rungs, inserting the paper's single-step fil
 covariance terms and the iteration are two adjacent differences rather than one. The
 prediction above is therefore over plug-in `R(μ⁻)` → single-step (36) → iterated (35) →
 belief-smoothed `E[R(x)]` → exact reference, monotone throughout at the certified
-tolerance, and `NOT_RESOLVED` between any adjacent pair whose bars overlap. Whether the
-two middle rungs run the paper's curvature or the modification is a decision the build
-plan still owes, and the ordering does not depend on which. The prediction's direction
-and its falsifier are unchanged, and "four computed numbers" in the warrant constraint reads
+tolerance, and `NOT_RESOLVED` between any adjacent pair whose bars overlap. The two
+middle rungs run the modified scheme ADR-057 ships, so the registered line's
+"Spinello–Stilwell iterated" reads as modified from here. The prediction's direction and
+its falsifier are unchanged, and "four computed numbers" in the warrant constraint reads
 five. Registered here before any rung exists, since an ordering
 seen before the set is fixed is what standing rule 7 refuses.
 

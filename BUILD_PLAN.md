@@ -631,10 +631,11 @@ The hard item, and it is shared.
       one. If Q(x) falls out of the internal interfaces at no cost, let it. Do not
       document it, write examples against it, or claim it in release notes (issue #56).
 - [ ] Rule ladder, common interface, **five rungs** (ADR-056): plug-in `R(μ⁻)`,
-      Spinello–Stilwell single-step (36), Spinello–Stilwell iterated (35), belief-smoothed
-      `E[R(x)]`, exact reference at the top. Swappable in one line. (36) is (35) at a
-      budget of one, so declaring it separately costs almost nothing and buys two adjacent
-      differences that isolate distinct mechanisms.
+      Spinello–Stilwell single-step (36) and iterated (35), both with the documented
+      modification of ADR-057, belief-smoothed `E[R(x)]`, exact reference at the top.
+      Swappable in one line. (36) is (35) at a budget of one, so declaring it separately
+      costs almost nothing and buys two adjacent differences that isolate distinct
+      mechanisms.
 - [ ] The rule list is **declared and versioned**, like `FiniteActionSet`. A rung added
       after results are seen shows up in the diff.
 - [ ] Five rungs is a finite declared set, so the ladder carries a completeness
@@ -650,7 +651,7 @@ The hard item, and it is shared.
 Durable record: `research/spinello_stilwell_rung.md` for the questions the paper leaves
 open and the routes that settle them, `research/spinello_stilwell_hand_derivation.md`
 with the scan beside it for the derivation of (35c) to (35e) and the modification, and
-ADR-056 for what is decided.
+ADR-056 and ADR-057 for what is decided.
 
 Run so far:
 
@@ -658,35 +659,44 @@ Run so far:
       the log-determinant term does not. The empirical half, a rescaling sweep of the
       reported **gap**, still needs the rung.
 - [x] Route 2. Four of the six declared families never dip below `R = 1`. Two of them,
-      `1 + x²` and `1.5 + 0.5 sin(x)`, attain it exactly, which is what makes a unit
-      choice compulsory rather than prudent. One `λ` clears every family except `exp(x)`.
+      `1 + x²` and `1.5 + 0.5 sin(x)`, attain it exactly, so a units-only repair would
+      have had to move the pole and not merely widen a margin. One `λ` clears every
+      family except `exp(x)`.
 - [x] Route 4, the `∇σ = 0` reduction against the Kalman oracle. Exact in every unit
       choice, for the printed scheme and the modification alike. This is the rung's only
       external check, since the paper simulates (36) and never (35).
 - [x] The derivation's three tests, in `research.spinello_stilwell.repair`. Test 1 came
       out different from the notes' prediction and the correction is recorded under Q1.
 
+Decided (ADR-057):
+
+- [x] The shipped rungs (36) and (35) run `R_mod`, the paper's scheme with the `r₃`
+      block of (35d) removed. Named as modified wherever it appears.
+- [x] No `λ` is declared. The deleted block was the only term a rescaling moved, so the
+      shipped scheme has no pole to clear and a unit convention would change nothing it
+      reports. Route 2's table stays as the measurement it was. `exp(x)` needs no box
+      and no guard for the pole. Q2, Q3 and Q4 close for the shipped rung.
+
 Still owed, roughly in order:
 
-- [ ] **Declare `λ` in an ADR.** Route 2 measured that `λ ≈ 4.02` clears the declared
-      set and then stopped, because what gets registered is a declaration and not a
-      measurement. No rung may read a unit choice off that table. The ADR also has to
-      dispose of `exp(x)`, whose infimum over the line is zero, so no `λ` clears it and
-      the guard question of Q2 stays open for that family alone.
 - [ ] Routes 3 and 5, the two-sided failure probe near `σ = 1` and the budget-exhaustion
-      probe. Both are runnable now against `research.spinello_stilwell.scheme`, which
-      carries no guard and takes its budget as an argument. They confirm ADR-056's `VOID`
-      routing rather than decide it.
-- [ ] Decide the modification. It is derived and its three tests pass. Nothing has
-      compared a modified against an unmodified **gap**, which needs the reference
-      lattice and a rung with a declared budget.
+      probe, on the printed scheme in `research/` where it still runs. Both are runnable
+      now against `research.spinello_stilwell.scheme`, which carries no guard and takes
+      its budget as an argument. They confirm ADR-056's `VOID` routing rather than
+      decide it, and they carry the unrun comparison of modified against printed
+      iterates.
+- [ ] Declare the iteration budget and the tolerance. Both are arguments today and
+      `test_the_rung_s_open_decisions_stay_arguments` pins that they stay so until an
+      ADR says otherwise.
+- [ ] Route 1's empirical half, now a cost measurement: the shipped rung's gap against
+      the printed scheme's at the declared budget. Needs the reference lattice.
 - [ ] Route 6, the rung-one-versus-(36) separation. Needs the ladder to exist.
 - [ ] Route 7, section IV's constants evaluated. Decides nothing the rung needs, only
       whether Paper 2 may say the published runs never cashed the term in.
 
 **Merge gate:** agreement with the closed-form Kalman posterior in the fixed-R case, where
-the Kalman filter *is* the exact Bayesian filter. Each rung evaluates. The ladder
-enumerates completely.
+the Kalman filter *is* the exact Bayesian filter, and a reported gap that does not move
+under `o → λo` (ADR-057). Each rung evaluates. The ladder enumerates completely.
 
 ## PR-8 — Certified discretisation bound · GATE-D4 · tag v0.4.5
 

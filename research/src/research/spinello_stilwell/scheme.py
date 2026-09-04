@@ -18,8 +18,9 @@ scheme's.
 One implementation, two callers: `invariance` measures what rescaling moves and `repair`
 measures what the deletion costs. A second copy of (35) is the thing that drifts.
 
-Not the rung. No guard at the pole. The iteration budget is an argument rather than
-a declaration, because `research/spinello_stilwell_rung.md` still owes both decisions.
+Not the rung. No guard at the pole, which ADR-057 decides the shipped rung does not
+need. The iteration budget is an argument rather than a declaration, because
+`research/spinello_stilwell_rung.md` still owes that one.
 
 **Care with the letter sigma.** cpomdp writes `sigma` for the prior spread and the paper
 writes it for the observation-noise variance. `noise` is the paper's quantity throughout
