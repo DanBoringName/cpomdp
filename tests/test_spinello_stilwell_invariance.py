@@ -45,11 +45,12 @@ def test_the_iteration_count_is_not_unit_free():
     assert all(count < invariance.PROBE_BUDGET for count in counts), counts
 
 
-def test_it_reports_no_warrant():
+@pytest.mark.parametrize("module", [invariance, reachable_noise])
+def test_it_reports_no_warrant(module):
     # The package invariant, stated in its `__init__`. A `run_checks` or a `_SOURCE` is
     # the shape that would let a route be collected as though it had decided something.
-    assert not hasattr(invariance, "run_checks")
-    assert not any(name.endswith("_SOURCE") for name in dir(invariance))
+    assert not hasattr(module, "run_checks")
+    assert not any(name.endswith("_SOURCE") for name in dir(module))
 
 
 @pytest.mark.parametrize("iterate", [invariance.iterate, scheme.iterate])
@@ -125,3 +126,6 @@ class TestReachableNoise:
     def test_the_ridge_operating_point_sits_below_the_pole(self):
         floor = reachable_noise._infimum_over_the_line(reachable_noise.RIDGE)
         assert floor < 1.0, floor
+
+    def test_no_reachable_noise_means_no_scale(self):
+        assert reachable_noise.clearing_scale(0.0) == float("inf")

@@ -91,8 +91,10 @@ def clearing_scale(lowest_noise: float, margin: float = MARGIN) -> float:
         margin: how far above one the rescaled minimum must sit.
 
     Returns:
-        The required `lambda`.
+        The required `lambda`, infinite where no reachable noise is above zero.
     """
+    if lowest_noise <= 0.0:
+        return math.inf
     return math.sqrt(margin / lowest_noise)
 
 
