@@ -2,9 +2,13 @@
 
 Rung two of PR-7's evaluation ladder is the iterated extended Kalman filter for
 state-dependent observation noise, Spinello and Stilwell, *IEEE Transactions on
-Automatic Control*, 2009. This file records what building it requires deciding that the
-paper does not decide, and what has to be measured before those decisions are made.
-ADR-056 carries the decisions that are settled and points here for the rest.
+Automatic Control* 55(6), 1358-1366, 2010. This file records what building it requires
+deciding that the paper does not decide, and what has to be measured before those
+decisions are made. ADR-056 carries the decisions that are settled and points here for
+the rest. The derivation of (35c) to (35e) that the questions below cite by equation
+number was worked on paper first: `research/spinello_stilwell_hand_derivation.pdf` is
+the scan of that notebook, and `research/spinello_stilwell_hand_derivation.md` is the
+scan typed up.
 
 Nothing below is a result. These are routes and tests, written before the rung exists,
 so that a choice made later can be read against what was known when.
@@ -124,6 +128,41 @@ where `σ < 1`, so the method used to minimise it does not apply there. That is 
 reason for any guard, and it belongs in the record as a statement about the method's
 domain rather than as a numerical footnote.
 
+### AMENDMENT 2026-09-04: the block that fails is named, and the repair is derived
+
+From `research/spinello_stilwell_hand_derivation.md`, which is the scan of the notebook
+beside it typed up. The question above says `R⁽ᶥ⁾` is not `∇ᵀr∇r` where `σ < 1` and
+leaves it there. The derivation says which block, and what removing it costs.
+
+Steps 5 and 6 of that file split the curvature by Jacobian row:
+
+```text
+R = (∂r₂)ᵀ(∂r₂) + (∂r₃)ᵀ(∂r₃)
+```
+
+The `r₂` block sandwiches to a real square for every direction, every innovation and
+every `σ > 0`, so it is positive-semi-definite everywhere the mode is defined. The `r₃`
+block sandwiches to `(σ'w)²/(4σ² ln σ)`, whose sign is decided by `ln σ` alone. The
+whole of the defect is that one block, which is the whole of the fourth printed term of
+(35d).
+
+**The repair, derived and not yet run.** Drop the `r₃` block from `R`. Keep `s` (35c),
+`Ū` (35e) and the objective (18) verbatim. Step 8 of the derivation gives the argument
+that this is surgical: `ln σ` cancels out of the gradient, so `s` is untouched, `Ū` is
+built from `s` alone and never contains `ln σ`, and the objective is not modified, so
+the mode does not move. Only the path of iterates changes, and it then descends
+provably. The cost is the name, since the iteration is no longer literal Gauss-Newton
+on (20).
+
+That argument is an argument. Nothing has compared modified against unmodified iterates
+in code, and until something does, the repair is a route.
+
+**A route the original pass missed.** Section IV's own constants appear to put `σ < 1`
+throughout figures 2 to 4 for any `N ≥ 3`, since `κ = 24/(α²N³)` falls as `N⁻³`. If
+that holds, the term was negative in every published run of the paper's own filter. It
+is arithmetic on stated constants and no module has done it, so it is route 7 below
+rather than a statement here.
+
 ## Q5. The ladder changes two things at once between rung one and rung two
 
 Rung one, plug-in at the predicted mean, gives
@@ -188,9 +227,11 @@ update exactly, and that is the one place an independent answer exists.
 | 4 | `∇σ = 0` reduction against the Kalman oracle | the only external check the rung has |
 | 5 | Budget-exhaustion probe | that both mean and covariance move, so `VOID` is right |
 | 6 | Rung-one-versus-(36) separation | whether the two mechanisms are separately visible |
+| 7 | Section IV's constants, evaluated | whether the paper's own runs ever had `σ > 1` |
 
 Routes 1, 2 and 4 are prerequisites for the rung. Routes 3, 5 and 6 decide how it
-reports and how many rungs the ladder declares.
+reports and how many rungs the ladder declares. Route 7 was added by the AMENDMENT of
+2026-09-04 under Q4 and decides nothing the rung needs, only what the citation may say.
 
 ### ROUTE 2026-08-24: routes 1 and 2's symbolic half are run, and Q2's premise is measured
 
