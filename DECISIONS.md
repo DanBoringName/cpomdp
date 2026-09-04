@@ -3782,7 +3782,7 @@ Three measurements back the argument, all asserted in
   symbolically in route 1. Run to convergence the printed scheme is already unit-free,
   since an additive `ln λ` in the objective cannot move a root. At a budget of one the
   printed estimate spans `2.955e-05` across four unit choices and the modified spans
-  `1.1e-16`. A budget of one is rung (36), so the term made a rung the ladder
+  `1.11e-16`. A budget of one is rung (36), so the term made a rung the ladder
   **reports** depend on the observation's units. The ladder reports a divergence
   between distributions over the state, which no unit choice can move. This is the
   warrant ADR-056 named, now measured.
@@ -3792,7 +3792,7 @@ Three measurements back the argument, all asserted in
   `0/0`, so the printed scheme cannot be evaluated in the one regime that has an
   oracle. The modification can.
 - **The change is confined to where it was argued for.** Above the pole the two
-  curvatures agree to a relative `7.2e-08` by `σ = 10⁶`, and the difference falls
+  curvatures agree to a relative `7.24e-08` by `σ = 10⁶`, and the difference falls
   monotonically over six decades. Below the pole the printed curvature is negative
   and the modified one is positive.
 
