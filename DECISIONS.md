@@ -3824,7 +3824,7 @@ it, and route 7 evaluates the paper's constants in the paper's units. All three 
 the pole reachable, so a clearing `λ` there would defeat the measurement. Route 1's
 empirical half sweeps `λ`. None of them declares one.
 
-Route 2's table stays as what it is: the measurement that `λ ≈ 2.563` would have
+Route 2's table stays as what it is: the measurement that `λ = 4.0195` would have
 cleared every declared family but `exp(x)`. It decides nothing now, and it records that
 a units-only repair was available for five families and unavailable for the sixth.
 `exp(x)` was what made the units answer insufficient on its own. With the block gone
