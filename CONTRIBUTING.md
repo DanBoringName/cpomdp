@@ -91,16 +91,16 @@ save, point it at ruff yourself. Just don't rely on it. The hooks are what count
   bounce anything that doesn't.
 - a few **hygiene** checks: no trailing whitespace, files end in a newline, YAML and
   TOML parse, no leftover merge-conflict markers.
-- **protected files** stay append-only. `DECISIONS.md` and
-  `research/gate_d4_registration.md` may gain lines and may not have one rewritten. The
-  next section says why and what to do instead.
+- **protected files** stay append-only. The paths in `PROTECTED_PATHS` in
+  `protected_files.py` may gain lines and may not have one rewritten. The next section
+  says why and what to do instead.
 
 ## Protected files
 
-`DECISIONS.md` and `research/gate_d4_registration.md` are records of what was known
-when. What a reader gets from them is the ability to tell a claim made before a result
-existed from one made after. An in-place edit destroys that silently. No diff restores
-it.
+`DECISIONS.md` and the research records listed beside it in `protected_files.py` are
+records of what was known when. What a reader gets from them is the ability to tell a
+claim made before a result existed from one made after. An in-place edit destroys that
+silently. No diff restores it.
 
 So corrections, qualifications, retractions and new results go in as a new dated entry
 in the file's own convention. The superseded line keeps its place. The new entry says
