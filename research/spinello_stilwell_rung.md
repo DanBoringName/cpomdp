@@ -344,6 +344,22 @@ curvatures: the mean differs by `3.2e-3` at a budget of one, `6.7e-6` by five, a
 run out. ADR-057's "surgical" is that last number. The two curvatures share a fixed
 point and differ only on the way to it.
 
+### RESOLVED 2026-09-04: the budget is 64 and the tolerance is `1e-12`
+
+ADR-058 declares both, against the counts route 5 measured. `VOID` for an exhausted
+budget stands as ADR-056 left it, and Q7's argument for it is now a number: at a budget
+of one the covariance is out by up to `0.425`, and on one declared cell by more than the
+mean is.
+
+The declaration carries a condition. The rung differentiates `R` by automatic
+differentiation, because a central difference floors convergence above `1e-12` and the
+run would then be measuring the difference. That reaches the rung's contract in PR-7
+rather than staying here.
+
+One cell exhausts the budget: `κ = 100` at the observation box's edge takes 65
+iterations. Its predictive weight is `2.6e-18` of the centre's. What a single voided
+node does to a reported gap is left open, and ADR-058 names the three ways it could go.
+
 ## Q8. Rung two has no published numerical validation
 
 Every figure in §IV uses (36), the single-step filter. The iterated scheme (35) is
