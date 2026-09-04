@@ -14,6 +14,9 @@ what makes two runs over different crosses tellable apart (standing prohibition 
 
 from dataclasses import dataclass
 
+import numpy as np
+from numpy.typing import ArrayLike
+
 from cpomdp.backends.base import InferenceBackend
 from cpomdp.constructors import ConstructorSet, InferenceSet, ModelSpec
 from cpomdp.enumeration import IncompleteEnumerationError
@@ -27,6 +30,7 @@ __all__ = [
     "CrossCell",
     "Decomposition",
     "build_cross",
+    "gaussian_kl",
 ]
 
 #: What each axis is called on the certificate. Declared here rather than written at the
@@ -191,3 +195,84 @@ def _certificate(
             ),
         ),
     )
+
+
+def gaussian_kl(
+    mean_a: ArrayLike, cov_a: ArrayLike, mean_b: ArrayLike, cov_b: ArrayLike
+) -> float:
+    """``D_KL[N(mean_a, cov_a) ‖ N(mean_b, cov_b)]`` in nats, as non-negative parts.
+
+    The textbook form subtracts ``n`` from a trace and one log-determinant from
+    another. Near equality those are differences of like-sized numbers, so a
+    divergence that is truly zero reads as rounding noise of either sign, and a
+    reading below ``1e-12`` then says nothing about which of two Gaussians moved
+    (``research/warrant_ledger.md`` section 4). Here every part is a square or a
+    ``λ − 1 − ln λ`` over the eigenvalues of ``cov_b⁻¹ · cov_a``, each of which is
+    non-negative on its own. Nothing is subtracted, so a small result is a small
+    divergence rather than a cancellation.
+
+    Args:
+        mean_a: The divergence's first argument's mean, shape ``(n,)``.
+        cov_a: Its covariance, shape ``(n, n)``, positive definite.
+        mean_b: The second argument's mean, shape ``(n,)``.
+        cov_b: Its covariance, shape ``(n, n)``, positive definite.
+
+    Returns:
+        The divergence, ``0.0`` exactly when the two Gaussians are identical.
+
+    Raises:
+        ValueError: On a shape mismatch, or if either covariance is not positive
+            definite. A degenerate Gaussian has no density for the divergence to read.
+    """
+    mean_a, mean_b = np.asarray(mean_a, dtype=float), np.asarray(mean_b, dtype=float)
+    cov_a, cov_b = np.asarray(cov_a, dtype=float), np.asarray(cov_b, dtype=float)
+    if mean_a.ndim != 1 or mean_a.shape != mean_b.shape:
+        raise ValueError(
+            f"the two means must be vectors of one length, got shapes "
+            f"{mean_a.shape} and {mean_b.shape}"
+        )
+    expected = (mean_a.shape[0], mean_a.shape[0])
+    if cov_a.shape != expected or cov_b.shape != expected:
+        raise ValueError(
+            f"the two covariances must be {expected} to match the means, got shapes "
+            f"{cov_a.shape} and {cov_b.shape}"
+        )
+    factor_a = _cholesky_or_refuse(cov_a, "cov_a")
+    factor_b = _cholesky_or_refuse(cov_b, "cov_b")
+
+    # Singular values of L_b⁻¹ L_a squared are the eigenvalues of cov_b⁻¹ cov_a.
+    ratios = np.linalg.svd(np.linalg.solve(factor_b, factor_a), compute_uv=False) ** 2
+    shape_term = _excess_over_log(ratios - 1.0)
+    shift = np.linalg.solve(factor_b, mean_a - mean_b)
+    return float(0.5 * (shape_term.sum() + shift @ shift))
+
+
+# Below this, ``x − log1p(x)`` is itself a cancellation: the two agree to nearly every
+# digit, and the series has no such subtraction.
+_SERIES_BELOW = 1e-4
+
+
+def _excess_over_log(excess: np.ndarray) -> np.ndarray:
+    """``x − ln(1 + x)`` elementwise, non-negative for ``x > −1``, without cancelling.
+
+    Near zero the direct form subtracts two numbers that agree to almost every digit.
+    The series ``x²/2 − x³/3 + x⁴/4 − x⁵/5 + x⁶/6`` evaluates the same function there
+    with a truncation error below ``x⁷/7``, which at the switch is ``1e-29``.
+    """
+    small = np.abs(excess) < _SERIES_BELOW
+    x = np.where(small, excess, 0.0)
+    series = x**2 / 2 - x**3 / 3 + x**4 / 4 - x**5 / 5 + x**6 / 6
+    return np.where(small, series, excess - np.log1p(excess))
+
+
+def _cholesky_or_refuse(cov: np.ndarray, name: str) -> np.ndarray:
+    """The lower Cholesky factor, or a ``ValueError`` naming the argument."""
+    if not np.allclose(cov, cov.T, atol=1e-12):
+        raise ValueError(f"{name} must be symmetric")
+    try:
+        return np.linalg.cholesky(cov)
+    except np.linalg.LinAlgError as failure:
+        raise ValueError(
+            f"{name} must be positive definite; a degenerate Gaussian has no density "
+            f"for a divergence to read"
+        ) from failure
