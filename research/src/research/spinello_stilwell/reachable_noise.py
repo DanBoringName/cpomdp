@@ -7,7 +7,10 @@ moving the converged estimate (`invariance`). So a `lambda` that puts a family's
 reachable noise on one side of one removes the hazard by construction.
 
 Whether such a `lambda` exists is a property of each declared family, and this measures
-it. Run::
+it. ADR-057 went the other way and deleted the block the pole lives in, so the shipped
+rungs declare no unit choice. This stays as the measurement of what a units-only repair
+would have required, and the printed scheme still runs in `research/`, where routes 3,
+5 and 7 need the pole reachable. Run::
 
     uv run --no-sync python -m research.spinello_stilwell.reachable_noise
 
@@ -132,7 +135,8 @@ def main() -> None:
         assert floors[key] >= 1.0 - 1e-9, (key, floors[key])
     # Two of them reach exactly one: `1 + x^2` at the origin and `1.5 + 0.5 sin(x)`
     # wherever the sine is minus one. At lambda = 1 the pole is on both families rather
-    # than near them, which is what makes the unit choice compulsory.
+    # than near them, so a units-only repair would have had to move the pole rather
+    # than widen a margin against it.
     for key in ("quadratic", "sin"):
         assert abs(floors[key] - 1.0) < 1e-6, (key, floors[key])
     # The ridge's whole-line floor is R0 at the origin, below the pole. Its operating
@@ -175,12 +179,12 @@ def main() -> None:
     assert on_the_pole["quadratic"] > on_the_pole["sin"] > 0, on_the_pole
 
     print(f"\nOne lambda for every family at every declared spread: {worst_scale:.4f}")
-    # A single declared unit choice covers the whole survey, which is what makes this a
-    # convention rather than a per-cell tuning.
+    # One scale covers the whole survey, so a units-only repair would have been a
+    # convention rather than a per-cell tuning. ADR-057 declares none.
     for (key, spread), low in lows.items():
         assert worst_scale**2 * low >= MARGIN - 1e-9, (key, spread, low)
 
-    print("\nWhat this decides:")
+    print("\nWhat this measures, for the printed scheme:")
     print("  - Four families never reach below R = 1, so any lambda above")
     print(f"    sqrt(MARGIN) = {math.sqrt(MARGIN):.4f} clears them with the margin.")
     print("  - `1 + x^2` and `1.5 + 0.5 sin(x)` attain R = 1 exactly, so lambda = 1")
@@ -191,8 +195,9 @@ def main() -> None:
         "  - `exp(x)` has an infimum of zero, so no lambda clears it for every state."
     )
     print("    It is cleared only over a declared box, and the required lambda grows")
-    print("    without bound as that box widens. That family, alone, is where a guard")
-    print("    would still be needed.")
+    print("    without bound as that box widens. That family, alone, is why the units")
+    print("    answer was insufficient on its own, and ADR-057 removed the block")
+    print("    instead of clearing the pole.")
 
 
 if __name__ == "__main__":
