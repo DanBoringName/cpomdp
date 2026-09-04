@@ -3853,3 +3853,95 @@ property every rung shares rather than one of this scheme.
 - **Still owed, unchanged.** The iteration budget and the tolerance, which ADR-056
   routes to a measurement. `VOID` for a non-convergent step stands, since a positive
   definite `M` guarantees a descent direction and not convergence within a budget.
+
+## ADR-058 — the Spinello–Stilwell rungs run 64 iterations at a tolerance of `1e-12`
+
+**Date:** 2026-09-04
+**Extends:** ADR-056, whose budget and tolerance this supplies, and ADR-057, whose
+scheme these numbers were measured on
+
+ADR-056 left the iteration budget and the tolerance as arguments and routed them to a
+measurement. `research.spinello_stilwell.budget` is that measurement. This entry is the
+declaration it was run for.
+
+### Decision
+
+Rungs (36) and (35) run at a budget of **64 iterations** and a tolerance of **`1e-12`**,
+relative to the prior standard deviation. A step smaller than `tolerance * sqrt(P)` ends
+the run. A run that spends the budget reports `VOID`, per ADR-056.
+
+Rung (36) is unaffected. It is (35) at a budget of one by definition, and a budget
+declared for the iterated rung does not reach it.
+
+The rung obtains `R'` by automatic differentiation and never by a finite difference.
+The tolerance is only reachable if it does, which section three below measures.
+
+### Why 64
+
+The counts come from `research.spinello_stilwell.budget`, run with
+
+    uv run --no-sync python -m research.spinello_stilwell.budget
+
+Over the declared spreads, curvatures from `0.1` to `100`, and readings placed in
+predictive standard deviations off the prior mean, the modified scheme at `1e-12` needs
+
+| where the reading sits | worst count |
+| --- | --- |
+| the bulk, out to two predictive spreads | 23 |
+| the box edge, nine predictive spreads | 65 |
+
+The declared families alone need 10, and that number understates the range by a factor
+of six. They are run at a reading two spreads out, and `averaged_inference_gap` sweeps
+an observation box nine predictive standard deviations wide, so the rung is called at
+every node of it.
+
+64 is a little under three times the worst count in the bulk, which is where the
+predictive mass is. A cell that exhausts it has to be unlike anything measured.
+
+**The budget is a cap and not a cost.** A convergent run stops at its tolerance, so
+raising the cap changes nothing about the runs that produce numbers. What it changes is
+the price of a run that will report `VOID` anyway, and the gap calls the rung once per
+observation node, so that price is `64 K` evaluations rather than `500 K`.
+
+### Why `1e-12`
+
+At `1e-12` the estimate is within `2.1e-15` of the fully settled one, which contributes
+around `1e-29` to a divergence. The smallest gap the ladder has to resolve is the top
+rung's, and rung one's is already as small as `1e-14` on the declared grid. A
+convergence error has to sit far below the quantity being measured, and this one sits
+fifteen decades below the smallest measured so far.
+
+`1e-14` costs four more iterations in the bulk, 27 against 23, and buys nothing that
+reaches a reported gap. It also sits at the arithmetic's floor for this iteration, which
+is where the derivative condition bites. A central difference at `1e-6` carries about
+`1e-11` into the iterate, and five of the thirty declared cells then ran to a budget of
+200 without settling: the run was measuring the difference rather than the scheme. At
+`1e-12` there are two decades of room above that floor for an exact derivative and none
+for a differenced one, which is why the condition is part of the decision rather than
+advice attached to it.
+
+`1e-8` would be defensible on today's numbers and is rejected on timing. The gaps it
+would have to be small against are the higher rungs', and none of them has been measured.
+Choosing the loosest tolerance that looks safe before the quantity exists is what
+standing rule 2 objects to.
+
+### Consequences
+
+- **A node at the box edge can exhaust the budget.** At `kappa = 100` and nine
+  predictive spreads the run takes 65 iterations, one more than the budget, so that node
+  reports `VOID`. Its predictive weight is `2.6e-18` of the centre's, so it carries
+  nothing into the average. What a single voided node does to a reported gap is a
+  decision PR-7 owes, and this entry does not take it: dropping the node, voiding the
+  gap and widening the budget are all still open. No curvature range is registered
+  anywhere, so `kappa = 100` is a bracket rather than a declared cell.
+- **`test_the_rung_s_open_decisions_stay_arguments` changes meaning.** The research
+  probes keep taking a budget and a tolerance as arguments and printing what they ran
+  at. What is now settled is the rung's own, and it is declared here rather than
+  defaulted anywhere.
+- **The derivative condition reaches PR-7's rung contract.** A rung built on
+  `StateDependentNoiseLikelihood` differentiates `observation_noise_fn`, and JAX does
+  that for nothing. A rung that differences instead cannot hold this tolerance and the
+  declaration would have to be reopened.
+- **The per-decision cost is bounded and attributable.** 64 iterations per observation
+  node is the ceiling an iterating rung can cost, which is what RFC-001 needs to
+  separate the rung's compute from the ladder's.
