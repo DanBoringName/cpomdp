@@ -145,7 +145,8 @@ def curvature_departure(noise: float) -> float:
         noise: the observation-noise variance, `sigma`.
 
     Returns:
-        `(R - R_mod) / R_mod`, negative below the pole where the block is negative.
+        The printed curvature minus the modified, over the modified. Negative below
+        the pole, where the block is.
     """
     printed = scheme.gauss_newton_curvature(noise, 2.0, 1.0, 0.3, log_block=True)
     modified = scheme.gauss_newton_curvature(noise, 2.0, 1.0, 0.3, log_block=False)

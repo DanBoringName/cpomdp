@@ -3,12 +3,17 @@
 `research/spinello_stilwell_hand_derivation.md` derives (35c) to (35e), and its step 5
 splits the Gauss-Newton curvature by Jacobian row::
 
-    R = (dr2)^T (dr2) + (dr3)^T (dr3)
+    curvature = (dr2)^T (dr2) + (dr3)^T (dr3)
 
 The second block is the fourth printed term of (35d), `grad_noise^2 / (4 noise^2 ln
 noise)`. It is the only part of the scheme that is not a real square, and the only part
 that moves when the observation is rescaled. `log_block=False` is the scheme with it
 removed.
+
+The paper's letter for the Gauss-Newton matrix is the one cpomdp uses for the noise, so
+it is never written here. `gauss_newton_curvature` is that matrix, and the docstrings
+say "the printed curvature" for the paper's form and "the modified curvature" for the
+scheme's.
 
 One implementation, two callers: `invariance` measures what rescaling moves and `repair`
 measures what the deletion costs. A second copy of (35) is the thing that drifts.
@@ -78,7 +83,7 @@ def gauss_newton_curvature(
         log_block: keep the `r3` block. False is the modification of step 6.
 
     Returns:
-        `R` as printed, or `R_mod` without its fourth term.
+        The printed curvature, or the modified one without its fourth term.
     """
     real_square = (
         mean_slope**2 / noise
