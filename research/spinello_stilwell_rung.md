@@ -124,6 +124,19 @@ a family whose reachable `σ` straddles every achievable pole.
 operating point at `λ = 1`. **Test.** The declared `λ` keeps `σ > 1` across the swept
 range, asserted rather than assumed.
 
+### RESOLVED 2026-09-04: no unit choice is declared, because the shipped rung has no pole
+
+ADR-057 ships rungs (36) and (35) with the `r₃` block of (35d) removed, and that block
+is the only term a rescaling moves. So the shipped scheme has no pole, and a `λ`
+declared to keep `σ > 1` would change nothing the ladder reports. Standing rule 2
+catches an undeclared choice. An absent one is checked instead, by a rescaling
+invariance test on the shipped rung.
+
+Route 2's table is kept as a measurement: five families had a units-only repair
+available and `exp(x)` did not, which is what made the units answer insufficient on
+its own. The printed scheme still runs in `research/` at native units, where routes 3,
+5 and 7 need the pole reachable. No guard is written.
+
 ## Q3. The failure is two-sided, and one side is silent
 
 **From above.** As `σ → 1⁺`, `1/ln σ → +∞`, so `R⁽ᶥ⁾ → +∞` and the step
@@ -137,6 +150,13 @@ On the ridge with `R₀ < 1` a single run crosses from one regime to the other.
 
 The stall is the severity-one case: it produces a number, the number is wrong, and
 nothing about it looks wrong. The blow-up at least announces itself.
+
+### RESOLVED 2026-09-04: both sides of the failure leave with the block
+
+Under ADR-057 the shipped curvature is `(1/σ)bᵀb`, a real square, so
+`P⁻¹ + R_mod` is positive definite for every `σ > 0`. Neither the freeze from above nor
+the indefiniteness from below can occur. Both stay true of the printed scheme and are
+route 3's to measure in `research/`, where that scheme still runs.
 
 ## Q4. Below `σ = 1`, Gauss–Newton is outside its domain
 
@@ -184,6 +204,21 @@ throughout figures 2 to 4 for any `N ≥ 3`, since `κ = 24/(α²N³)` falls as 
 that holds, the term was negative in every published run of the paper's own filter. It
 is arithmetic on stated constants and no module has done it, so it is route 7 below
 rather than a statement here.
+
+### RESOLVED 2026-09-04: the repair is adopted for the shipped rungs
+
+ADR-057. The three tests of the derivation's step 10 are run in
+`research.spinello_stilwell.repair` and the amendment above records their results
+under Q1 and here. The deletion keeps `s`, `Ū` and the objective verbatim, so the
+fixed point, the posterior covariance and the gap are the paper's. What changes is the
+path of iterates, and each step is now a descent direction because the step matrix is
+positive definite. The name changes with it: the rung is the Spinello–Stilwell
+iterated filter with a documented modification, and it is never called the paper's
+equation verbatim.
+
+The comparison of modified against printed iterates that the amendment above says is
+unrun stays unrun, and it stays a route rather than a decision. Route 1's empirical
+half now measures what the deletion cost rather than whether to make it.
 
 ## Q5. The ladder changes two things at once between rung one and rung two
 
