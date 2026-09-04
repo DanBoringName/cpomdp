@@ -213,9 +213,9 @@ raising a parameter until the result fires. Require the sign flip at the registe
 
 **D1 · fidelity-ladder ordering** · SEVERE · R7 · toolbox C, D · tier `BOUNDED` · **PR-9 · v0.5**, gated on GATE-D4
 
-- Predict: along plug-in `R(μ⁻)` → modified Spinello–Stilwell iterated (ADR-057) →
-  belief-smoothed `E[R(x)]` → exact reference, the inference gap decreases at a certified
-  tolerance, ε non-constant throughout.
+- Predict: along plug-in `R(μ⁻)` → Spinello–Stilwell iterated → belief-smoothed
+  `E[R(x)]` → exact reference, the inference gap decreases at a certified tolerance, ε
+  non-constant throughout.
 - Falsify: non-monotone ordering. Registered as a *conjecture with a predicted
   direction*, not a theorem: higher approximation order does not imply monotone KL to the
   exact posterior, and Rmk 3 calls the smoothed rule a refinement only in the
@@ -234,10 +234,10 @@ ADR-056 declares the ladder as five rungs, inserting the paper's single-step fil
 covariance terms and the iteration are two adjacent differences rather than one. The
 prediction above is therefore over plug-in `R(μ⁻)` → single-step (36) → iterated (35) →
 belief-smoothed `E[R(x)]` → exact reference, monotone throughout at the certified
-tolerance, and `NOT_RESOLVED` between any adjacent pair whose bars overlap. Whether the
-two middle rungs run the paper's curvature or the modification is a decision the build
-plan still owes, and the ordering does not depend on which. The prediction's direction
-and its falsifier are unchanged, and "four computed numbers" in the warrant constraint reads
+tolerance, and `NOT_RESOLVED` between any adjacent pair whose bars overlap. The two
+middle rungs run the modified scheme ADR-057 ships, so the registered line's
+"Spinello–Stilwell iterated" reads as modified from here. The prediction's direction and
+its falsifier are unchanged, and "four computed numbers" in the warrant constraint reads
 five. Registered here before any rung exists, since an ordering
 seen before the set is fixed is what standing rule 7 refuses.
 
