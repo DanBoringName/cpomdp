@@ -31,7 +31,11 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-PROTECTED_PATHS = ("DECISIONS.md", "research/gate_d4_registration.md")
+PROTECTED_PATHS = (
+    "DECISIONS.md",
+    "research/gate_d4_registration.md",
+    "research/spinello_stilwell_rung.md",
+)
 """The files whose landed lines may not be rewritten.
 
 The one place this list lives. Both the hook and the CI job read it from here, and

@@ -71,10 +71,11 @@ repos:
         types: [python]
         files: ^(src|packages/warrantlib/src)/
 
-  # `DECISIONS.md` and the gate-D4 registration are append-only: what a reader gets from
-  # them is the ability to tell a claim made before a result from one made after. Runs
-  # at commit-msg, the only stage that sees both the index and the subject about to be
-  # recorded, and the subject is where `[in-place]` takes the typo exception (ADR-054).
+  # The protected files (`PROTECTED_PATHS` in the script) are append-only: what a
+  # reader gets from them is the ability to tell a claim made before a result from one
+  # made after. Runs at commit-msg, the only stage that sees both the index and the
+  # subject about to be recorded, and the subject is where `[in-place]` takes the typo
+  # exception (ADR-054).
   - repo: local
     hooks:
       - id: protected-files
