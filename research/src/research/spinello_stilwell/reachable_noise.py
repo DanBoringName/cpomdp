@@ -47,9 +47,10 @@ REACH_IN_SPREADS = X_WINDOW_LADDER[0]
 #: than an absolute, since the pole is multiplicative in the rescaling.
 MARGIN = 1.2
 
-#: The registered ridge, `R(x) = R0 + kappa x^2` evaluated at `mu* = sqrt(R0/kappa)`.
+#: The registered ridge, `R(x) = R0 + kappa x^2`, its prior at `mu* = sqrt(R0/kappa)`.
 #: Declared here because it is not in `FAMILIES` and because `R0 = 1/2` is the case the
-#: write-up names: the noise at the operating point is `2 R0`, so the pole falls on it.
+#: write-up names: the noise at the operating point is `2 R0`, so the pole falls on it,
+#: and the floor of the whole line is `R0` itself at `x = 0`.
 RIDGE = NoiseFamily(
     name="R0 + kappa x^2 at mu*, R0 = 1/2",
     key="ridge_half",
@@ -113,54 +114,79 @@ def _infimum_over_the_line(family: NoiseFamily) -> float:
 def main() -> None:
     """Survey every declared family and assert what the survey decides."""
     surveyed = {**FAMILIES, RIDGE.key: RIDGE}
+    name_width = max(len(family.name) for family in surveyed.values())
 
     print("Infimum of R over the whole line, and what it implies for a unit choice.")
-    print(f"{'family':<28} {'inf R':>12} {'clears at lambda >':>20}")
+    print(f"{'family':<{name_width + 2}} {'inf R':>12} {'clears at lambda >':>20}")
     floors = {}
     for key, family in surveyed.items():
         floor = _infimum_over_the_line(family)
         floors[key] = floor
-        needed = "no lambda" if floor <= 1e-9 else f"{clearing_scale(floor):.4f}"
-        print(f"  {family.name:<26} {floor:>12.6g} {needed:>20}")
+        needed = clearing_scale(floor)
+        shown = "no lambda" if math.isinf(needed) else f"{needed:.4f}"
+        print(f"  {family.name:<{name_width}} {floor:>12.6g} {shown:>20}")
 
-    # Four of the declared families never dip below one, so any lambda above one puts
-    # their whole state line clear. This is a property of how they were declared.
+    # Four of the declared families never dip below one, so a lambda that clears the
+    # margin puts their whole state line clear. A property of how they were declared.
     for key in ("quadratic", "tanh", "sin", "constant"):
         assert floors[key] >= 1.0 - 1e-9, (key, floors[key])
-    # `sin` reaches exactly one, so at lambda = 1 the pole is attained rather than
-    # merely approached. It is the family that makes the unit choice compulsory rather
-    # than prudent.
-    assert abs(floors["sin"] - 1.0) < 1e-6, floors["sin"]
-    # The ridge at R0 = 1/2 sits below one, which is the case the write-up names.
-    assert floors["ridge_half"] < 1.0, floors["ridge_half"]
+    # Two of them reach exactly one: `1 + x^2` at the origin and `1.5 + 0.5 sin(x)`
+    # wherever the sine is minus one. At lambda = 1 the pole is on both families rather
+    # than near them, which is what makes the unit choice compulsory.
+    for key in ("quadratic", "sin"):
+        assert abs(floors[key] - 1.0) < 1e-6, (key, floors[key])
+    # The ridge's whole-line floor is R0 at the origin, below the pole. Its operating
+    # point is a different place: there the noise is 2 R0, exactly one for R0 = 1/2.
+    assert abs(floors["ridge_half"] - 0.5) < 1e-6, floors["ridge_half"]
+    assert abs(float(RIDGE.noise(np.asarray(RIDGE.prior_mean))) - 1.0) < 1e-12
     # The exponential's floor is zero, so no single lambda clears it everywhere.
     assert floors["exponential"] < 1e-9, floors["exponential"]
 
     print("\nOver the reachable window only, at each declared prior spread.")
-    print(f"{'family':<28} {'spread':>7} {'min R':>11} {'max R':>11} {'lambda':>9}")
-    worst_scale = 0.0
-    for family in surveyed.values():
+    print(
+        f"{'family':<{name_width + 2}} {'spread':>7} {'min R':>11} {'max R':>11}"
+        f" {'lambda':>9}"
+    )
+    lows: dict[tuple[str, float], float] = {}
+    for key, family in surveyed.items():
         for spread in SIGMAS:
             low, high = reachable_noise(family, spread)
-            scale = clearing_scale(low)
-            worst_scale = max(worst_scale, scale)
+            lows[key, spread] = low
             print(
-                f"  {family.name:<26} {spread:>7.2f} {low:>11.5g} {high:>11.5g} "
-                f"{scale:>9.4f}"
+                f"  {family.name:<{name_width}} {spread:>7.2f} {low:>11.5g}"
+                f" {high:>11.5g} {clearing_scale(low):>9.4f}"
             )
+    worst_scale = max(clearing_scale(low) for low in lows.values())
+
+    # Which cells of the declared grid reach the pole at lambda = 1. Both priors sit
+    # at one. The quadratic's minimum is one unit away, the sine's nearest is at
+    # -pi/2, so the window reaches the first at far narrower spreads than the second.
+    on_the_pole = {
+        key: sum(lows[key, spread] <= 1.0 + 1e-6 for spread in SIGMAS)
+        for key in ("quadratic", "sin")
+    }
+    print(f"\nCells of the declared grid on the pole at lambda = 1: {on_the_pole}")
+    assert on_the_pole["quadratic"] == sum(
+        REACH_IN_SPREADS * spread >= 1.0 for spread in SIGMAS
+    ), on_the_pole
+    assert on_the_pole["sin"] == sum(
+        REACH_IN_SPREADS * spread >= 1.0 + math.pi / 2 for spread in SIGMAS
+    ), on_the_pole
+    assert on_the_pole["quadratic"] > on_the_pole["sin"] > 0, on_the_pole
 
     print(f"\nOne lambda for every family at every declared spread: {worst_scale:.4f}")
     # A single declared unit choice covers the whole survey, which is what makes this a
     # convention rather than a per-cell tuning.
-    for key, family in surveyed.items():
-        for spread in SIGMAS:
-            low, _ = reachable_noise(family, spread)
-            assert worst_scale**2 * low >= MARGIN - 1e-9, (key, spread, low)
+    for (key, spread), low in lows.items():
+        assert worst_scale**2 * low >= MARGIN - 1e-9, (key, spread, low)
 
     print("\nWhat this decides:")
-    print("  - Four families never reach below R = 1, so any lambda > 1 clears them.")
-    print("  - `sin` attains R = 1 exactly, so lambda = 1 puts the pole on the family.")
-    print("  - The ridge at R0 = 1/2 sits below R = 1 at its operating point.")
+    print("  - Four families never reach below R = 1, so any lambda above")
+    print(f"    sqrt(MARGIN) = {math.sqrt(MARGIN):.4f} clears them with the margin.")
+    print("  - `1 + x^2` and `1.5 + 0.5 sin(x)` attain R = 1 exactly, so lambda = 1")
+    print("    puts the pole on both. The quadratic reaches it in more of the grid.")
+    print("  - The ridge at R0 = 1/2 has its floor at R0, below the pole, and its")
+    print("    operating point on it.")
     print(
         "  - `exp(x)` has an infimum of zero, so no lambda clears it for every state."
     )

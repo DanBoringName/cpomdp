@@ -3,6 +3,7 @@
 Running the module is checking it: every claim it prints is asserted inside it.
 """
 
+import numpy as np
 import pytest
 
 from research.checks.gap_kernel import FAMILIES, SIGMAS
@@ -91,12 +92,26 @@ class TestReachableNoise:
             floor = reachable_noise._infimum_over_the_line(FAMILIES[key])
             assert floor >= 1.0 - 1e-9, (key, floor)
 
-    def test_the_sin_family_attains_the_pole_exactly(self):
-        # 1.5 + 0.5 sin(x) reaches 1.0 where sin(x) = -1. At lambda = 1 the pole is on
-        # the family rather than near it, which is what makes the unit choice
-        # compulsory rather than prudent.
-        floor = reachable_noise._infimum_over_the_line(FAMILIES["sin"])
+    @pytest.mark.parametrize("key", ["quadratic", "sin"])
+    def test_two_families_attain_the_pole_exactly(self, key):
+        # 1 + x^2 reaches 1.0 at the origin and 1.5 + 0.5 sin(x) where sin(x) = -1.
+        # At lambda = 1 the pole is on both families rather than near them, which is
+        # what makes the unit choice compulsory rather than prudent.
+        floor = reachable_noise._infimum_over_the_line(FAMILIES[key])
         assert abs(floor - 1.0) < 1e-6, floor
+
+    def test_the_quadratic_reaches_the_pole_in_more_of_the_grid_than_the_sine(self):
+        # Both priors sit at one. The quadratic's minimum is one unit away and the
+        # sine's nearest is at -pi/2, so the declared windows reach the first in five
+        # cells of six and the second in two.
+        cells = {
+            key: sum(
+                reachable_noise.reachable_noise(FAMILIES[key], spread)[0] <= 1.0 + 1e-6
+                for spread in SIGMAS
+            )
+            for key in ("quadratic", "sin")
+        }
+        assert cells == {"quadratic": 5, "sin": 2}, cells
 
     def test_the_exponential_cannot_be_cleared_over_the_whole_line(self):
         # Its infimum is zero, so no lambda puts every state clear. This is the one
@@ -123,9 +138,11 @@ class TestReachableNoise:
         # a narrower survey would understate what the iterate can reach.
         assert reachable_noise.REACH_IN_SPREADS == 12.0
 
-    def test_the_ridge_operating_point_sits_below_the_pole(self):
-        floor = reachable_noise._infimum_over_the_line(reachable_noise.RIDGE)
-        assert floor < 1.0, floor
+    def test_the_ridge_floor_is_below_the_pole_and_its_operating_point_is_on_it(self):
+        ridge = reachable_noise.RIDGE
+        floor = reachable_noise._infimum_over_the_line(ridge)
+        assert abs(floor - 0.5) < 1e-6, floor
+        assert abs(float(ridge.noise(np.asarray(ridge.prior_mean))) - 1.0) < 1e-12
 
     def test_no_reachable_noise_means_no_scale(self):
         assert reachable_noise.clearing_scale(0.0) == float("inf")
