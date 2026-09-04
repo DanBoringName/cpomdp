@@ -41,6 +41,7 @@ __all__ = [
     "iterate",
     "iterate_with",
     "kalman_update",
+    "objective",
     "quadratic_noise",
 ]
 
@@ -123,6 +124,33 @@ def fisher_information(
         `U-bar`.
     """
     return mean_slope**2 / noise + noise_slope**2 / (2.0 * noise**2)
+
+
+def objective(
+    estimate: float,
+    prior_mean: float,
+    prior_variance: float,
+    noise: float,
+    residual: float,
+) -> float:
+    """The function the rung minimises, equation (18), up to constants in the state.
+
+    Step 1 of the derivation: prior distance, measurement mismatch, and the Gaussian
+    normaliser. The third term is what `R(x)` keeps in play, and it is why a step that
+    climbs can be told from one that descends.
+
+    Args:
+        estimate: the current iterate.
+        prior_mean: the predicted mean.
+        prior_variance: the predicted variance.
+        noise: the observation-noise variance at the iterate, `sigma`.
+        residual: the innovation there, `zeta`.
+
+    Returns:
+        `l(x)`, comparable between two iterates of the same run and not otherwise.
+    """
+    prior_gap = estimate - prior_mean
+    return 0.5 * (prior_gap**2 / prior_variance + residual**2 / noise + math.log(noise))
 
 
 def quadratic_noise(base_noise: float, curvature: float) -> NoiseAt:
