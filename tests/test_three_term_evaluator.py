@@ -2,20 +2,36 @@
 
 from dataclasses import fields
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
 from cpomdp.backends.degraded import WrongFixedRBackend
 from cpomdp.backends.kalman import KalmanBackend
+from cpomdp.constructors import (
+    CORRECT,
+    EXACT_INFERENCE,
+    ConstructorSet,
+    InferenceKind,
+    InferenceRule,
+    InferenceSet,
+    ModelSpec,
+    Perturbation,
+)
+from cpomdp.harness import DrivenRun, ExogenousActionSequence, World, drive
 from cpomdp.observation import CallableSensor
 from cpomdp.reference.gap import averaged_inference_gap
 from cpomdp.reference.likelihood import FixedNoiseLikelihood
 from cpomdp.reference.quadrature import GridDensity, QuadratureGrid
 from cpomdp.scoring import (
     _SERIES_BELOW,
+    ConstructorCross,
+    CrossCell,
     Decomposition,
+    ThreeTermEvaluator,
     _excess_over_log,
+    build_cross,
     gaussian_kl,
     inference_gap_step,
     misspecification_step,
@@ -178,8 +194,8 @@ def test_a_model_with_a_control_matrix_needs_an_action():
         observation_predictive(_model(), BELIEF, None)
 
 
-def test_a_state_dependent_sensor_is_refused_by_name():
-    model = LinearGaussianModel(
+def _state_dependent_model() -> LinearGaussianModel:
+    return LinearGaussianModel(
         dynamics_matrix=[[1.0, DT], [0.0, 1.0]],
         observation_matrix=[[1.0, 0.0]],
         dynamics_noise=[[1e-4, 0.0], [0.0, 1e-4]],
@@ -192,8 +208,11 @@ def test_a_state_dependent_sensor_is_refused_by_name():
             noise_params=(),
         ),
     )
+
+
+def test_a_state_dependent_sensor_is_refused_by_name():
     with pytest.raises(ValueError, match="observation_model"):
-        observation_predictive(model, BELIEF, ACTION)
+        observation_predictive(_state_dependent_model(), BELIEF, ACTION)
 
 
 def test_two_separately_built_equal_models_have_no_misspecification():
@@ -370,3 +389,120 @@ def test_an_update_whose_covariance_reads_the_observation_is_refused():
     true_mean, true_cov = observation_predictive(_model(), BELIEF, ACTION)
     with pytest.raises(ValueError, match="covariance depends on the reading"):
         inference_gap_step(widening, exact, true_mean, true_cov)
+
+
+# --- the evaluator over a driven run --------------------------------------------------
+
+
+def _spec(version: str = "spec-v1") -> ModelSpec:
+    return ModelSpec(
+        dynamics_matrix=[[1.0, DT], [0.0, 1.0]],
+        observation_matrix=[[1.0, 0.0]],
+        dynamics_noise=[[1e-4, 0.0], [0.0, 1e-4]],
+        observation_noise=[[1e-2]],
+        prior_mean=[0.0, 0.0],
+        prior_cov=[[1.0, 0.0], [0.0, 1.0]],
+        control_matrix=[[0.0], [DT]],
+        version=version,
+    )
+
+
+def _cross() -> ConstructorCross:
+    return build_cross(
+        _spec(),
+        ConstructorSet(
+            (CORRECT, Perturbation("noisy_sensor", "observation_noise", 0.5)),
+            version="models-v1",
+        ),
+        InferenceSet(
+            (
+                EXACT_INFERENCE,
+                InferenceRule("frozen_gain", InferenceKind.FROZEN_GAIN),
+                InferenceRule("wrong_r", InferenceKind.WRONG_FIXED_R, magnitude=0.5),
+                InferenceRule("diagonal", InferenceKind.DIAGONAL_COVARIANCE_ONLY),
+            ),
+            version="rules-v1",
+        ),
+    )
+
+
+def _cell(cross: ConstructorCross, model_name: str, inference_name: str) -> CrossCell:
+    (cell,) = [
+        c
+        for c in cross.cells
+        if (c.model_name, c.inference_name) == (model_name, inference_name)
+    ]
+    return cell
+
+
+SEQUENCE = ExogenousActionSequence(
+    np.sin(np.arange(12))[:, None] * 0.3, version="seq-v1"
+)
+
+
+@pytest.fixture(scope="module")
+def run() -> DrivenRun:
+    # The world is built on its own copy of the spec. The evaluator gets another, so
+    # p* reaches the score by value alone, never through the world.
+    return drive(World(_spec().build()), {}, SEQUENCE, jax.random.PRNGKey(7))
+
+
+@pytest.fixture(scope="module")
+def evaluator() -> ThreeTermEvaluator:
+    return ThreeTermEvaluator(_spec().build())
+
+
+def test_the_calibration_cell_scores_zero_on_both_terms(run, evaluator):
+    # R1, and the reading is exactly zero rather than below a bar. The correct model
+    # runs the same arithmetic as p*, and the exact rule is the exact step.
+    scored = evaluator.score(_cell(_cross(), "correct", "exact"), run, SEQUENCE)
+    assert scored == Decomposition(misspecification=0.0, inference_gap=0.0)
+
+
+def test_a_perturbed_model_under_exact_inference_moves_only_misspecification(
+    run, evaluator
+):
+    # C2. The gap is exactly zero because the cell's filter and the exact step under
+    # the cell's model are one computation, whatever the model got wrong.
+    scored = evaluator.score(_cell(_cross(), "noisy_sensor", "exact"), run, SEQUENCE)
+    assert scored.misspecification > 0.0
+    assert scored.inference_gap == 0.0
+
+
+@pytest.mark.parametrize("rule", ["frozen_gain", "wrong_r", "diagonal"])
+def test_a_degraded_filter_under_the_correct_model_moves_only_the_gap(
+    run, evaluator, rule
+):
+    # C3. Misspecification reads two exact predictives and never the cell's filter,
+    # so degrading the filter cannot reach it.
+    scored = evaluator.score(_cell(_cross(), "correct", rule), run, SEQUENCE)
+    assert scored.misspecification == 0.0
+    assert scored.inference_gap > 0.0
+
+
+def test_the_both_positive_cell_moves_both(run, evaluator):
+    scored = evaluator.score(_cell(_cross(), "noisy_sensor", "wrong_r"), run, SEQUENCE)
+    assert scored.misspecification > 0.0
+    assert scored.inference_gap > 0.0
+
+
+def test_scoring_is_a_pure_function_of_the_run(run, evaluator):
+    cell = _cell(_cross(), "noisy_sensor", "diagonal")
+    assert evaluator.score(cell, run, SEQUENCE) == evaluator.score(cell, run, SEQUENCE)
+
+
+def test_a_sequence_the_run_was_not_driven_by_is_refused(run, evaluator):
+    other = ExogenousActionSequence(SEQUENCE.actions, version="seq-v2")
+    with pytest.raises(ValueError, match="seq-v2"):
+        evaluator.score(_cell(_cross(), "correct", "exact"), run, other)
+
+
+def test_a_run_of_another_length_is_refused(run, evaluator):
+    shorter = ExogenousActionSequence(SEQUENCE.actions[:5], version="seq-v1")
+    with pytest.raises(ValueError, match="shape"):
+        evaluator.score(_cell(_cross(), "correct", "exact"), run, shorter)
+
+
+def test_a_true_model_with_state_dependent_noise_is_refused():
+    with pytest.raises(ValueError, match="observation_model"):
+        ThreeTermEvaluator(_state_dependent_model())

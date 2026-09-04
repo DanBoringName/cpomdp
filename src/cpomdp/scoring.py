@@ -19,8 +19,10 @@ import numpy as np
 from numpy.typing import ArrayLike
 
 from cpomdp.backends.base import InferenceBackend
+from cpomdp.backends.kalman import KalmanBackend
 from cpomdp.constructors import ConstructorSet, InferenceSet, ModelSpec
 from cpomdp.enumeration import IncompleteEnumerationError
+from cpomdp.harness import DrivenRun, ExogenousActionSequence
 from cpomdp.types import Belief, LinearGaussianModel
 from warrantlib import AxisDeclaration, ProductCompletenessCertificate, Warrant
 
@@ -30,6 +32,7 @@ __all__ = [
     "ConstructorCross",
     "CrossCell",
     "Decomposition",
+    "ThreeTermEvaluator",
     "build_cross",
     "gaussian_kl",
     "inference_gap_step",
@@ -511,4 +514,108 @@ def _require_same_covariance(probed: Belief, cov: np.ndarray, name: str) -> None
         raise ValueError(
             f"{name}'s posterior covariance depends on the reading; the closed-form "
             f"average is for a Gaussian filter step, whose covariance does not."
+        )
+
+
+@dataclass(frozen=True)
+class ThreeTermEvaluator:
+    """Scores a cell against ``p*`` over a driven run, returning its two divergences.
+
+    Holds the true model, which the world was built from and the agents never see.
+    Scoring is done by the experimenter, not by any agent, so this is the one place
+    both ``p*`` and a cell's ``p`` are in hand at once.
+
+    Each step of the run is scored given the readings before it. The true model and
+    the cell's model each carry an exact filter over the same readings, and the cell's
+    own filter runs beside them. At every step the misspecification term compares the
+    two exact predictive distributions, and the inference gap averages the cell
+    filter's divergence from the exact posterior under the cell's model over the true
+    predictive. Both
+    are closed forms given the history, so the run is a sampled witness of an exact
+    per-step identity rather than an estimate of it.
+
+    Args:
+        truth: ``p*``, with fixed noise. A state-dependent ``R(x)`` or ``Q(x)`` is
+            refused, since the closed forms are Gaussian ones.
+    """
+
+    truth: LinearGaussianModel
+
+    def __post_init__(self) -> None:
+        """Refuse a true model the closed forms do not describe."""
+        _require_fixed_noise(self.truth)
+
+    def score(
+        self, cell: CrossCell, run: DrivenRun, sequence: ExogenousActionSequence
+    ) -> Decomposition:
+        """The cell's two divergences summed over the run's steps, in nats.
+
+        The cell's filter is run afresh from its model's prior over the run's
+        readings, so the score depends on the run only through what the world
+        emitted and what drove it.
+
+        Args:
+            cell: The model and filter to score.
+            run: The readings, from a world built on ``truth``.
+            sequence: The actions that drove the run. Checked against the version
+                the run recorded, since a run carries the version and not the actions.
+
+        Returns:
+            The two terms, each a sum over the run's steps.
+
+        Raises:
+            ValueError: If ``sequence`` is not the one the run recorded, if the run's
+                readings are not the true model's, if the cell's model carries
+                state-dependent noise, or if the cell's filter step is not affine in
+                the reading.
+        """
+        if sequence.version != run.action_sequence_version:
+            raise ValueError(
+                f"the run was driven by sequence {run.action_sequence_version!r} and "
+                f"the sequence passed is {sequence.version!r}; a score needs the "
+                f"actions the run was actually driven by"
+            )
+        observations = np.asarray(run.observations, dtype=float)
+        if observations.shape != (sequence.horizon, self.truth.n_observations):
+            raise ValueError(
+                f"the run holds readings of shape {observations.shape}, and the true "
+                f"model over {sequence.horizon} steps of {self.truth.n_observations} "
+                f"readings expects {(sequence.horizon, self.truth.n_observations)}"
+            )
+        _require_fixed_noise(cell.model)
+
+        exact_truth = KalmanBackend(self.truth)
+        exact_model = KalmanBackend(cell.model)
+        truth_belief = self.truth.prior
+        model_belief = cell.model.prior
+        agent_belief = cell.model.prior
+        misspecification = 0.0
+        inference_gap = 0.0
+        for observation, action in zip(
+            observations, np.asarray(sequence.actions, dtype=float), strict=True
+        ):
+            true_mean, true_cov = observation_predictive(
+                self.truth, truth_belief, action
+            )
+            model_mean, model_cov = observation_predictive(
+                cell.model, model_belief, action
+            )
+            misspecification += gaussian_kl(true_mean, true_cov, model_mean, model_cov)
+
+            def agent_update(reading, prior=agent_belief, action=action):
+                return cell.inference_backend.infer_states(reading, prior, action)
+
+            def exact_update(reading, prior=model_belief, action=action):
+                return exact_model.infer_states(reading, prior, action)
+
+            inference_gap += inference_gap_step(
+                agent_update, exact_update, true_mean, true_cov
+            )
+
+            truth_belief = exact_truth.infer_states(observation, truth_belief, action)
+            model_belief = exact_update(observation)
+            agent_belief = agent_update(observation)
+
+        return Decomposition(
+            misspecification=misspecification, inference_gap=inference_gap
         )

@@ -87,3 +87,32 @@ both engines can reach, agreeing to `1e-6` with an integrator that knows nothing
 gains. And a two-dimensional case with the gains written out by formula and the
 average taken by the textbook trace. The exact rule scores `0.0` exactly, since it and
 the exact step are one computation.
+
+## The evaluator walks a run
+
+`ThreeTermEvaluator` holds `p*`. It is the experimenter's object, never an agent's, so
+it is the one place the true model and a cell's model are in hand together. `score`
+takes a cell, a `DrivenRun` and the sequence that drove it, and refuses a sequence
+whose version the run did not record.
+
+Three filters walk the readings side by side: the exact filter under `p*`, the exact
+filter under the cell's model, and the cell's own filter. At each step the two
+predictives give the misspecification term and the two updates give the gap, both
+given the readings so far. Then all three fold the actual reading and move on. The
+two terms are sums over steps.
+
+What that buys, on a twelve-step double integrator with the sensor noise perturbed by
+half and three degraded rules:
+
+- correct model, exact rule: both terms `0.0`, exactly (R1)
+- perturbed model, exact rule: misspecification positive, gap `0.0` exactly (C2)
+- correct model, any degraded rule: misspecification `0.0` exactly, gap positive (C3)
+- perturbed model, degraded rule: both positive, the diagonal cell the off-diagonal
+  separations are read against
+
+The exact zeros are structural. C2's gap is zero because the cell's filter and the
+exact step under the cell's model are one computation. C3's misspecification is zero
+because the term never reads the cell's filter. Neither is a tolerance being met.
+
+Not yet here: the separation ratio and the conditioning beside every cell (F2, F3),
+the additivity check with its four-term bound (F1), and common-mode propagation (F5).
