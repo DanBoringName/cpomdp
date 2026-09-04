@@ -3713,3 +3713,139 @@ which is why it is routed rather than printed.
   exactly when the noise varies with the state. Reportable in Paper 2 Part 2, stated
   carefully: the filter's posterior information and expected free energy's epistemic
   term are related and are not the same object.
+
+## ADR-057 — the shipped Spinello–Stilwell rungs run `R_mod`, and no unit choice is declared
+
+**Date:** 2026-09-04
+**Status:** Accepted
+**Extends:** ADR-056, whose units question this answers
+
+`research/spinello_stilwell_hand_derivation.md` is the scan of the notebook typed up.
+Its step 6 names the block that fails, step 8 argues the deletion is surgical, and
+`research.spinello_stilwell.repair` runs the three tests step 10 names. This entry is
+the decision those were written for.
+
+### Decision
+
+Rungs (36) and (35) of the ladder run the paper's scheme with the `r₃` block of (35d)
+removed. (35c), (35e) and the objective (18) stay verbatim. The curvature is
+
+    R_mod = (∂r₂)ᵀ(∂r₂) = (1/σ) bᵀb,    b = ∇h + (ζ/2σ)∇σ
+
+and the deleted term is `∇ᵀσ∇σ/(4σ² ln σ)`, the fourth printed term of (35d), whole.
+
+The rung is named as modified wherever it appears: the Spinello–Stilwell iterated
+filter with a documented modification, declared at first use in Paper 2. It is not
+the paper's equation verbatim and nothing in the tree will say it is.
+
+No observation unit choice is declared. The shipped ladder runs at native units and
+nothing in it depends on that, which is a test rather than a promise. `λ` stays a
+sweep variable in `research/` and is not a convention anywhere.
+
+### Why the deletion is justified
+
+Step 8 of the derivation, point by point, with what each point rests on.
+
+- **The fixed point is where the gradient vanishes.** The iteration is
+  `x ← x − M⁻¹g`. `M` steers the route and `g` picks the destination. Changing `M`
+  to any positive-definite matrix leaves the set of fixed points alone.
+- **`ln σ` cancels out of the gradient.** Step 4 has `r₃ ∂r₃ = ∇σ/2σ`, real for every
+  `σ > 0`, and that is what (35c) prints. `s` stays verbatim, so `g` does.
+- **The deleted object is the curvature block alone.** `(∂r₃)ᵀ(∂r₃)` is
+  `∇ᵀσ∇σ/(4σ² ln σ)` and nothing in it cancels. It is the only place `ln σ` survives
+  into the scheme.
+- **`Ū` is built from `s` alone.** No `ln σ` reaches (35e), so the posterior covariance
+  `P₊` is the paper's, unchanged.
+- **The objective is untouched.** The mode of (18) is where it was.
+
+Net: same `x̂`, same `P₊`, same `g`, same gap in nats. Only the path of iterates
+changes. `M = P⁻¹ + R_mod` is positive definite for every state, since `P⁻¹` is and
+`R_mod` is a real square, so every step is a descent direction of (18). Step 8 writes
+that as "provably descends". Monotone descent without a line search is not claimed
+here and does not need to be.
+
+What it costs is the name. The iteration is a modified-metric Newton with the
+Gauss–Newton fixed point and it is not literal Gauss–Newton on the residual vector
+(20). Where `σ < 1` a repair of some kind was compulsory anyway: the printed `R`
+claims to be `∇ᵀr∇r` and every real such matrix is positive-semi-definite, and the
+printed one is not.
+
+Three measurements back the argument, all asserted in
+`research.spinello_stilwell.repair` and in `tests/test_spinello_stilwell_repair.py`.
+
+- **The deleted block is the whole of the unit dependence.** Under `o → λo` every term
+  of `s`, `R_mod` and `Ū` returns to itself and the deleted block does not, checked
+  symbolically in route 1. Run to convergence the printed scheme is already unit-free,
+  since an additive `ln λ` in the objective cannot move a root. At a budget of one the
+  printed estimate spans `2.955e-05` across four unit choices and the modified spans
+  `1.1e-16`. A budget of one is rung (36), so the term made a rung the ladder
+  **reports** depend on the observation's units. The ladder reports a divergence
+  between distributions over the state, which no unit choice can move. This is the
+  warrant ADR-056 named, now measured.
+- **The reduction to Kalman is exact either way, and only one variant can take it.**
+  With `∇σ = 0` both variants reproduce the ordinary Kalman posterior to `0.0` in mean
+  and variance at every unit choice tried. At `σ = 1` with `∇σ = 0` the printed block is
+  `0/0`, so the printed scheme cannot be evaluated in the one regime that has an
+  oracle. The modification can.
+- **The change is confined to where it was argued for.** Above the pole the two
+  curvatures agree to a relative `7.2e-08` by `σ = 10⁶`, and the difference falls
+  monotonically over six decades. Below the pole the printed curvature is negative
+  and the modified one is positive.
+
+Two further points from the scan's last page.
+
+- **The paper never cashed the term in.** Every figure in section IV uses the
+  single-step filter (36), and its stated constants appear to put `σ < 1` throughout
+  figures 2 to 4. That arithmetic is route 7 and is not done. Until it is, this point
+  is a reason to expect the deletion costs the paper's results nothing, and not a
+  result.
+- **Why repair rather than derive fresh.** A published derivation exists, in a known
+  lineage back to Bell and Cathey's iterated filter. One declared change to it has a
+  cost that code can monitor and tests can pin. A scheme of cpomdp's own would have
+  neither the citation nor the single named difference.
+
+### Why `λ` is not declared
+
+ADR-056 held the guard until the units question was answered, and the answer is that
+the shipped scheme has no pole to clear. The one term that moved under rescaling is
+the term removed. A unit convention declared to keep `σ > 1` would be a parameter with
+no observable effect on any number the ladder reports. Standing rule 2 objects to a
+choice that is made and not declared. It has nothing to say about a choice that is
+absent, provided the absence is checked, which is the invariance test on the shipped
+rung.
+
+The printed scheme still runs in `research/`, where the pole is the object of study.
+Route 3 probes the two-sided failure near `σ = 1`, route 5 exhausts the budget against
+it, and route 7 evaluates the paper's constants in the paper's units. All three need
+the pole reachable, so a clearing `λ` there would defeat the measurement. Route 1's
+empirical half sweeps `λ`. None of them declares one.
+
+Route 2's table stays as what it is: the measurement that `λ ≈ 2.563` would have
+cleared every declared family but `exp(x)`. It decides nothing now, and it records that
+a units-only repair was available for five families and unavailable for the sixth.
+`exp(x)` was what made the units answer insufficient on its own. With the block gone
+it needs no box and no guard for the pole, and its vanishing noise as `x → −∞` is a
+property every rung shares rather than one of this scheme.
+
+### Consequences
+
+- **Q2, Q3 and Q4 of the companion file close for the shipped rung.** Q3's two-sided
+  failure remains a true statement about the printed scheme and is measured in
+  `research/` by route 3 rather than guarded in the tree.
+- **Rung (36) is the single `R_mod`-preconditioned step.** It is unit-free at budget
+  one, which the paper's (36) is not. Route 6 compares it against rung one on that
+  footing.
+- **Route 1's empirical half changes purpose.** It was to decide the modification. It
+  now measures what the modification cost against the printed scheme, at a declared
+  budget, and it stays in `research/`.
+- **The rescaling invariance of the shipped rung is a required test**, on the same
+  terms as the fixed-`R` Kalman agreement: a reported gap that moves under `o → λo` is
+  a defect, whatever the budget.
+- **The iteration count is unit-free too.** Every term the modified iterate touches is
+  invariant, so the path of iterates is, and so is its length. The printed scheme's
+  count was not (6, 9, 8, 8 across four unit choices). RFC-001's accounting inherits a
+  per-decision cost that does not depend on the observation's units. This follows from
+  the invariance and has not been measured on its own.
+- **Still owed, unchanged.** The iteration budget and the tolerance, which ADR-056
+  routes to a measurement. `VOID` for a non-convergent step stands, since a positive
+  definite `M` guarantees a descent direction and not convergence within a budget.
