@@ -39,3 +39,22 @@ a later cell say "below `1e-12`" and mean it.
 The tests hold it against the scalar closed form, the textbook form where that form is
 accurate, and an affine change of coordinates, which is the invariance the ledger
 relies on to treat nats as a scale-free unit.
+
+## The misspecification term reads two predictives
+
+`observation_predictive` pushes a belief through the dynamics and then through the
+sensor and returns the Gaussian `p(y | u)` for the next reading. `misspecification_step`
+is the divergence from the true model's predictive to the cell model's, each predicting
+from its own **exact** belief.
+
+That last word is the design decision. If the cell's predictive came from the agent's
+own belief, a cell that filtered badly under the correct model would show a nonzero
+misspecification, and C3 would fail by construction rather than by finding. So the
+term is a function of `(p*, p, y_{1:t−1}, u)` and nothing about the filter. Two
+separately built models with equal numbers score `0.0` exactly at every step, since
+both sides run the same arithmetic on the same values and identical Gaussians diverge
+by exactly zero.
+
+Both functions refuse state-dependent noise. Under `R(x)` the predictive is a scale
+mixture with no covariance that describes it, and scoring that is the reference
+filter's job at PR-9, not a formula's.

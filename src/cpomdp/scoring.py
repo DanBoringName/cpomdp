@@ -20,7 +20,7 @@ from numpy.typing import ArrayLike
 from cpomdp.backends.base import InferenceBackend
 from cpomdp.constructors import ConstructorSet, InferenceSet, ModelSpec
 from cpomdp.enumeration import IncompleteEnumerationError
-from cpomdp.types import LinearGaussianModel
+from cpomdp.types import Belief, LinearGaussianModel
 from warrantlib import AxisDeclaration, ProductCompletenessCertificate, Warrant
 
 __all__ = [
@@ -31,6 +31,8 @@ __all__ = [
     "Decomposition",
     "build_cross",
     "gaussian_kl",
+    "misspecification_step",
+    "observation_predictive",
 ]
 
 #: What each axis is called on the certificate. Declared here rather than written at the
@@ -276,3 +278,106 @@ def _cholesky_or_refuse(cov: np.ndarray, name: str) -> np.ndarray:
             f"{name} must be positive definite; a degenerate Gaussian has no density "
             f"for a divergence to read"
         ) from failure
+
+
+def observation_predictive(
+    model: LinearGaussianModel, belief: Belief, action: ArrayLike | None
+) -> tuple[np.ndarray, np.ndarray]:
+    """The mean and covariance of ``p(y | u)`` one step ahead under ``model``.
+
+    The belief is pushed through the dynamics and then through the sensor::
+
+        mean = C · (A · μ + B · u)
+        cov  = C · (A · Σ · Aᵀ + Q) · Cᵀ + R
+
+    Gaussian because everything in the model is, which is why this asks for fixed
+    noise. Under a state-dependent ``R(x)`` or ``Q(x)`` the predictive is a scale
+    mixture and has no covariance that describes it.
+
+    Args:
+        model: The model doing the predicting.
+        belief: The state belief before the step, over the model's ``n`` states.
+        action: The action applied over the step, shape ``(p,)``. ``None`` for a model
+            without a control matrix.
+
+    Returns:
+        ``(mean, cov)`` of the predicted observation, shapes ``(m,)`` and ``(m, m)``.
+
+    Raises:
+        ValueError: If the model carries state-dependent noise, if the model has a
+            control matrix and ``action`` is ``None``, or if the belief is not over
+            the model's state.
+    """
+    _require_fixed_noise(model)
+    mean = np.asarray(belief.mean, dtype=float)
+    cov = np.asarray(belief.cov, dtype=float)
+    if mean.shape != (model.n_states,):
+        raise ValueError(
+            f"the belief is over {mean.shape[0]} states and the model has "
+            f"{model.n_states}"
+        )
+    dynamics_matrix = np.asarray(model.dynamics_matrix, dtype=float)  # A
+    observation_matrix = np.asarray(model.observation_matrix, dtype=float)  # C
+    mean_pred = dynamics_matrix @ mean
+    if model.control_matrix is not None:
+        if action is None:
+            raise ValueError(
+                "this model has a control matrix; the step needs an action"
+            )
+        mean_pred = mean_pred + np.asarray(
+            model.control_matrix, dtype=float
+        ) @ np.asarray(action, dtype=float)
+    cov_pred = dynamics_matrix @ cov @ dynamics_matrix.T + np.asarray(
+        model.dynamics_noise, dtype=float
+    )
+    return (
+        observation_matrix @ mean_pred,
+        observation_matrix @ cov_pred @ observation_matrix.T
+        + np.asarray(model.observation_noise, dtype=float),
+    )
+
+
+def misspecification_step(
+    truth: LinearGaussianModel,
+    truth_belief: Belief,
+    model: LinearGaussianModel,
+    model_belief: Belief,
+    action: ArrayLike | None,
+) -> float:
+    """``D_KL[p*(y|u) ‖ p(y|u)]`` for one step, in nats.
+
+    Each side predicts from its own exact belief, so the term reads what the two
+    models say about the next reading and nothing about how either is being filtered.
+    A cell that infers badly under the true model scores zero here at every step,
+    which is what keeps the two axes separable (battery C2, C3).
+
+    Args:
+        truth: ``p*``, the process the observations come from.
+        truth_belief: The exact filter's belief under ``truth`` before this step.
+        model: ``p``, the cell's model.
+        model_belief: The exact filter's belief under ``model`` before this step.
+        action: The action applied over the step, common to both.
+
+    Returns:
+        The divergence. ``0.0`` exactly when the two models agree in value and their
+        beliefs do.
+    """
+    true_mean, true_cov = observation_predictive(truth, truth_belief, action)
+    model_mean, model_cov = observation_predictive(model, model_belief, action)
+    return gaussian_kl(true_mean, true_cov, model_mean, model_cov)
+
+
+def _require_fixed_noise(model: LinearGaussianModel) -> None:
+    """Refuse a model whose noise varies with the state.
+
+    The closed forms here are Gaussian ones. Under ``R(x)`` the exact posterior and
+    the predictive are not Gaussian, and scoring them needs the reference filter
+    rather than a formula.
+    """
+    for slot in ("observation_model", "dynamics_noise_model"):
+        carried = getattr(model, slot)
+        if carried is not None and not carried.is_fixed:
+            raise ValueError(
+                f"the model's {slot} is state-dependent; the closed-form terms here "
+                f"are for fixed noise only"
+            )

@@ -2,10 +2,20 @@
 
 from dataclasses import fields
 
+import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from cpomdp.scoring import _SERIES_BELOW, Decomposition, _excess_over_log, gaussian_kl
+from cpomdp.observation import CallableSensor
+from cpomdp.scoring import (
+    _SERIES_BELOW,
+    Decomposition,
+    _excess_over_log,
+    gaussian_kl,
+    misspecification_step,
+    observation_predictive,
+)
+from cpomdp.types import Belief, LinearGaussianModel
 
 
 def test_the_type_carries_the_two_divergences_and_nothing_else():
@@ -112,3 +122,87 @@ def test_the_series_and_the_direct_form_agree_at_the_switch():
             assert float(_excess_over_log(np.array([side]))[0]) == pytest.approx(
                 direct, rel=1e-9
             )
+
+
+# --- the misspecification term ------------------------------------------------------
+
+
+DT = 0.1
+
+
+def _model(*, observation_noise: float = 1e-2) -> LinearGaussianModel:
+    """A double integrator, built afresh on every call so p* and p share nothing."""
+    return LinearGaussianModel(
+        dynamics_matrix=[[1.0, DT], [0.0, 1.0]],
+        observation_matrix=[[1.0, 0.0]],
+        dynamics_noise=[[1e-4, 0.0], [0.0, 1e-4]],
+        observation_noise=[[observation_noise]],
+        prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
+        control_matrix=[[0.0], [DT]],
+    )
+
+
+BELIEF = Belief(mean=[0.4, -0.2], cov=[[0.5, 0.1], [0.1, 0.3]])
+ACTION = np.array([0.7])
+
+
+def test_the_predictive_is_the_belief_pushed_through_dynamics_then_sensor():
+    model = _model()
+    dynamics, control, sensor = (
+        np.array([[1.0, DT], [0.0, 1.0]]),
+        np.array([[0.0], [DT]]),
+        np.array([[1.0, 0.0]]),
+    )
+    mean_pred = dynamics @ np.asarray(BELIEF.mean) + control @ ACTION
+    cov_pred = dynamics @ np.asarray(BELIEF.cov) @ dynamics.T + 1e-4 * np.eye(2)
+    mean, cov = observation_predictive(model, BELIEF, ACTION)
+    np.testing.assert_allclose(mean, sensor @ mean_pred, rtol=1e-14)
+    np.testing.assert_allclose(cov, sensor @ cov_pred @ sensor.T + 1e-2, rtol=1e-14)
+
+
+def test_a_model_with_a_control_matrix_needs_an_action():
+    with pytest.raises(ValueError, match="action"):
+        observation_predictive(_model(), BELIEF, None)
+
+
+def test_a_state_dependent_sensor_is_refused_by_name():
+    model = LinearGaussianModel(
+        dynamics_matrix=[[1.0, DT], [0.0, 1.0]],
+        observation_matrix=[[1.0, 0.0]],
+        dynamics_noise=[[1e-4, 0.0], [0.0, 1e-4]],
+        observation_noise=[[1e-2]],
+        prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
+        control_matrix=[[0.0], [DT]],
+        observation_model=CallableSensor(
+            observation_matrix=[[1.0, 0.0]],
+            noise_fn=lambda x, _p: jnp.array([[1e-2 * (1 + x[0] ** 2)]]),
+            noise_params=(),
+        ),
+    )
+    with pytest.raises(ValueError, match="observation_model"):
+        observation_predictive(model, BELIEF, ACTION)
+
+
+def test_two_separately_built_equal_models_have_no_misspecification():
+    # Exactly zero, not merely small. Two builds from the same numbers run the same
+    # arithmetic, and the divergence of identical Gaussians is 0.0 by construction.
+    assert misspecification_step(_model(), BELIEF, _model(), BELIEF, ACTION) == 0.0
+
+
+def test_a_perturbed_sensor_noise_moves_the_term_by_the_scalar_closed_form():
+    truth, model = _model(), _model(observation_noise=1.5e-2)
+    _, true_cov = observation_predictive(truth, BELIEF, ACTION)
+    true_var = float(true_cov[0, 0])
+    model_var = true_var - 1e-2 + 1.5e-2
+    expected = 0.5 * (np.log(model_var / true_var) + true_var / model_var - 1.0)
+    assert misspecification_step(truth, BELIEF, model, BELIEF, ACTION) == pytest.approx(
+        expected, rel=1e-12
+    )
+
+
+def test_the_term_reads_the_beliefs_it_is_handed_and_not_the_prior():
+    # The two sides may sit at different beliefs, as they will once each exact filter
+    # has folded its own view of the history. Moving one belief moves the term.
+    truth, model = _model(), _model()
+    shifted = Belief(mean=[0.9, -0.2], cov=BELIEF.cov)
+    assert misspecification_step(truth, BELIEF, model, shifted, ACTION) > 0.0
