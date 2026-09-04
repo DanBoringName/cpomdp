@@ -304,6 +304,46 @@ That argues for a non-convergent step being routed to `VOID` rather than reporte
 number. A gap computed from a posterior whose mean and covariance are both wrong by an
 unmeasured amount is not a measurement of anything.
 
+### ROUTE 2026-09-04: route 5 is run, and the covariance is not the smaller error
+
+`research.spinello_stilwell.budget`, run with
+
+```text
+uv run --no-sync python -m research.spinello_stilwell.budget
+```
+
+**Both halves move, on all twelve declared cells.** The grid sweeps `κ ∈ {0.1, 1, 5,
+20}` against prior variance `{0.01, 0.25, 1}`, the two axes GATE-D4's registered family
+sweeps. At a budget of one the mean departs by `0.0069` to `0.357` and the variance by
+`7.6e-7` to `0.425`.
+
+**On the widest prior at the strongest curvature the variance is the worse of the
+two**, `0.425` against the mean's `0.357`. So the covariance is not a bystander whose
+error is bounded by the mean's, and a caller who trusted the covariance of a truncated
+run would be worse off than one who trusted its mean. That is what makes `VOID` the
+right routing rather than reporting the number with a caveat.
+
+Both departures fall as the budget grows, so what is measured is truncation and not the
+scheme.
+
+**What a budget has to cover: ten iterations.** Over the five declared families at the
+six declared spreads, the modified scheme at tolerance `1e-14` needs 2 to 10 iterations,
+worst at `1 + x²` and spread `0.30`, and the fixed family needs 2 everywhere. Nothing
+here declares a budget. The number is what a declaration would read.
+
+**The slopes are declared, not differenced.** `FAMILIES` declares `R` and (35) needs
+`R'`. A central difference at `1e-6` carries about `1e-11` of error into the iterate,
+which floors convergence well above `1e-14`: five of the thirty cells then ran to the
+probe budget without settling, measuring the difference rather than the scheme. The
+slopes are written out in `budget.SLOPES` and checked against a difference to `1e-6`.
+A tolerance declaration has to sit above whatever error the sensor model's own
+derivative carries, and that is not a property of the scheme.
+
+**What the deletion costs at a finite budget.** Same case, same budget, both
+curvatures: the mean differs by `3.2e-3` at a budget of one, `6.7e-6` by five, and `0`
+run out. ADR-057's "surgical" is that last number. The two curvatures share a fixed
+point and differ only on the way to it.
+
 ## Q8. Rung two has no published numerical validation
 
 Every figure in §IV uses (36), the single-step filter. The iterated scheme (35) is
