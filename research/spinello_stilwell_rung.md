@@ -158,6 +158,46 @@ Under ADR-057 the shipped curvature is `(1/σ)bᵀb`, a real square, so
 the indefiniteness from below can occur. Both stay true of the printed scheme and are
 route 3's to measure in `research/`, where that scheme still runs.
 
+### ROUTE 2026-09-04: route 3 is run, and the silent side is quieter than stated
+
+`research.spinello_stilwell.pole_failure`, run with
+
+```text
+uv run --no-sync python -m research.spinello_stilwell.pole_failure
+```
+
+Both sides are now measured on the printed scheme. Every number below came out of a
+probe at a budget of 200 and a tolerance of `1e-14`.
+
+**The pole itself has no value.** `gauss_newton_curvature(1.0, …)` raises
+`ZeroDivisionError`, so the printed curvature is not evaluable at `σ = 1` rather than
+merely large there. The modification returns `2.56` on the same arguments.
+
+**From above, the curvature grows as `1/offset`** and the step falls with it: at
+offsets `1e-2` to `1e-8` off the pole the curvature runs `27.1`, `2.50e3`, `2.50e5`,
+`2.50e7` and the first step runs `-2.68e-2` to `-5.68e-8`. Close in, the step is about
+`5.68` times the offset.
+
+**The stall is conditional on the tolerance, which the original entry did not say.** At
+a tolerance of `1e-14` the run does not freeze. It takes 24 iterations against the
+modification's 12 and lands on the same estimate to `2e-16`. What the collapse buys is
+a *threshold*: at `1e-8` off the pole the first step is `5.68e-8`, so any relative
+tolerance above `2.84e-7` stops the run on iteration one and reports `0.500000057`
+where the answer is `0.549191167`. Wrong by `0.049`, reported as converged. A hundred
+times closer to the pole and the threshold falls a hundredfold, so no declared
+tolerance is safe for every case. The original claim that a fixed budget returns the
+prediction holds, and it needs the tolerance stated beside it.
+
+**From below, the sum crosses zero at `x = 0.694474243706`** on the registered ridge,
+inside the pole at `x = √½`. Approaching it, the step goes `8.81e4`, `8.81e5`,
+`8.81e6` for distances `1e-8`, `1e-9`, `1e-10`, and the two sides point opposite ways.
+Past the crossing the printed step climbs: from `x = 0.700791` the objective goes
+`0.499721 → 0.574875`, where the modification takes it to `0.476722`.
+
+The iteration count is the other cost. The printed scheme needed 24 iterations where
+the modification needed 12 for the same answer, which is per-decision compute RFC-001
+will account for.
+
 ## Q4. Below `σ = 1`, Gauss–Newton is outside its domain
 
 `R⁽ᶥ⁾` is meant to be `∇ᵀr∇r` for the residual vector `r` of (20), and any such matrix
