@@ -28,13 +28,20 @@ and `spread` is cpomdp's.
 """
 
 import math
+from collections.abc import Callable
+
+NoiseAt = Callable[[float], tuple[float, float]]
+"""A declared `R` read at a state, returning `(noise, its slope)` in native units."""
 
 __all__ = [
+    "NoiseAt",
     "fisher_information",
     "gauss_newton_curvature",
     "gradient",
     "iterate",
+    "iterate_with",
     "kalman_update",
+    "quadratic_noise",
 ]
 
 
@@ -118,6 +125,23 @@ def fisher_information(
     return mean_slope**2 / noise + noise_slope**2 / (2.0 * noise**2)
 
 
+def quadratic_noise(base_noise: float, curvature: float) -> NoiseAt:
+    """`R(x) = base_noise + curvature * x^2` and its slope, as one callable.
+
+    Args:
+        base_noise: `R0`.
+        curvature: `kappa`.
+
+    Returns:
+        A callable giving `(R(x), R'(x))`.
+    """
+
+    def noise_at(state: float) -> tuple[float, float]:
+        return base_noise + curvature * state**2, 2.0 * curvature * state
+
+    return noise_at
+
+
 def kalman_update(
     observation: float,
     prior_mean: float,
@@ -178,15 +202,58 @@ def iterate(
         of iterations taken. A count equal to `max_iterations` is a run that did not
         converge, and the caller decides what that means.
     """
+    return iterate_with(
+        observation,
+        prior_mean,
+        prior_variance,
+        quadratic_noise(base_noise, curvature),
+        scale,
+        tolerance,
+        max_iterations,
+        log_block=log_block,
+    )
+
+
+def iterate_with(
+    observation: float,
+    prior_mean: float,
+    prior_variance: float,
+    noise_at: NoiseAt,
+    scale: float,
+    tolerance: float,
+    max_iterations: int,
+    *,
+    log_block: bool = True,
+) -> tuple[float, float, int]:
+    """(35) for any declared `R`, which is what a survey over several families needs.
+
+    The quadratic case reaches this through `iterate`. Routes 3 and 5 reach it with
+    the other declared families, which have no closed-form iterate count between them.
+
+    Args:
+        observation: the reading, in unrescaled units.
+        prior_mean: the predicted mean.
+        prior_variance: the predicted variance.
+        noise_at: the declared `R`, read as `(R(x), R'(x))` in native units.
+        scale: `lambda`, the factor the observation is multiplied by.
+        tolerance: stop when the step falls below this, relative to the prior spread.
+        max_iterations: give up after this many steps.
+        log_block: keep the `r3` block of (35d). False is the modification.
+
+    Returns:
+        The estimate in unrescaled state units, the posterior variance, and the number
+        of iterations taken.
+    """
     reading = scale * observation
     prior_precision = 1.0 / prior_variance
     estimate = prior_mean
     taken = 0
     while taken < max_iterations:
         taken += 1
-        noise = scale**2 * (base_noise + curvature * estimate**2)
+        native_noise, native_slope = noise_at(estimate)
+        noise = scale**2 * native_noise
         mean_slope = scale
-        noise_slope = scale**2 * 2.0 * curvature * estimate
+        noise_slope = scale**2 * native_slope
         residual = reading - scale * estimate
 
         step = (
@@ -202,7 +269,6 @@ def iterate(
         if abs(step) < tolerance * math.sqrt(prior_variance):
             break
 
-    noise = scale**2 * (base_noise + curvature * estimate**2)
-    noise_slope = scale**2 * 2.0 * curvature * estimate
-    fisher = fisher_information(noise, noise_slope, scale)
+    native_noise, native_slope = noise_at(estimate)
+    fisher = fisher_information(scale**2 * native_noise, scale**2 * native_slope, scale)
     return estimate, 1.0 / (prior_precision + fisher), taken

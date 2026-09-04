@@ -102,6 +102,28 @@ class TestTheScheme:
         assert scheme.fisher_information(0.9, 2.0, 1.0) > 0.0
         assert scheme.fisher_information(1.0, 2.0, 1.0) > 0.0
 
+    def test_the_general_iterate_is_the_quadratic_one(self):
+        # `iterate` delegates, so there is one implementation of (35) and not two. A
+        # second copy is the thing that drifts.
+        quadratic = scheme.iterate(
+            **invariance.CASE,
+            scale=3.0,
+            tolerance=invariance.PROBE_TOLERANCE,
+            max_iterations=invariance.PROBE_BUDGET,
+        )
+        general = scheme.iterate_with(
+            invariance.CASE["observation"],
+            invariance.CASE["prior_mean"],
+            invariance.CASE["prior_variance"],
+            scheme.quadratic_noise(
+                invariance.CASE["base_noise"], invariance.CASE["curvature"]
+            ),
+            scale=3.0,
+            tolerance=invariance.PROBE_TOLERANCE,
+            max_iterations=invariance.PROBE_BUDGET,
+        )
+        assert general == quadratic
+
     def test_it_reports_no_warrant(self):
         for module in (repair, scheme):
             assert not hasattr(module, "run_checks")

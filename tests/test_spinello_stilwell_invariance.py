@@ -54,7 +54,9 @@ def test_it_reports_no_warrant(module):
     assert not any(name.endswith("_SOURCE") for name in dir(module))
 
 
-@pytest.mark.parametrize("iterate", [invariance.iterate, scheme.iterate])
+@pytest.mark.parametrize(
+    "iterate", [invariance.iterate, scheme.iterate, scheme.iterate_with]
+)
 @pytest.mark.parametrize("owed", ["max_iterations", "tolerance"])
 def test_the_rung_s_open_decisions_stay_arguments(iterate, owed):
     # The budget and the tolerance are undeclared on purpose: ADR-056 routes them to a
