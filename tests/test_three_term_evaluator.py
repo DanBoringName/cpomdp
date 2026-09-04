@@ -19,6 +19,7 @@ from cpomdp.constructors import (
     ModelSpec,
     Perturbation,
 )
+from cpomdp.diagnostics import condition_numbers
 from cpomdp.harness import DrivenRun, ExogenousActionSequence, World, drive
 from cpomdp.observation import CallableSensor
 from cpomdp.reference.gap import averaged_inference_gap
@@ -28,7 +29,9 @@ from cpomdp.scoring import (
     _SERIES_BELOW,
     ConstructorCross,
     CrossCell,
+    CrossScore,
     Decomposition,
+    Separation,
     ThreeTermEvaluator,
     _excess_over_log,
     build_cross,
@@ -456,7 +459,9 @@ def test_the_calibration_cell_scores_zero_on_both_terms(run, evaluator):
     # R1, and the reading is exactly zero rather than below a bar. The correct model
     # runs the same arithmetic as p*, and the exact rule is the exact step.
     scored = evaluator.score(_cell(_cross(), "correct", "exact"), run, SEQUENCE)
-    assert scored == Decomposition(misspecification=0.0, inference_gap=0.0)
+    assert scored.decomposition == Decomposition(
+        misspecification=0.0, inference_gap=0.0
+    )
 
 
 def test_a_perturbed_model_under_exact_inference_moves_only_misspecification(
@@ -465,8 +470,8 @@ def test_a_perturbed_model_under_exact_inference_moves_only_misspecification(
     # C2. The gap is exactly zero because the cell's filter and the exact step under
     # the cell's model are one computation, whatever the model got wrong.
     scored = evaluator.score(_cell(_cross(), "noisy_sensor", "exact"), run, SEQUENCE)
-    assert scored.misspecification > 0.0
-    assert scored.inference_gap == 0.0
+    assert scored.decomposition.misspecification > 0.0
+    assert scored.decomposition.inference_gap == 0.0
 
 
 @pytest.mark.parametrize("rule", ["frozen_gain", "wrong_r", "diagonal"])
@@ -476,19 +481,23 @@ def test_a_degraded_filter_under_the_correct_model_moves_only_the_gap(
     # C3. Misspecification reads two exact predictives and never the cell's filter,
     # so degrading the filter cannot reach it.
     scored = evaluator.score(_cell(_cross(), "correct", rule), run, SEQUENCE)
-    assert scored.misspecification == 0.0
-    assert scored.inference_gap > 0.0
+    assert scored.decomposition.misspecification == 0.0
+    assert scored.decomposition.inference_gap > 0.0
 
 
 def test_the_both_positive_cell_moves_both(run, evaluator):
     scored = evaluator.score(_cell(_cross(), "noisy_sensor", "wrong_r"), run, SEQUENCE)
-    assert scored.misspecification > 0.0
-    assert scored.inference_gap > 0.0
+    assert scored.decomposition.misspecification > 0.0
+    assert scored.decomposition.inference_gap > 0.0
 
 
 def test_scoring_is_a_pure_function_of_the_run(run, evaluator):
     cell = _cell(_cross(), "noisy_sensor", "diagonal")
-    assert evaluator.score(cell, run, SEQUENCE) == evaluator.score(cell, run, SEQUENCE)
+    first, second = (evaluator.score(cell, run, SEQUENCE) for _ in range(2))
+    assert first.decomposition == second.decomposition
+    assert np.array_equal(
+        first.conditioning.cond_sigma_agent, second.conditioning.cond_sigma_agent
+    )
 
 
 def test_a_sequence_the_run_was_not_driven_by_is_refused(run, evaluator):
@@ -506,3 +515,137 @@ def test_a_run_of_another_length_is_refused(run, evaluator):
 def test_a_true_model_with_state_dependent_noise_is_refused():
     with pytest.raises(ValueError, match="observation_model"):
         ThreeTermEvaluator(_state_dependent_model())
+
+
+# --- the conditioning travels with the score ------------------------------------------
+
+
+def test_every_matrix_the_terms_inverted_reports_its_conditioning(run, evaluator):
+    scored = evaluator.score(_cell(_cross(), "noisy_sensor", "diagonal"), run, SEQUENCE)
+    conditioning = scored.conditioning
+    assert scored.steps == SEQUENCE.horizon
+    for column in (
+        conditioning.cond_s_true,
+        conditioning.cond_s_model,
+        conditioning.cond_sigma_exact,
+        conditioning.cond_sigma_agent,
+    ):
+        assert column.shape == (SEQUENCE.horizon,)
+        assert np.all(np.isfinite(column))
+        assert np.all(column >= 1.0)
+    assert conditioning.worst_s == max(
+        conditioning.cond_s_true.max(), conditioning.cond_s_model.max()
+    )
+    assert conditioning.worst_sigma == max(
+        conditioning.cond_sigma_exact.max(), conditioning.cond_sigma_agent.max()
+    )
+
+
+def test_the_calibration_cell_conditions_both_sides_identically(run, evaluator):
+    # The same arithmetic on the same numbers: the two predictives and the two
+    # posteriors are the same matrices, so their conditioning is equal bit for bit.
+    conditioning = evaluator.score(
+        _cell(_cross(), "correct", "exact"), run, SEQUENCE
+    ).conditioning
+    assert np.array_equal(conditioning.cond_s_true, conditioning.cond_s_model)
+    assert np.array_equal(conditioning.cond_sigma_exact, conditioning.cond_sigma_agent)
+
+
+def test_the_conditioning_is_the_diagnostics_module_reading():
+    # One implementation, so a rollout and a score read the same number.
+    stack = np.array([[[4.0, 0.0], [0.0, 1.0]], [[1.0, 0.0], [0.0, 1.0]]])
+    np.testing.assert_allclose(condition_numbers(stack), [4.0, 1.0], rtol=1e-14)
+
+
+# --- the cross, its separations, and the cell they are read against ------------------
+
+
+@pytest.fixture(scope="module")
+def scored_cross(run, evaluator) -> CrossScore:
+    return evaluator.score_cross(_cross(), run, SEQUENCE)
+
+
+def test_the_cross_score_carries_every_cell_and_the_certificate(scored_cross):
+    cross = _cross()
+    assert [(c.model_name, c.inference_name) for c in scored_cross.cells] == [
+        (c.model_name, c.inference_name) for c in cross.cells
+    ]
+    assert scored_cross.certificate == cross.certificate
+    assert scored_cross.action_sequence_version == SEQUENCE.version
+
+
+def test_the_calibration_and_both_positive_cells_carry_no_separation(scored_cross):
+    by_name = {(c.model_name, c.inference_name): c for c in scored_cross.cells}
+    assert by_name[("correct", "exact")].separation is None
+    assert by_name[("noisy_sensor", "wrong_r")].separation is None
+
+
+def test_an_off_diagonal_cell_pins_the_term_its_reference_axis_holds(scored_cross):
+    by_name = {(c.model_name, c.inference_name): c for c in scored_cross.cells}
+    model_moved = by_name[("noisy_sensor", "exact")].separation
+    rule_moved = by_name[("correct", "diagonal")].separation
+    assert model_moved is not None
+    assert rule_moved is not None
+    assert (model_moved.pinned, model_moved.moving) == (
+        "inference_gap",
+        "misspecification",
+    )
+    assert (rule_moved.pinned, rule_moved.moving) == (
+        "misspecification",
+        "inference_gap",
+    )
+
+
+def test_a_pinned_term_of_exactly_zero_reads_an_infinite_ratio(scored_cross):
+    # The ratio is the claim. Here the pinned term is not small, it is zero by
+    # construction, and the pinned value printed beside the ratio says so.
+    for _cell, separation in scored_cross.separations:
+        assert separation.pinned_value == 0.0
+        assert separation.moving_value > 0.0
+        assert separation.ratio == float("inf")
+
+
+def test_a_finite_pinned_term_gives_the_plain_ratio():
+    assert Separation("inference_gap", 1e-13, 0.5).ratio == pytest.approx(5e12)
+
+
+def test_the_both_positive_cells_are_the_perturbed_model_under_a_degraded_rule(
+    scored_cross,
+):
+    assert {(c.model_name, c.inference_name) for c in scored_cross.both_positive} == {
+        ("noisy_sensor", "frozen_gain"),
+        ("noisy_sensor", "wrong_r"),
+        ("noisy_sensor", "diagonal"),
+    }
+
+
+def test_separations_are_refused_without_a_cell_where_both_terms_move(run, evaluator):
+    # A cross with the exact rule alone can move only one term. Its off-diagonal cells
+    # have a separation each, and nothing to read it against.
+    cross = build_cross(
+        _spec(),
+        ConstructorSet(
+            (CORRECT, Perturbation("noisy_sensor", "observation_noise", 0.5)),
+            version="models-v1",
+        ),
+        InferenceSet((EXACT_INFERENCE,), version="rules-exact-only"),
+    )
+    scored = evaluator.score_cross(cross, run, SEQUENCE)
+    assert scored.both_positive == ()
+    with pytest.raises(ValueError, match="both terms move"):
+        _ = scored.separations
+
+
+def test_a_rendered_separation_row_prints_its_ratio_and_conditioning(scored_cross):
+    # Standing prohibition 5, at the point of printing: no row asserts a separation
+    # without its ratio and the conditioning of what was inverted on the same line.
+    rendered = scored_cross.render()
+    rows = {line.split(" | ")[0]: line for line in rendered.splitlines()[2:]}
+    for cell, separation in scored_cross.separations:
+        row = rows[f"{cell.model_name} / {cell.inference_name}"]
+        assert f"ratio {separation.ratio:.3e}" in row
+        assert f"{cell.conditioning.worst_sigma:.3e}" in row
+        assert f"{cell.conditioning.worst_s:.3e}" in row
+    assert "calibration" in rows["correct / exact"]
+    assert "the reference for the separations" in rows["noisy_sensor / wrong_r"]
+    assert str(scored_cross.certificate) in rendered.splitlines()[0]

@@ -116,3 +116,66 @@ because the term never reads the cell's filter. Neither is a tolerance being met
 
 Not yet here: the separation ratio and the conditioning beside every cell (F2, F3),
 the additivity check with its four-term bound (F1), and common-mode propagation (F5).
+
+## The conditioning travels with the score
+
+`score` now returns a `CellScore`: the two terms, the step count, and a
+`RunConditioning` holding the condition number of every matrix the terms factored or
+inverted, per step. Four columns: the true predictive `S*`, the cell model's
+predictive `S`, the exact posterior `Σ` under the cell's model, and the cell filter's
+own `Σ`. An ill-conditioned matrix can manufacture or destroy twelve orders (ledger
+section 4), so the reading is carried beside the number rather than looked up later.
+
+One implementation serves the rollout and the score. `condition_numbers` moved into
+`cpomdp.diagnostics` and `rollout_conditioning` calls it, so a rollout and a cell
+read the same number for the same matrix.
+
+## A separation is a ratio, read against a cell where both terms move
+
+Each `CrossCell` now knows whether its row is the unperturbed model and whether its
+column is the exact rule. A `CellScore` with exactly one axis at the reference has a
+`Separation`: which term the axes pinned, what it read, what the other term read, and
+the ratio between them. The ratio is the claim (ledger section 4). Where the pinned
+term is exactly `0.0` the ratio is `inf`, and the pinned value beside it says why.
+
+`score_cross` scores every cell and hands back a `CrossScore` carrying the cross's
+certificate. Its `both_positive` cells are the perturbed model under a degraded rule
+with both terms above zero. `separations` refuses to answer when there are none: a
+contrast needs a cell that shows both terms can move, and a cross with only the exact
+rule cannot show it.
+
+`render` prints one row per cell. A separation row carries its pinned term, its
+moving term, the ratio, and the worst `cond(Σ)` and `cond(S)` behind it, on that one
+line, so a separation cannot be printed without them (prohibition 5). On the
+twelve-step double integrator the frozen gain and the diagonal rule read gaps in the
+tens of nats. Both start from a prior with unit covariance that the exact filter
+contracts fast and they do not, so the early steps dominate. That is a reading, not a
+result: nothing here is registered yet, and the numbers are `COMPUTED` until PR-5
+declares what they are measured against.
+
+## The additivity check measures both sides on its own
+
+`cpomdp.additivity` is a separate module, and `AdditivityCheck` is a separate object,
+because it is the one place `H(p*)` is estimated. The evaluator's two terms never
+need an entropy. The check takes an `EntropyEstimator` explicitly: `GaussianEntropy`
+is the closed form with no bar, `MonteCarloEntropy` samples and carries a
+standard-error bar, and anything else that fits the protocol can be wired in.
+
+The left side is measured directly. `variational_free_energy` computes
+`E_q[ln q − ln p(y|x) − ln p(x)]` term by term from the cell filter's belief and the
+model's joint, never through the identity. Readings are drawn from the true
+predictive and `F` is averaged over them, with `δ_F` as a stated number of standard
+errors. The right side is the estimator's entropy plus the two closed-form
+divergences. Nothing on one side is derived from the other.
+
+The residual carries the four-term bound `δ_F + δ_H + δ₁ + δ₂`. The worked case in
+the tests shows a residual of `0.008` closing inside `δ_F = 0.01` and failing when
+`δ_F` is dropped, with nothing about the measurement changed. On the double
+integrator the accounting closes on the calibration cell, both off-diagonal kinds
+and the both-positive cell, with the closed-form entropy and with the sampled one. A
+closed form nudged by a twentieth of a nat fails to close, which is what says the
+check can tell.
+
+Not yet here: F5, common-mode propagation of a shared reference error into a
+difference. It is shared with Paper 3's G10 and neither the seam nor the Paper 3
+toolbox may import `cpomdp.scoring`, so where it lives is a decision to take first.

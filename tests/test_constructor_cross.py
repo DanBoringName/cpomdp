@@ -214,3 +214,18 @@ def test_the_refusal_keeps_the_type_the_axis_raised():
             rules,
         )
     assert isinstance(refused.value.__cause__, ValueError)
+
+
+def test_each_cell_knows_whether_its_axes_sit_at_the_reference():
+    cross = build_cross(_spec(), _models(), _rules())
+    flags = {
+        (cell.model_name, cell.inference_name): (
+            cell.model_is_correct,
+            cell.inference_is_exact,
+        )
+        for cell in cross.cells
+    }
+    assert flags[("correct", "exact")] == (True, True)
+    assert flags[("noisy_sensor", "exact")] == (False, True)
+    assert flags[("correct", "frozen_gain")] == (True, False)
+    assert flags[("noisy_process", "diagonal")] == (False, False)
