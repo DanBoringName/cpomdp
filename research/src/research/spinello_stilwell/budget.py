@@ -487,6 +487,7 @@ def main() -> None:
     # This reading is two *prior* spreads out, which is inside the bulk. It is the
     # number the sweep below has to be compared against, so it is pinned here.
     assert survey_worst == 10, counts
+    assert counts["quadratic", 0.30] == survey_worst, counts
     assert counts["constant", 0.06] == 2, counts
 
     print("\nThe curvature axis, at the readings the gap actually calls the rung at.")
@@ -501,13 +502,22 @@ def main() -> None:
             f"    bulk {max(bulk for bulk, _ in swept[tolerance].values())},"
             f" edge {max(edge for _, edge in swept[tolerance].values())}"
         )
-    tight = swept[1e-12]
+    declared, tighter = swept[1e-12], swept[1e-14]
     # The reading is out at the box edge here and two prior spreads out in the survey
     # above, so the two are not in the same units and the sweep below is what compares
     # against the declared families like for like.
-    assert max(bulk for bulk, _ in tight.values()) == 23, tight
-    assert max(edge for _, edge in tight.values()) == 65, tight
-    assert all(edge > bulk for bulk, edge in tight.values()), tight
+    assert max(bulk for bulk, _ in declared.values()) == 23, declared
+    assert max(edge for _, edge in declared.values()) == 65, declared
+    assert all(edge > bulk for bulk, edge in declared.values()), declared
+    # What two decades of tolerance cost, which is the trade ADR-058 chose `1e-12` on:
+    # four more iterations in the bulk, and no cell that gets cheaper.
+    assert max(bulk for bulk, _ in tighter.values()) == 27, tighter
+    assert max(edge for _, edge in tighter.values()) == 76, tighter
+    assert all(
+        tighter[curvature][where] >= declared[curvature][where]
+        for curvature in OPERATING_CURVATURES
+        for where in (0, 1)
+    ), (tighter, declared)
 
     print("\nThe family axis, over the same offsets, at the declared tolerance.")
     print(f"  {'family':<26} {'worst in the bulk':>19} {'worst at the box edge':>23}")
