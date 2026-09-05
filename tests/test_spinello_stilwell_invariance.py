@@ -59,9 +59,10 @@ def test_it_reports_no_warrant(module):
 )
 @pytest.mark.parametrize("owed", ["max_iterations", "tolerance"])
 def test_the_rung_s_open_decisions_stay_arguments(iterate, owed):
-    # The budget and the tolerance are undeclared on purpose: ADR-056 routes them to a
-    # measurement that has not been made. A default here would settle by default what
-    # the record says is open, so every caller has to say which budget it ran at.
+    # ADR-058 declares the rung's budget and tolerance. The probes here still have to
+    # say which ones they ran at. A default in `scheme` would let a probe report a
+    # number without recording what produced it, and would put the declared pair in
+    # code that is not the rung.
     import inspect
 
     parameter = inspect.signature(iterate).parameters[owed]

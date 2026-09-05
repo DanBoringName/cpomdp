@@ -159,10 +159,11 @@ CASE: WorkedCase = {
 #: happened to work in one direction would show.
 SCALES = (1.0, 0.5, 3.0, 7.0)
 
-#: The budget the probes here and in `repair` run to convergence at, and the relative
-#: step below which a run counts as converged. These are the probes' numbers and are
-#: printed with every result they produce. The rung's budget is a different thing,
-#: undeclared until an ADR declares it (ADR-056), and nothing reads it off these.
+#: The budget every probe in this package runs to convergence at, and the relative step
+#: below which a run counts as converged. These are the probes' numbers and are printed
+#: with every result they produce. The rung's budget is a different thing, declared by
+#: ADR-058 as 64 at `1e-12`. A probe that ran to it would report the cap rather than the
+#: count the cap has to be judged against.
 PROBE_BUDGET = 200
 PROBE_TOLERANCE = 1e-14
 

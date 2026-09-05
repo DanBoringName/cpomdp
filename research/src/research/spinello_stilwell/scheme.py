@@ -19,8 +19,8 @@ One implementation, two callers: `invariance` measures what rescaling moves and 
 measures what the deletion costs. A second copy of (35) is the thing that drifts.
 
 Not the rung. No guard at the pole, which ADR-057 decides the shipped rung does not
-need. The iteration budget is an argument rather than a declaration, because
-`research/spinello_stilwell_rung.md` still owes that one.
+need. The iteration budget is an argument rather than a declaration: ADR-058 declares
+the rung's, and a probe that measures what a budget has to cover cannot run to one.
 
 **Care with the letter sigma.** cpomdp writes `sigma` for the prior spread and the paper
 writes it for the observation-noise variance. `noise` is the paper's quantity throughout
@@ -210,9 +210,10 @@ def iterate(
     """Spinello-Stilwell (35) for a scalar linear-mean sensor, in rescaled units.
 
     `R(x) = base_noise + curvature * x^2` and `h(x) = x`, both rescaled by `scale`.
-    The budget and the tolerance have no defaults. A probe runs at some budget and
-    says which, and the rung's own stays undeclared (ADR-056). Exhausting the budget
-    is reported through the count returned, which then equals `max_iterations`.
+    The budget and the tolerance have no defaults. A probe runs at some budget and says
+    which, and the rung's own belongs to the rung (ADR-058) rather than to this module.
+    Exhausting the budget is reported through the count returned, which then equals
+    `max_iterations`.
 
     Args:
         observation: the reading, in unrescaled units.
