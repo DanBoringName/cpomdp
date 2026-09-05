@@ -24,12 +24,14 @@ from itertools import pairwise
 from typing import NamedTuple
 
 from research.spinello_stilwell import scheme
-from research.spinello_stilwell.invariance import WorkedCase
+from research.spinello_stilwell.invariance import (
+    PROBE_BUDGET,
+    PROBE_TOLERANCE,
+    WorkedCase,
+)
 
 __all__ = [
     "OFFSETS",
-    "PROBE_BUDGET",
-    "PROBE_TOLERANCE",
     "RIDGE",
     "Step",
     "case_at",
@@ -46,11 +48,6 @@ __all__ = [
 #: nothing about the limit.
 OFFSETS = (1e-2, 1e-4, 1e-6, 1e-8)
 
-#: The budget and the tolerance these probes run at, printed beside every number they
-#: produce. The rung's own stays undeclared until an ADR takes it.
-PROBE_BUDGET = 200
-PROBE_TOLERANCE = 1e-14
-
 #: Where the prediction is put when a case is built at a chosen distance from the pole.
 #: Off the origin, because `R'(0) = 0` on a symmetric ridge kills the deleted block for
 #: a reason that has nothing to do with the pole.
@@ -60,8 +57,10 @@ _PRIOR_VARIANCE = 0.04
 _OBSERVATION = 1.7
 
 #: The registered ridge, `R0 = 1/2` and `kappa = 1`. Its noise is one at
-#: `x = +/- sqrt(1/2)`, which is also its operating point `mu* = sqrt(R0/kappa)`, so a
-#: run starting there begins on the pole and its iterates cross to the inside.
+#: `x = +/- sqrt(1/2)`, which is also its operating point `mu* = sqrt(R0/kappa)`, so the
+#: pole sits on the operating point and the crossing below sits inside it. Nothing runs
+#: a trajectory from here: what is measured is the step from a state, and the prior
+#: stays where the case declares it.
 RIDGE: WorkedCase = {
     "observation": _OBSERVATION,
     "prior_mean": math.sqrt(0.5),
@@ -227,7 +226,10 @@ def singular_state(case: WorkedCase) -> float:
 
 def main() -> None:
     """Measure both sides of the failure and assert what each one shows."""
-    print(f"Route 3, printed scheme. Probe budget {PROBE_BUDGET}, tolerance 1e-14.")
+    print(
+        f"Route 3, printed scheme. Probe budget {PROBE_BUDGET},"
+        f" tolerance {PROBE_TOLERANCE:.0e}."
+    )
 
     print("\nThe printed curvature is not evaluable on the pole itself.")
     try:
@@ -238,7 +240,7 @@ def main() -> None:
         raise AssertionError("the printed curvature evaluated at noise = 1")
     modified = scheme.gauss_newton_curvature(1.0, 1.0, 1.0, 1.2, log_block=False)
     print(f"  modified: {modified:.6g}")
-    assert modified > 0.0, modified
+    assert abs(modified - 2.56) < 5e-3, modified
 
     print("\nEither side of the pole, at the prediction.")
     print(f"{'offset':>10} {'curvature above':>18} {'curvature below':>18}")
@@ -290,10 +292,11 @@ def main() -> None:
     )
     prediction = closest["prior_mean"]
     answer = converged[-1].estimate
+    agreement = abs(answer - repaired[-1].estimate)
     print(f"  first printed step {first.step:.6g}, prior spread {spread}")
     print(f"  any relative tolerance above {silent_above:.3g} stops the run at one")
     print(f"  the run stopped there reports {prediction - first.step:.9f}")
-    print(f"  run out, both curvatures agree on {answer:.9f}")
+    print(f"  run out, both curvatures agree on {answer:.9f} to {agreement:.1e}")
     print(f"  so the reported estimate is wrong by {abs(answer - prediction):.4g}")
     print(
         f"  iterations to get there: printed {len(converged)}, modified {len(repaired)}"
@@ -309,7 +312,14 @@ def main() -> None:
     # run does. The number it hands back is the prediction.
     assert len(stalled) == 1, len(stalled)
     assert abs(stalled[-1].estimate - prediction) < 1e-7, stalled[-1].estimate
-    assert abs(answer - prediction) > 1e-2, answer
+    # Both estimates are quoted to nine figures, so both are pinned there. The gap
+    # between them is the error a caller is handed for stopping on iteration one.
+    assert abs(prediction - first.step - 0.500000057) < 5e-10, first.step
+    assert abs(answer - 0.549191167) < 5e-10, answer
+    assert abs(abs(answer - prediction) - 0.049191) < 5e-7, answer
+    # The two curvatures share this fixed point, which is what makes the printed run's
+    # extra iterations a cost and not a different answer.
+    assert agreement < 1e-15, (answer, repaired[-1].estimate)
     # The distance to the pole sets the threshold, so no declared tolerance is safe for
     # every case. Halving the offset halves the tolerance that would have caught it.
     nearer = case_at(OFFSETS[-1] / 100.0)
@@ -319,12 +329,17 @@ def main() -> None:
     # same tolerance leaves it running.
     assert abs(step_at(closest, _POLE_STATE, log_block=False).step) > 1e-2
     # The printed scheme also pays for the collapse in iterations, which is the
-    # per-cycle cost RFC-001 accounts for.
-    assert len(converged) > len(repaired), (len(converged), len(repaired))
+    # per-cycle cost RFC-001 accounts for. Both counts are quoted in the write-up.
+    assert (len(converged), len(repaired)) == (24, 12), (converged, repaired)
 
     print("\nThe loud side: where `1/P + R` crosses zero, on the registered ridge.")
     crossing = singular_state(RIDGE)
     print(f"  crossing at x = {crossing:.12f}")
+    # Quoted to twelve figures in the write-up, so pinned to them here. It sits inside
+    # the pole, which is what "the sum turns indefinite before the noise reaches one"
+    # means.
+    assert abs(crossing - 0.694474243706) < 5e-13, crossing
+    assert crossing < math.sqrt(0.5), crossing
     print(f"{'distance':>12} {'step inside':>16} {'step outside':>16}")
     approach = []
     for distance in (1e-8, 1e-9, 1e-10):
@@ -339,10 +354,11 @@ def main() -> None:
         assert inside_step * outside_step < 0.0, (inside_step, outside_step)
     for (_, wider, _), (_, closer, _) in pairwise(approach):
         assert abs(closer) > 5.0 * abs(wider), (wider, closer)
-    assert abs(approach[-1][1]) > 1e6, approach[-1]
+    assert abs(abs(approach[-1][1]) - 8.81e6) < 5e3, approach[-1]
 
     print("\nPast the crossing the step climbs the objective.")
-    uphill = 0.5 * (crossing + math.sqrt((1.0 - RIDGE["base_noise"]) / 1.0))
+    edge = math.sqrt((1.0 - RIDGE["base_noise"]) / RIDGE["curvature"])
+    uphill = 0.5 * (crossing + edge)
     before = objective_at(RIDGE, uphill)
     climbed = step_at(RIDGE, uphill, log_block=True)
     descended = step_at(RIDGE, uphill, log_block=False)

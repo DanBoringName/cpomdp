@@ -11,7 +11,7 @@ import math
 
 import pytest
 
-from research.spinello_stilwell import pole_failure, scheme
+from research.spinello_stilwell import invariance, pole_failure, scheme
 
 
 def test_it_runs_and_its_assertions_hold(capsys):
@@ -57,7 +57,7 @@ class TestTheFailureFromAbove:
         stalled = pole_failure.trajectory(
             case,
             log_block=True,
-            max_iterations=pole_failure.PROBE_BUDGET,
+            max_iterations=invariance.PROBE_BUDGET,
             tolerance=10.0 * collapsed / spread,
         )
         assert len(stalled) == 1
@@ -68,8 +68,8 @@ class TestTheFailureFromAbove:
         settled = pole_failure.trajectory(
             case,
             log_block=True,
-            max_iterations=pole_failure.PROBE_BUDGET,
-            tolerance=pole_failure.PROBE_TOLERANCE,
+            max_iterations=invariance.PROBE_BUDGET,
+            tolerance=invariance.PROBE_TOLERANCE,
         )
         assert abs(settled[-1].estimate - case["prior_mean"]) > 1e-2
 
