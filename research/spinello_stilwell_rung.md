@@ -326,10 +326,15 @@ right routing rather than reporting the number with a caveat.
 Both departures fall as the budget grows, so what is measured is truncation and not the
 scheme.
 
-**What a budget has to cover: ten iterations.** Over the five declared families at the
-six declared spreads, the modified scheme at tolerance `1e-14` needs 2 to 10 iterations,
-worst at `1 + x²` and spread `0.30`, and the fixed family needs 2 everywhere. Nothing
-here declares a budget. The number is what a declaration would read.
+**What a budget has to cover, in the bulk and at the box edge.** Over the five declared
+families at the six declared spreads, with the reading two *prior* spreads out, the
+modified scheme at tolerance `1e-14` needs 2 to 10 iterations, worst at `1 + x²` and
+spread `0.30`, and the fixed family needs 2 everywhere. That reading is inside the bulk.
+`averaged_inference_gap` runs its observation box nine *predictive* spreads out on
+either side of the prior mean and calls the rung at every node of it. Out there, at
+`1e-12`, the same families need up to 124 iterations, worst at `1.5 + 0.5 sin(x)` and
+spread `0.30`, and the curvature axis from `0.1` to `100` needs up to 65. Nothing here
+declares a budget. Those are the numbers a declaration reads.
 
 **The slopes are declared, not differenced.** `FAMILIES` declares `R` and (35) needs
 `R'`. A central difference at `1e-6` carries about `1e-11` of error into the iterate,
@@ -356,9 +361,18 @@ differentiation, because a central difference floors convergence above `1e-12` a
 run would then be measuring the difference. That reaches the rung's contract in PR-7
 rather than staying here.
 
-One cell exhausts the budget: `κ = 100` at the observation box's edge takes 65
-iterations. Its predictive weight is `2.6e-18` of the centre's. What a single voided
-node does to a reported gap is left open, and ADR-058 names the three ways it could go.
+Two cells exhaust the budget, both at the observation box's edge. `1.5 + 0.5 sin(x)` at
+spread `0.30` takes 124 iterations and `κ = 100` takes 65. The first is a declared family
+at a declared spread rather than a bracket: `R` is bounded and periodic there, so the
+iterate crosses several periods of it before it settles. Both nodes carry `2.6e-18` of
+the centre's predictive weight. What a voided node does to a reported gap is left open,
+and ADR-058 names the three ways it could go.
+
+Past the box edge the scheme stops converging at all on the bounded family: at thirteen
+predictive spreads `1.5 + 0.5 sin(x)` at spread `0.30` settles into a stable two-cycle,
+alternating by `2.83` for as long as it is run. That is outside the registered box, and
+it is why the budget comes with a routing instead of being chosen large enough to be
+safe.
 
 ## Q8. Rung two has no published numerical validation
 

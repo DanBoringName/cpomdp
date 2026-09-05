@@ -3885,23 +3885,37 @@ The counts come from `research.spinello_stilwell.budget`, run with
 Over the declared spreads, curvatures from `0.1` to `100`, and readings placed in
 predictive standard deviations off the prior mean, the modified scheme at `1e-12` needs
 
-| where the reading sits | worst count |
-| --- | --- |
-| the bulk, out to two predictive spreads | 23 |
-| the box edge, nine predictive spreads | 65 |
+| where the reading sits | curvatures `0.1`–`100` | the declared families |
+| --- | --- | --- |
+| the bulk, out to two predictive spreads | 23 | 16 |
+| the box edge, nine predictive spreads out | 65 | 124 |
 
-The declared families alone need 10, and that number understates the range by a factor
-of six. They are run at a reading two spreads out, and `averaged_inference_gap` sweeps
-an observation box nine predictive standard deviations wide, so the rung is called at
-every node of it.
+Nine is `measure_truncation`'s half-width multiplier, in plug-in predictive spreads,
+which is where the reference truncations the registration quotes were measured. The rung
+is called at every node inside it, so at readings up to thirteen off the prior mean. The
+convergence survey's ten iterations are not a comparable number: it reads at two *prior*
+spreads, which is at most `0.6` off the mean.
 
 64 is a little under three times the worst count in the bulk, which is where the
-predictive mass is. A cell that exhausts it has to be unlike anything measured.
+predictive mass is. At the box edge it is not enough, and the first consequence below
+says which cells that voids.
 
 **The budget is a cap and not a cost.** A convergent run stops at its tolerance, so
-raising the cap changes nothing about the runs that produce numbers. What it changes is
-the price of a run that will report `VOID` anyway, and the gap calls the rung once per
-observation node, so that price is `64 K` evaluations rather than `500 K`.
+raising the cap changes nothing about a cell that already converges inside it. What it
+changes is the price of a run that will report `VOID` anyway, and the gap calls the rung
+once per observation node, so that price is `64 K` evaluations rather than `500 K`.
+
+**128 would convert both voided nodes and is rejected on the trade.** It doubles the
+price of every run that still reports `VOID`, and what it buys is two nodes carrying
+`2.6e-18` of the centre's predictive weight, which cannot move a reported gap at any
+precision the ladder works to. RFC-001 measures per-cycle compute, and a cap sized by
+the least-weighted node in the box is how a baseline gets bloated.
+
+**No cap converts every cell.** One offset past the box edge, at thirteen predictive
+spreads, `1.5 + 0.5 sin(x)` at spread `0.30` settles into a stable two-cycle and stays
+in it: the iterate alternates by `2.83` for as long as it is run. That is outside the
+registered box and outside what this declaration covers. It is the reason the budget is
+paired with a routing rather than chosen large enough to be safe.
 
 ### Why `1e-12`
 
@@ -3927,13 +3941,16 @@ standing rule 2 objects to.
 
 ### Consequences
 
-- **A node at the box edge can exhaust the budget.** At `kappa = 100` and nine
-  predictive spreads the run takes 65 iterations, one more than the budget, so that node
-  reports `VOID`. Its predictive weight is `2.6e-18` of the centre's, so it carries
-  nothing into the average. What a single voided node does to a reported gap is a
-  decision PR-7 owes, and this entry does not take it: dropping the node, voiding the
-  gap and widening the budget are all still open. No curvature range is registered
-  anywhere, so `kappa = 100` is a bracket rather than a declared cell.
+- **Two nodes at the box edge exhaust the budget, and one of them is a declared cell.**
+  At nine predictive spreads `1.5 + 0.5 sin(x)` at spread `0.30` takes 124 iterations
+  and `kappa = 100` takes 65, so both report `VOID`. `R` is bounded and periodic on the
+  first, so the iterate crosses several periods of it before it settles. That is a
+  declared family at a declared spread and not a bracket. No curvature range is
+  registered anywhere, so `kappa = 100` is the bracket. Both nodes carry `2.6e-18` of
+  the centre's predictive weight, so neither carries anything into the average. What a
+  voided node does to a reported gap is a decision PR-7 owes, and this entry does not
+  take it: dropping the node, voiding the gap and widening the budget are all still
+  open.
 - **`test_the_rung_s_open_decisions_stay_arguments` changes meaning.** The research
   probes keep taking a budget and a tolerance as arguments and printing what they ran
   at. What is now settled is the rung's own, and it is declared here rather than

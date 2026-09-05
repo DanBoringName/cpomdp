@@ -132,8 +132,9 @@ Size key: S under a day, M two to four days, L a week or more. Grouping the orig
 nineteen items into eleven PRs pushed six of them to L. That is the trade.
 
 **Critical path.** `PR-1 → PR-3 → PR-7 → PR-7b → PR-8 → PR-9 → PR-11`. It runs through the
-gate, so nothing shortens it except starting PR-7 early. PR-7a is off the path and can go
-any time, and PR-7 cannot ship a declared budget until it has.
+gate, so nothing shortens it except starting PR-7 early. PR-7a blocks PR-7 without being
+on the path: it has no blockers of its own and is a day's work, so it can land any time
+before PR-7, which cannot ship a declared budget until it has.
 
 **Parallel tracks.** PR-1 and PR-2 touch nothing else and can go first or alongside
 anything. PR-1b is the exception: it edits `enumeration.py`, which PR-3 also opens, so it
@@ -621,7 +622,7 @@ sampled existence claim, settled by one construction.
 
 ## PR-7a — the printed scheme's failure probes, and the declared budget
 
-`serves: 2, 3` · `blocked by: ADR-057 landing` · `alias: —` · `size: S` ·
+`serves: 2, 3` · `blocked by: —` · `alias: —` · `size: S` ·
 `tag: v0.4.5` · `ADR: on landing`
 
 Ahead of the ladder. The ladder cannot ship a rung whose budget is undeclared, and the
@@ -645,9 +646,12 @@ guard and takes its budget as an argument.
       budget of one, `6.7e-6` by five, and exactly `0` run out. That last number is
       ADR-057's "surgical".
 - [x] **A convergence-count survey.** The declared families need 10 iterations at
-      `1e-14`. Over the whole operating range at `1e-12` it is 23 in the bulk and 65 at
-      the observation box's edge, because the gap calls the rung at every node of a box
-      nine predictive spreads wide.
+      `1e-14` two prior spreads out. The gap calls the rung nine predictive spreads out
+      as well, at the edge of its observation box: there, at `1e-12`, the curvature axis
+      needs 65 and `1.5 + 0.5 sin(x)` at spread `0.30` needs 124.
+- [x] **What a wider budget cannot buy.** One offset past the box edge the bounded
+      family settles into a stable two-cycle instead of converging, so a cap large
+      enough to be safe everywhere does not exist and the routing is what handles it.
 - [x] **The ADR**, ADR-058: budget 64, tolerance `1e-12` relative to the prior spread,
       and the rung differentiates `R` by automatic differentiation rather than by a
       difference. A difference floors convergence above the declared tolerance, which
@@ -658,16 +662,17 @@ guard and takes its budget as an argument.
 **Merge gate:** every number printed is asserted in the module that prints it. Nothing
 here acquires a warrant, and no module gains a `run_checks`.
 
-**Left open for PR-7**, from ADR-058's consequences: one node at the box edge exhausts
-the budget at `κ = 100`, carrying `2.6e-18` of the centre's predictive weight. Whether a
-voided node drops out, voids the gap, or widens the budget is the ladder's decision.
+**Left open for PR-7**, from ADR-058's consequences: two nodes at the box edge exhaust
+the budget, `1.5 + 0.5 sin(x)` at spread `0.30` and `κ = 100`, each carrying `2.6e-18` of
+the centre's predictive weight. Whether a voided node drops out, voids the gap, or widens
+the budget is the ladder's decision.
 
 ## PR-7 — Exact reference filter and the rule ladder
 
-`serves: 2, 3` · `blocked by: PR-3` · `alias: P2-5 (C), P2-7 (D)` · `size: L` ·
+`serves: 2, 3` · `blocked by: PR-3, PR-7a` · `alias: P2-5 (C)` · `size: L` ·
 `tag: v0.4.5`
 
-The hard item, and it is shared.
+The hard item, and it is shared. P2-7 (D) moved to PR-7b with the ordering work.
 
 - [ ] Grid or quadrature filter over a low-dimensional latent, accepting an **arbitrary
       pointwise-evaluable likelihood** rather than an R(x)-specific one. The generality is
