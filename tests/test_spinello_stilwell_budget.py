@@ -7,7 +7,8 @@ Running the module is checking it, since every claim it prints is asserted insid
 These call the same functions so a failure names the claim rather than the whole run.
 """
 
-from research.spinello_stilwell import budget
+from research.checks.gap_kernel import FAMILIES
+from research.spinello_stilwell import budget, invariance
 
 
 def test_it_runs_and_its_assertions_hold(capsys):
@@ -50,7 +51,7 @@ class TestTheBudget:
     def test_the_declared_slopes_agree_with_a_difference(self):
         # `SLOPES` differentiates a registered declaration by hand, so it can drift
         # from what it differentiates without anything else noticing.
-        worst = budget._slopes_match_a_difference((-1.0, 0.0, 0.5, 1.0, 2.0))
+        worst = budget.slopes_match_a_difference((-1.0, 0.0, 0.5, 1.0, 2.0))
         assert all(gap < 1e-6 for gap in worst.values()), worst
 
     def test_no_declared_cell_needs_more_than_ten_iterations(self):
@@ -60,13 +61,48 @@ class TestTheBudget:
         assert max(counts.values()) == 10, counts
         assert counts["constant", 0.06] == 2, counts
 
-    def test_the_operating_range_needs_far_more_than_the_declared_families(self):
-        # The declared families are run at a reading two spreads out. The gap runs the
-        # rung to its box edge, nine predictive spreads, and the count follows.
+    def test_the_box_edge_costs_far_more_than_the_bulk_at_every_curvature(self):
+        # The convergence survey reads two *prior* spreads out. The gap runs the rung
+        # nine *predictive* spreads out, to the edge of its observation box, and the
+        # count follows.
         worst = budget.counts_over_the_operating_range(1e-12)
         assert max(bulk for bulk, _ in worst.values()) == 23, worst
         assert max(edge for _, edge in worst.values()) == 65, worst
         assert all(edge > bulk for bulk, edge in worst.values()), worst
+
+    def test_a_declared_family_exhausts_the_declared_budget_at_the_box_edge(self):
+        # The curvature sweep never leaves `1 + kappa x^2`, so it cannot see this. On
+        # the bounded oscillating family the iterate crosses several periods of `R`
+        # before it settles, and 64 iterations do not get it there.
+        worst = budget.counts_over_the_declared_families(1e-12)
+        assert worst["sin"] == (10, 124), worst
+        assert max(bulk for bulk, _ in worst.values()) == 16, worst
+        assert [key for key, (_, edge) in worst.items() if edge > 64] == ["sin"], worst
+
+    def test_every_declared_family_still_converges_inside_the_probe_budget(self):
+        # A count equal to the probe budget would be a run that never settled, and the
+        # number read off it would be the budget rather than a measurement.
+        worst = budget.counts_over_the_declared_families(1e-12)
+        assert all(
+            count < invariance.PROBE_BUDGET for cell in worst.values() for count in cell
+        ), worst
+
+    def test_the_bounded_family_stops_converging_past_the_box_edge(self):
+        # A stable two-cycle, not a slow run. Widening a budget is one of the three
+        # options ADR-058 leaves open for a voided node, and this is what it cannot do.
+        settled, alternate, back = budget.three_iterates_at(
+            FAMILIES["sin"], 0.30, budget.OUTSIDE_THE_BOX, 400
+        )
+        assert abs(settled - back) < 1e-12
+        assert abs(alternate - back) > 1.0
+
+    def test_the_unbounded_family_has_settled_at_the_same_offset(self):
+        # The falsifier for the test above: a two-cycle everywhere would mean the
+        # iteration was wrong rather than that this family is hard far from its mean.
+        states = budget.three_iterates_at(
+            FAMILIES["quadratic"], 0.30, budget.OUTSIDE_THE_BOX, 400
+        )
+        assert max(states) - min(states) < 1e-12, states
 
     def test_a_tighter_tolerance_costs_iterations_at_every_curvature(self):
         # What 1e-14 buys over 1e-12, in the currency a budget is spent in.
@@ -83,7 +119,7 @@ class TestTheBudget:
         # ADR-057's "surgical" in numbers: a difference before convergence and none
         # after, so the deletion moves no fixed point.
         early = budget.modification_cost(budget.SLOW_CASE, 1)
-        settled = budget.modification_cost(budget.SLOW_CASE, budget.PROBE_BUDGET)
+        settled = budget.modification_cost(budget.SLOW_CASE, invariance.PROBE_BUDGET)
         assert early[0] > 0.0
         assert settled[0] < 1e-12
         assert settled[1] < 1e-12
