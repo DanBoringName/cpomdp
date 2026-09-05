@@ -503,43 +503,50 @@ fitted to a gap figure that does not yet exist.
 ## PR-4 — Paper 2 scoring: evaluator, separation cells, error bars
 
 `serves: 2, and F5 serves 3` · `blocked by: PR-3` · `alias: P2-1b (B), F1, F2, F3, F5` ·
-`size: L` · `tag: v0.4.5` · `ADR: on landing`
+`size: L` · `tag: v0.4.5` · `ADR: ADR-059`
 
-- [ ] `ThreeTermEvaluator` returns `Decomposition(misspecification, inference_gap)`, two
+- [x] `ThreeTermEvaluator` returns `Decomposition(misspecification, inference_gap)`, two
       divergences directly computed. The type carries no entropy field and no entropy
       estimator, which makes the standing prohibition on entropy subtraction structurally
       unrepresentable rather than discouraged.
-- [ ] `AdditivityCheck` is a **separate object** taking an entropy estimator explicitly.
+- [x] `AdditivityCheck` is a **separate object** taking an entropy estimator explicitly.
       It is the only place `H(p*)` is estimated, which is why its residual carries an
       entropy bar and the divergences do not.
-- [ ] **Reuse `CompletenessCertificate` from `cpomdp.enumeration` on the constructor
+- [x] **Reuse `CompletenessCertificate` from `cpomdp.enumeration` on the constructor
       cross.** Expected cardinality `|model axis| × |inference axis|`, visited, equality
       asserted, `IncompleteEnumerationError` on mismatch. This is the cheapest provability
       purchase in the plan (Route 2), so do it first inside the PR.
-- [ ] Report the both-positive diagonal cell explicitly. Off-diagonal separations are only
+- [x] Report the both-positive diagonal cell explicitly. Off-diagonal separations are only
       meaningful against a cell where both terms move.
-- [ ] **F2.** Condition numbers `cond(Σ)` and `cond(S)` printed in every separation cell.
+- [x] **F2.** Condition numbers `cond(Σ)` and `cond(S)` printed in every separation cell.
       An ill-conditioned matrix manufactures or destroys twelve orders. Extend
       `diagnostics.rollout_conditioning` rather than writing a second one.
-- [ ] **F3.** Separation ratio: the pinned term, the moving term's magnitude beside it,
+- [x] **F3.** Separation ratio: the pinned term, the moving term's magnitude beside it,
       and their ratio. "Below 1e-12" is empty if the term is naturally O(1e-13). The claim
       is the ratio, roughly twelve orders, not the small number.
-- [ ] Absence of catastrophic cancellation checked wherever a term is computed as a
+- [x] Absence of catastrophic cancellation checked wherever a term is computed as a
       difference of large quantities.
-- [ ] **F1.** The additivity residual is `E[F]_measured − (H(p*) + D₁ + D₂)` and the bound
+- [x] **F1.** The additivity residual is `E[F]_measured − (H(p*) + D₁ + D₂)` and the bound
       is `δ_F + δ_H + δ₁ + δ₂`, four terms. Omitting `δ_F` under-bounds the residual and
       lets a real closure failure read as within tolerance.
-- [ ] **F5.** Common-mode propagation for differences. Quantities scored against one
+- [x] **F5.** Common-mode propagation for differences. Quantities scored against one
       reference share its discretisation error, which largely cancels in their
       differences. Pre-register the resolution threshold as the error *on the difference*,
       not the sum of the bars.
-- [ ] F5 is shared. Paper 3's **G10** is defined as propagation with common-mode
+- [x] F5 is shared. Paper 3's **G10** is defined as propagation with common-mode
       cancellation against the same reference filter. Build it once.
 
 **Merge gate:** the cross enumerates completely. R2 and R3 print at `PROVED`. No cell
 asserts a separation without printing its ratio and conditioning. The four-term bound is
 asserted. A difference and a sum-of-bars are shown to differ on a worked case.
-**ADR on landing.**
+**ADR-059.**
+
+**Met 2026-09-05.** All five conditions hold. The cross carries a
+`ProductCompletenessCertificate` at `PROVED`, which warrants the enumeration and not
+the cell values: those are `COMPUTED` until PR-5 registers what they are measured
+against. F5 lives in `cpomdp.resolution`, a leaf the boundary test asserts, so the seam
+and the reference filter reach it without reaching the evaluator. Nothing is exported
+at the top level, so no `docs/api/` page is owed yet.
 
 **Warrant:** R1 `EXACT` / Prover 1 with a sampled witness. R2 and R3 `EXACT`–`BOUNDED` /
 **Prover 3 · enumeration**. R4 `BOUNDED` / Prover 3 · sample.

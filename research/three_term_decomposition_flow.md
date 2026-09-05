@@ -176,6 +176,38 @@ and the both-positive cell, with the closed-form entropy and with the sampled on
 closed form nudged by a twentieth of a nat fails to close, which is what says the
 check can tell.
 
-Not yet here: F5, common-mode propagation of a shared reference error into a
-difference. It is shared with Paper 3's G10 and neither the seam nor the Paper 3
-toolbox may import `cpomdp.scoring`, so where it lives is a decision to take first.
+## A difference is read at its own error, not the sum of two bars
+
+`cpomdp.resolution` is a leaf. It imports nothing first-party, and the boundary test
+asserts that, because it is built once for the evaluator and for the things that may
+not import the evaluator: the reference filter, and Paper 3's G10. It went into its
+own module rather than `cpomdp.diagnostics` because it is not a diagnostic of a
+model. It is the arithmetic of comparing two bounded numbers.
+
+A `Bar` is split by where its error came from. The `common_mode` part is the shift
+the reference's error puts on the value, at the reference's bar, and it is *signed*.
+The `own` part is the quantity's alone. Two quantities scored against one reference
+share the reference's error, so in their difference the common-mode parts subtract:
+`difference_bar` carries `a.common_mode − b.common_mode` and `a.own + b.own`. The
+conservative rule reads `|a| + |b|` on the common-mode parts instead. When the two
+sensitivities share a sign the difference bar is smaller, which is the cancellation
+ledger section 4 describes. When they do not, nothing cancels and the two rules
+agree. The sign is what keeps the second case honest; an unsigned split would
+under-bound it, the way dropping `δ_F` under-bounds the additivity residual.
+
+The threshold is pre-registered by construction. `resolution_threshold` takes two
+`Bar`s, and a `Bar` has no value field, so it cannot be read off the numbers it
+judges. `resolve` compares two `Bounded` values at that threshold and reports one of
+three: `BELOW`, `ABOVE`, or `NOT_RESOLVED`. The third is the measured tie the ledger
+asks the fidelity ladder for, and the strict inequality means two `EXACT` values that
+agree also read as not resolved, since a difference of zero exceeds nothing. The
+`Resolution` carries `sum_of_bars` beside `threshold` so a report can show what the
+shared reference bought.
+
+Two worked cases. Two rungs at `0.500` and `0.503`, each carrying `0.010` from the
+reference and `1e-4` of its own: the sum of bars is `0.0202` and calls it a tie, the
+difference bar is `2e-4` and resolves it. Then two nearby Gaussians scored by
+`gaussian_kl` against a third, whose mean is shifted by `1e-2` to stand in for its
+discretisation error. Both divergences move by about `0.01` with the same sign and
+the difference moves by `1e-4`. The two thresholds differ by a factor of two hundred
+on the same numbers.

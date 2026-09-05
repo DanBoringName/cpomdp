@@ -3962,3 +3962,92 @@ standing rule 2 objects to.
 - **The per-decision cost is bounded and attributable.** 64 iterations per observation
   node is the ceiling an iterating rung can cost, which is what RFC-001 needs to
   separate the rung's compute from the ladder's.
+
+## ADR-059 — the evaluator returns two divergences, and a difference is read at its own error
+
+**Date:** 2026-09-05
+**Status:** Accepted
+**Extends:** ADR-047, whose seam these terms are measured across
+
+`research/fep_falsification_battery.md` section C is the contract: two divergences
+that separate what a model gets wrong from what its filter gets wrong, on a cross the
+seam of ADR-047 makes measurable. `research/warrant_ledger.md` section 4 is the
+reporting discipline. `research/three_term_decomposition_flow.md` is the record of
+how the code arrived at what follows, one section per change. This entry is the
+decisions.
+
+### The result has no slot for an entropy
+
+`Decomposition` carries `misspecification` and `inference_gap` and nothing else. The
+ledger's rule against reaching a term by subtracting `H(p*)` could have been a
+docstring. It is instead a type with no field to put an entropy in, and a test that
+pins the field list, so the prohibition is unrepresentable rather than discouraged.
+Under a common exogenous action sequence the entropy is a shared floor that cancels
+between cells, and the two divergences are computable without it.
+
+The one place it is estimated is `cpomdp.additivity`, a separate module holding a
+separate object. `AdditivityCheck` takes its `EntropyEstimator` explicitly, measures
+`E[F]` directly from the cell filter's belief rather than through the identity, and
+reports a residual bounded by four terms, `δ_F + δ_H + δ₁ + δ₂`. A worked case closes
+at `δ_F = 0.01` and fails to close with `δ_F` dropped, nothing else changed, which is
+the under-bounding the ledger corrects.
+
+### Nothing is subtracted on the way to a small number
+
+Both terms are Gaussian KL divergences and one primitive serves both. The textbook
+form takes `n` from a trace and one log-determinant from another, so a divergence that
+is truly zero reads as rounding noise of either sign, and a reading below `1e-12`
+then cannot say which of two Gaussians moved. `gaussian_kl` sums squares and
+`λ − 1 − ln λ` over the eigenvalues of `cov_b⁻¹ cov_a`, each non-negative on its own,
+with the last evaluated by its series below `1e-4` where it too is a cancellation.
+Identical Gaussians read exactly `0.0` on a correlated covariance. The inference gap's
+average over the true predictive has a closed form and is built the same way.
+
+### The conditioning and the ratio travel with the number
+
+A `CellScore` carries a `RunConditioning`: the condition number of every predictive
+and posterior covariance the terms factored, per step, read by one function
+`cpomdp.diagnostics.condition_numbers` that the rollout now reads too. A cell with
+exactly one axis at the reference carries a `Separation`, which is the pinned term,
+the moving term and their ratio. The ratio is the claim. `render` prints no separation
+without its ratio and its worst conditioning on the one line, and `score_cross`
+refuses to name a separation on a cross with no cell where both terms move, since a
+contrast needs somewhere both can.
+
+### The cross is enumerated, and that is the warrant
+
+`build_cross` builds `|model axis| × |inference axis|` cells and carries a
+`ProductCompletenessCertificate` naming both axes and both versions, at `PROVED`. This
+is the Route 2 purchase from the build plan and it was done first inside the change.
+It warrants the enumeration, not the numbers: every cell value the evaluator prints is
+`COMPUTED` until PR-5 registers what it is measured against, and the flow record says
+so where it reports a reading.
+
+### A difference is read at the error on the difference
+
+Two quantities scored against one reference share its error, and the shared part
+cancels in their difference. The ledger asks that the resolution threshold be that
+error, propagated, and pre-registered, rather than the sum of the two bars.
+
+`cpomdp.resolution` splits a `Bar` into a *signed* common-mode part, the shift the
+reference's error puts on the value, and an own part. A difference's bar carries the
+difference of the common-mode parts and the sum of the own parts. The sign is the
+decision: sensitivities of one sign cancel and sensitivities of opposite sign do not,
+and an unsigned split would under-bound the second case the way a three-term bound
+under-bounds the additivity residual. `resolution_threshold` takes two `Bar`s, and a
+`Bar` has no value field, so the threshold is pre-registered by construction rather
+than by discipline. `resolve` reports `BELOW`, `ABOVE` or `NOT_RESOLVED`, the third
+being the measured tie the ledger asks the fidelity ladder for, neither confirmation
+nor refutation. Two `EXACT` values that agree read as not resolved, since a difference
+of zero exceeds nothing.
+
+The module is a leaf. It imports no first-party module and the boundary test asserts
+that, because it is built once for the evaluator and for the things that may not
+import the evaluator: the reference filter, and Paper 3's G10. It is its own module
+rather than part of `cpomdp.diagnostics` because it is not a diagnostic of a model.
+
+### Not decided here
+
+Which magnitudes the perturbation axis runs at, which seed set a stable reading is
+declared across, and what any cell is registered as measuring. Those are PR-5's, and
+nothing printed by this change is a result until it declares them.
