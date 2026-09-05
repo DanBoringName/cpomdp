@@ -180,3 +180,10 @@ def test_the_tree_imports_absolutely():
         if isinstance(node, ast.ImportFrom) and node.level > 0
     ]
     assert not relative
+
+
+def test_the_shared_propagation_is_a_leaf():
+    # The error on a difference is built once for the evaluator and for what may not
+    # import it. It reaches no first-party module, so any side can take it without
+    # taking the evaluator along.
+    assert _closure("resolution") == {"resolution"}
