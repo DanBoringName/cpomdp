@@ -449,6 +449,15 @@ covariance is wrong as well as its mean. The rung's budget stays undeclared (ADR
 The test that polices it asserted the wrong thing, that a default existed, and now
 asserts that none does.
 
+### AMENDMENT 2026-09-05: the budget that entry left undeclared is declared
+
+"The rung's budget stays undeclared (ADR-056)" above was true when it was written. It is
+not now. ADR-058 declares 64 iterations at a tolerance of `1e-12` relative to the prior
+spread, read off the counts route 5 measured, and Q7's section records it. The probes
+keep their own `PROBE_BUDGET = 200` at `1e-14`, which is not the same number and is not
+a candidate for it: a probe that ran to the declared cap would report the cap rather
+than the count the cap has to be judged against.
+
 ### RESOLVED 2026-08-24: route 2 is run, and only one declared family resists a unit choice
 
 `research/src/research/spinello_stilwell/reachable_noise.py`, run with
