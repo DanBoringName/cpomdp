@@ -77,7 +77,10 @@ class TestTheBudget:
         worst = budget.counts_over_the_declared_families(1e-12)
         assert worst["sin"] == (10, 124), worst
         assert max(bulk for bulk, _ in worst.values()) == 16, worst
-        assert [key for key, (_, edge) in worst.items() if edge > 64] == ["sin"], worst
+        exhausted = [
+            key for key, (_, edge) in worst.items() if edge > budget.DECLARED_BUDGET
+        ]
+        assert exhausted == ["sin"], worst
 
     def test_every_declared_family_still_converges_inside_the_probe_budget(self):
         # A count equal to the probe budget would be a run that never settled, and the
