@@ -254,3 +254,14 @@ class TestProbeGraphBackend:
         report = probe_model(backend, Belief(jnp.zeros(2), jnp.eye(2)), ACTIONS)
         assert not report.full_row_rank
         assert (report.rank, report.n_observations) == (1, 2)
+
+
+def test_condition_numbers_reads_a_stack_and_refuses_anything_else():
+    from cpomdp.diagnostics import condition_numbers
+
+    stack = np.array([[[4.0, 0.0], [0.0, 1.0]], [[1.0, 1.0], [1.0, 1.0]]])
+    measured = condition_numbers(stack)
+    assert measured[0] == pytest.approx(4.0)
+    assert not np.isfinite(measured[1]) or measured[1] > 1e15
+    with pytest.raises(ValueError, match="stack of square matrices"):
+        condition_numbers(np.eye(2))

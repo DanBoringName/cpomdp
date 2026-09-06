@@ -82,6 +82,7 @@ __all__ = [
     "ProbeBackend",
     "RolloutConditioning",
     "SensorReport",
+    "condition_numbers",
     "epistemic_value",
     "is_positive_definite",
     "loewner_order",
@@ -387,6 +388,28 @@ class RolloutConditioning:
     all_positive_definite: bool
 
 
+def condition_numbers(matrices: ArrayLike) -> np.ndarray:
+    """The 2-norm condition number of each matrix in a stack, on the host.
+
+    One implementation for every place a conditioning discipline is applied, so the
+    rollout and the scoring harness read the same number for the same matrix. Pure
+    NumPy: a condition number is asserted against on the host, outside any ``jit``.
+
+    Args:
+        matrices: a stack of square matrices, shape ``(k, n, n)``.
+
+    Returns:
+        A length-``k`` array of condition numbers, ``inf`` where a matrix is singular.
+    """
+    stack = np.asarray(matrices, dtype=float)
+    if stack.ndim != 3 or stack.shape[1] != stack.shape[2]:
+        raise ValueError(
+            f"condition_numbers reads a stack of square matrices, shape (k, n, n), "
+            f"got shape {stack.shape}"
+        )
+    return np.array([np.linalg.cond(m) for m in stack])
+
+
 def rollout_conditioning(trace: "PolicyEfeTrace") -> RolloutConditioning:
     """Per-step condition numbers and PD flags of a rollout trace, on the host.
 
@@ -408,9 +431,9 @@ def rollout_conditioning(trace: "PolicyEfeTrace") -> RolloutConditioning:
     sigma_post = np.asarray(trace.sigma_post, dtype=float)
 
     return RolloutConditioning(
-        cond_sigma_pred=np.array([np.linalg.cond(m) for m in sigma_pred]),
-        cond_s=np.array([np.linalg.cond(m) for m in s]),
-        cond_sigma_post=np.array([np.linalg.cond(m) for m in sigma_post]),
+        cond_sigma_pred=condition_numbers(sigma_pred),
+        cond_s=condition_numbers(s),
+        cond_sigma_post=condition_numbers(sigma_post),
         min_eig_sigma_post=np.array([np.linalg.eigvalsh(m).min() for m in sigma_post]),
         all_positive_definite=all(
             is_positive_definite(m)

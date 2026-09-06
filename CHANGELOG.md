@@ -24,6 +24,16 @@ that second fact rather than leaving it to a comment.
 parameters get wrong and one for what its filter does. Both are versioned, so a cell added
 after results are seen shows up in the diff.
 
+The cross gets its two numbers. `cpomdp.scoring` scores every cell of the declared
+constructor cross with two divergences, what the model gets wrong and what the filter
+gets wrong, and nothing else: the result has no slot for an entropy, so the one term
+the ledger forbids reaching by subtraction cannot be reached that way. Every separation
+is a ratio, printed beside the conditioning of every matrix it inverted. The check that
+the two divergences and the entropy add up to the measured free energy is a separate
+object, the one place an entropy is estimated. And a difference between two numbers
+scored against one reference is read at the error on the difference, which the shared
+reference makes far smaller than the sum of the two bars.
+
 ### Added
 
 - `cpomdp.harness` — a world and an agent held apart, so what an agent's model gets wrong
@@ -55,6 +65,33 @@ after results are seen shows up in the diff.
   filters that infer worse than the model they are built for and name how. Each keeps
   `model` pointing at the model being scored, so a degradation is never an anonymous
   mismatch between two models.
+- `cpomdp.scoring` — the three-term evaluator. `build_cross` enumerates the declared
+  model and inference axes in full and carries a `ProductCompletenessCertificate` at
+  `PROVED`, refusing a cross that comes up short. `Decomposition` holds a
+  misspecification term and an inference gap, both KL divergences in nats and both in
+  closed form on a linear-Gaussian model. `gaussian_kl` is built from non-negative parts
+  and subtracts nothing, so a reading near zero is a small divergence rather than a
+  cancellation. `ThreeTermEvaluator.score` walks a driven run and returns a `CellScore`
+  with a `RunConditioning` beside it: the condition number of every predictive and
+  posterior covariance the terms factored, per step. `score_cross` scores every cell,
+  reports the cell where both terms move, and refuses to name a separation without one.
+  A `Separation` is the pinned term, the moving term and their ratio, and `render`
+  prints no separation without its ratio and its worst conditioning on the same line.
+- `cpomdp.additivity` — whether `E[F] = H(p*) + D₁ + D₂` closes, with both sides
+  measured on their own. `AdditivityCheck` takes an `EntropyEstimator` explicitly and is
+  the only object that estimates one; `GaussianEntropy` is the closed form and
+  `MonteCarloEntropy` samples with a standard-error bar. `variational_free_energy` is
+  computed term by term from the cell filter's belief, never through the identity. The
+  residual's bound is four terms, `δ_F + δ_H + δ₁ + δ₂`, and a worked case shows it
+  failing to close when `δ_F` is dropped.
+- `cpomdp.resolution` — the error on a difference. A `Bar` is split into a signed
+  common-mode part, what the reference's error puts on the value, and an own part. Two
+  values against one reference subtract the first in their difference, so
+  `resolution_threshold` reads `|Δ common-mode| + Σ own` rather than the sum of the two
+  bars. It reads bars only, which is what makes it pre-registered. `resolve` reports
+  `BELOW`, `ABOVE` or `NOT_RESOLVED`, the measured tie that is neither confirmation nor
+  refutation. The module imports nothing first-party, asserted in the boundary test, so
+  the seam and the reference filter reach it without reaching the evaluator.
 
 - `warrantlib.CompletenessEvidence` (warrantlib 0.3.0) — the two predicates a `PROVED`
   completeness claim rests on, held once in a base, with a leaf per domain shape under
@@ -218,6 +255,9 @@ after results are seen shows up in the diff.
 
 ### Changed
 
+- `cpomdp.diagnostics.condition_numbers` — the batched condition number
+  `rollout_conditioning` computed inline, now a function of its own so a rollout and a
+  scored cell read the same number for the same matrix.
 - **Breaking:** a *fixed* `observation_model` or `dynamics_noise_model` must now restate
   the model's `observation_noise` / `dynamics_noise` exactly, and a sensor's linearized
   observation matrix must equal `observation_matrix`. `LinearGaussianModel` previously
