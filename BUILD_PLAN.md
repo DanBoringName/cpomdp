@@ -659,8 +659,9 @@ guard and takes its budget as an argument.
 - [x] `ROUTE` entries appended under Q3 and Q7 of `research/spinello_stilwell_rung.md`,
       and Q7 closed on the declaration.
 
-**Merge gate:** every number printed is asserted in the module that prints it. Nothing
-here acquires a warrant, and no module gains a `run_checks`.
+**Merge gate:** every number that reaches prose is asserted in the module that prints
+it, and a printed table is asserted on the claim it illustrates rather than cell by cell.
+Nothing here acquires a warrant, and no module gains a `run_checks`.
 
 **Left open for PR-7**, from ADR-058's consequences: two nodes at the box edge exhaust
 the budget, `1.5 + 0.5 sin(x)` at spread `0.30` and `κ = 100`, each carrying `2.6e-18` of
@@ -711,12 +712,20 @@ ladder is what is missing. Nothing in `src/cpomdp` implements that callable.
       reports it and `averaged_inference_gap` does not average over it silently.
 - [ ] **Iteration work is labeled and isolable.** RFC-001 has to attribute the
       per-decision cost of an iterating rung without reading the loop body.
+- [ ] **`R'` comes from automatic differentiation**, per ADR-058. The declared `1e-12`
+      is only reachable with an exact derivative: a central difference carries about
+      `1e-11` into the iterate and floors convergence above the tolerance, so a rung
+      that differences cannot hold the declaration. `jax.grad` over
+      `observation_noise_fn` is the whole of it.
 
-**Per-rung merge gate, both required:**
+**Per-rung merge gate, all three required:**
 
 - Fixed-`R` agreement with the closed-form Kalman posterior, where the Kalman filter is
   the exact Bayesian filter.
 - A reported gap that does not move under `o → λo` (ADR-057).
+- No finite difference anywhere in the rung. The iterated rung converges at `1e-12` on
+  the declared families inside the declared budget, which a differenced `R'` cannot do
+  (ADR-058).
 
 ### The two Spinello–Stilwell rungs
 
