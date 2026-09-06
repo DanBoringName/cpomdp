@@ -512,8 +512,10 @@ fitted to a gap figure that does not yet exist.
 - [x] `AdditivityCheck` is a **separate object** taking an entropy estimator explicitly.
       It is the only place `H(p*)` is estimated, which is why its residual carries an
       entropy bar and the divergences do not.
-- [x] **Reuse `CompletenessCertificate` from `cpomdp.enumeration` on the constructor
-      cross.** Expected cardinality `|model axis| × |inference axis|`, visited, equality
+- [x] **Reuse the completeness certificate on the constructor cross.** It is
+      `warrantlib.ProductCompletenessCertificate`, the two-axis form of the certificate
+      `cpomdp.enumeration` reports, so the cross names both axes and both versions.
+      Expected cardinality `|model axis| × |inference axis|`, visited, equality
       asserted, `IncompleteEnumerationError` on mismatch. This is the cheapest provability
       purchase in the plan (Route 2), so do it first inside the PR.
 - [x] Report the both-positive diagonal cell explicitly. Off-diagonal separations are only
@@ -536,12 +538,14 @@ fitted to a gap figure that does not yet exist.
 - [x] F5 is shared. Paper 3's **G10** is defined as propagation with common-mode
       cancellation against the same reference filter. Build it once.
 
-**Merge gate:** the cross enumerates completely. R2 and R3 print at `PROVED`. No cell
-asserts a separation without printing its ratio and conditioning. The four-term bound is
-asserted. A difference and a sum-of-bars are shown to differ on a worked case.
+**Merge gate:** the cross enumerates completely at `PROVED`. No cell asserts a
+separation without printing its ratio and conditioning. The four-term bound is asserted.
+A difference and a sum-of-bars are shown to differ on a worked case. R2 and R3 printing
+at `PROVED` is PR-5's gate and not this one's: the battery schedules C2 and C3 there,
+and a cell value has no warrant until PR-5 registers what it is measured against.
 **ADR-059.**
 
-**Met 2026-09-05.** All five conditions hold. The cross carries a
+**Met 2026-09-05.** All four conditions hold. The cross carries a
 `ProductCompletenessCertificate` at `PROVED`, which warrants the enumeration and not
 the cell values: those are `COMPUTED` until PR-5 registers what they are measured
 against. F5 lives in `cpomdp.resolution`, a leaf the boundary test asserts, so the seam
