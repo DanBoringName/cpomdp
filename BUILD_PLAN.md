@@ -120,8 +120,10 @@ Import it; do not restate it.
 | **PR-4** | Paper 2 scoring: evaluator, cells, error bars | 2, 3 | PR-3 | P2-1b (B), F1–F3, F5 | L | v0.4.5 |
 | **PR-5** | Control bracket and Paper 2 Part 1 results | 2 | PR-4 | P2-4 (E) | L | v0.4.5 |
 | **PR-6** | Paper 3 toolbox and Part 1 results | 3 | PR-1, PR-3 | G-A, G-C, G-D | L | v0.4.5 |
-| **PR-7** | Exact reference filter and the rule ladder | 2, 3 | PR-3 | P2-5 (C), P2-7 (D) | L | v0.4.5 |
-| **PR-8** | **Certified discretisation bound · GATE-D4 · tag v0.4.5** | 2, 3 | PR-7 | P2-6 (C′) | L | v0.4.5 |
+| **PR-7a** | Printed-scheme failure probes and the declared budget | 2, 3 | — | — | S | v0.4.5 |
+| **PR-7** | Exact reference filter and the rule ladder | 2, 3 | PR-3, PR-7a | P2-5 (C) | L | v0.4.5 |
+| **PR-7b** | The ladder's ordering, and the R6 gap | 2, 3 | PR-7 | P2-7 (D) | M | v0.4.5 |
+| **PR-8** | **Certified discretisation bound · GATE-D4 · tag v0.4.5** | 2, 3 | PR-7b | P2-6 (C′) | L | v0.4.5 |
 | **PR-9** ⛔ | Window harness and Paper 2 Part 2 results | 2 | GATE-D4, PR-4 | P2-8 (F6) | L | v0.5 |
 | **PR-10** ⛔ | Paper 3 Part 2 results | 3 | GATE-D4, PR-2, PR-6 | — | M | v0.5 |
 | **PR-11** | v0.5 release | 2, 3 | all | — | M | v0.5 |
@@ -129,14 +131,16 @@ Import it; do not restate it.
 Size key: S under a day, M two to four days, L a week or more. Grouping the original
 nineteen items into eleven PRs pushed six of them to L. That is the trade.
 
-**Critical path.** `PR-1 → PR-3 → PR-7 → PR-8 → PR-9 → PR-11`. It runs through the gate,
-so nothing shortens it except starting PR-7 early.
+**Critical path.** `PR-1 → PR-3 → PR-7 → PR-7b → PR-8 → PR-9 → PR-11`. It runs through the
+gate, so nothing shortens it except starting PR-7 early. PR-7a blocks PR-7 without being
+on the path: it has no blockers of its own and is a day's work, so it can land any time
+before PR-7, which cannot ship a declared budget until it has.
 
 **Parallel tracks.** PR-1 and PR-2 touch nothing else and can go first or alongside
 anything. PR-1b is the exception: it edits `enumeration.py`, which PR-3 also opens, so it
 goes ahead of both rather than beside them. PR-3 is the fan-out point. After it lands,
 three tracks run independently: the Paper 2 scoring track (PR-4 → PR-5), the
-reference-filter track (PR-7 → PR-8), and the Paper 3 track (PR-6). Only PR-9 and PR-10
+reference-filter track (PR-7a → PR-7 → PR-7b → PR-8), and the Paper 3 track (PR-6). Only PR-9 and PR-10
 wait on the gate.
 
 **ADR numbers are not pre-allocated.** A PR takes the next free number when it lands, and
@@ -616,12 +620,60 @@ construction error, not a runtime warning. **ADR on landing.**
 **Warrant:** G2 is **Prover 3 · enumeration**, decided rather than surveyed. G4 is a
 sampled existence claim, settled by one construction.
 
+## PR-7a — the printed scheme's failure probes, and the declared budget
+
+`serves: 2, 3` · `blocked by: —` · `alias: —` · `size: S` ·
+`tag: v0.4.5` · `ADR: on landing`
+
+Ahead of the ladder. The ladder cannot ship a rung whose budget is undeclared, and the
+budget cannot be declared before the probe that sizes it exists. Nothing here touches
+`src/`. Everything runs against `research.spinello_stilwell.scheme`, which carries no
+guard and takes its budget as an argument.
+
+- [x] **Route 3, the two-sided failure**, in `research.spinello_stilwell.pole_failure`.
+      The pole has no value at all: the printed curvature raises `ZeroDivisionError` at
+      `σ = 1`. Above it the step collapses in proportion to the distance, which makes the
+      stall conditional on the tolerance rather than absolute: at `1e-8` off the pole any
+      relative tolerance above `2.84e-7` stops the run on its first iteration and reports
+      the prediction, wrong by `0.049`. Below it the sum crosses zero at
+      `x = 0.694474243706`, the step runs to `8.8e6`, and past the crossing it climbs the
+      objective.
+- [x] **Route 5, budget exhaustion**, in `research.spinello_stilwell.budget`. Both halves
+      move on all twelve declared cells, and on the widest prior at the strongest
+      curvature the covariance is the worse error, `0.425` against the mean's `0.357`.
+      `VOID` is a decision and not a preference.
+- [x] **The modified iterate against the printed one.** The mean differs by `3.2e-3` at a
+      budget of one, `6.7e-6` by five, and exactly `0` run out. That last number is
+      ADR-057's "surgical".
+- [x] **A convergence-count survey.** The declared families need 10 iterations at
+      `1e-14` two prior spreads out. The gap calls the rung nine predictive spreads out
+      as well, at the edge of its observation box: there, at `1e-12`, the curvature axis
+      needs 65 and `1.5 + 0.5 sin(x)` at spread `0.30` needs 124.
+- [x] **What a wider budget cannot buy.** One offset past the box edge the bounded
+      family settles into a stable two-cycle instead of converging, so a cap large
+      enough to be safe everywhere does not exist and the routing is what handles it.
+- [x] **The ADR**, ADR-058: budget 64, tolerance `1e-12` relative to the prior spread,
+      and the rung differentiates `R` by automatic differentiation rather than by a
+      difference. A difference floors convergence above the declared tolerance, which
+      route 5 measured.
+- [x] `ROUTE` entries appended under Q3 and Q7 of `research/spinello_stilwell_rung.md`,
+      and Q7 closed on the declaration.
+
+**Merge gate:** every number that reaches prose is asserted in the module that prints
+it, and a printed table is asserted on the claim it illustrates rather than cell by cell.
+Nothing here acquires a warrant, and no module gains a `run_checks`.
+
+**Left open for PR-7**, from ADR-058's consequences: two nodes at the box edge exhaust
+the budget, `1.5 + 0.5 sin(x)` at spread `0.30` and `κ = 100`, each carrying `2.6e-18` of
+the centre's predictive weight. Whether a voided node drops out, voids the gap, or widens
+the budget is the ladder's decision.
+
 ## PR-7 — Exact reference filter and the rule ladder
 
-`serves: 2, 3` · `blocked by: PR-3` · `alias: P2-5 (C), P2-7 (D)` · `size: L` ·
+`serves: 2, 3` · `blocked by: PR-3, PR-7a` · `alias: P2-5 (C)` · `size: L` ·
 `tag: v0.4.5`
 
-The hard item, and it is shared.
+The hard item, and it is shared. P2-7 (D) moved to PR-7b with the ordering work.
 
 - [ ] Grid or quadrature filter over a low-dimensional latent, accepting an **arbitrary
       pointwise-evaluable likelihood** rather than an R(x)-specific one. The generality is
@@ -638,13 +690,42 @@ The hard item, and it is shared.
       mechanisms.
 - [ ] The rule list is **declared and versioned**, like `FiniteActionSet`. A rung added
       after results are seen shows up in the diff.
-- [ ] Five rungs is a finite declared set, so the ladder carries a completeness
-      certificate too (Route 2). That is what lets R7 reach a decided ordering rather than
-      a sampled one.
-- [ ] **Compute and print the R6 gap here, at `COMPUTED`, before certification.** GATE-D4
-      compares the certified bound against that number by the pre-agreed factor, so the
-      gate cannot be evaluated until the uncertified signal exists. This ordering is easy
-      to miss and it blocks PR-8.
+The completeness certificate and the R6 gap move to PR-7b, which is where the numbers
+they rest on get measured.
+
+### The rung contract
+
+The substrate is built. `QuadratureGrid` and `GridDensity` carry `mean`, `cov` and
+`kl_to`, `FixedNoiseLikelihood` and `StateDependentNoiseLikelihood` evaluate the channel,
+and `averaged_inference_gap` takes the rule under test as `approximate_posterior`. The
+ladder is what is missing. Nothing in `src/cpomdp` implements that callable.
+
+- [ ] **A rung is a factory.** Model in, `ApproximatePosterior` out. The seam passes only
+      `(prior, observation)`, so the matrices, the noise function and the budget are closed
+      over at construction. This is the front-loading the energy constraint asks for: the
+      fixed-sensor rung stays one matrix-vector product per reading.
+- [ ] **One public way to put a Gaussian on a lattice.** Every rung ends by rendering its
+      belief on the prior's grid, and that step is written twice already, in
+      `tests/test_reference_gap.py` and inside `research.checks.gap_identity`. It becomes
+      one function before a third copy exists.
+- [ ] **`VOID` on a non-convergent step**, per ADR-056 and route 5's measurement. The rung
+      reports it and `averaged_inference_gap` does not average over it silently.
+- [ ] **Iteration work is labeled and isolable.** RFC-001 has to attribute the
+      per-decision cost of an iterating rung without reading the loop body.
+- [ ] **`R'` comes from automatic differentiation**, per ADR-058. The declared `1e-12`
+      is only reachable with an exact derivative: a central difference carries about
+      `1e-11` into the iterate and floors convergence above the tolerance, so a rung
+      that differences cannot hold the declaration. `jax.grad` over
+      `observation_noise_fn` is the whole of it.
+
+**Per-rung merge gate, all three required:**
+
+- Fixed-`R` agreement with the closed-form Kalman posterior, where the Kalman filter is
+  the exact Bayesian filter.
+- A reported gap that does not move under `o → λo` (ADR-057).
+- No finite difference anywhere in the rung. The iterated rung converges at `1e-12` on
+  the declared families inside the declared budget, which a differenced `R'` cannot do
+  (ADR-058).
 
 ### The two Spinello–Stilwell rungs
 
@@ -677,30 +758,50 @@ Decided (ADR-057):
       reports. Route 2's table stays as the measurement it was. `exp(x)` needs no box
       and no guard for the pole. Q2, Q3 and Q4 close for the shipped rung.
 
-Still owed, roughly in order:
+Still owed, split across three PRs:
 
-- [ ] Routes 3 and 5, the two-sided failure probe near `σ = 1` and the budget-exhaustion
-      probe, on the printed scheme in `research/` where it still runs. Both are runnable
-      now against `research.spinello_stilwell.scheme`, which carries no guard and takes
-      its budget as an argument. They confirm ADR-056's `VOID` routing rather than
-      decide it, and they carry the unrun comparison of modified against printed
-      iterates.
-- [ ] Declare the iteration budget and the tolerance. Both are arguments today and
-      `test_the_rung_s_open_decisions_stay_arguments` pins that they stay so until an
-      ADR says otherwise.
-- [ ] Route 1's empirical half, now a cost measurement: the shipped rung's gap against
-      the printed scheme's at the declared budget. Needs the reference lattice.
-- [ ] Route 6, the rung-one-versus-(36) separation. Needs the ladder to exist.
-- [ ] Route 7, section IV's constants evaluated. Decides nothing the rung needs, only
-      whether Paper 2 may say the published runs never cashed the term in.
+- **PR-7a** took routes 3 and 5 and declared the budget in ADR-058. Done.
+- **PR-7** builds the five rungs behind the seam, under the rung contract above.
+- **PR-7b** measures the ordering and prints the R6 gap. PR-8 waits on that number.
+
+One PR would have to hold all three, and two constraints stop it. The budget's ADR reads
+a number off a survey that has to be committed and runnable before the ADR cites it, and
+the R6 gap blocks PR-8, which should not queue behind a ladder review. Route 7 is
+optional throughout and decides nothing the rung needs.
 
 **Merge gate:** agreement with the closed-form Kalman posterior in the fixed-R case, where
 the Kalman filter *is* the exact Bayesian filter, and a reported gap that does not move
 under `o → λo` (ADR-057). Each rung evaluates. The ladder enumerates completely.
 
+## PR-7b — the ladder's ordering, and the R6 gap
+
+`serves: 2, 3` · `blocked by: PR-7` · `alias: P2-7 (D)` · `size: M` · `tag: v0.4.5`
+
+Split from PR-7 because PR-8 waits on one number in here and should not also wait on a
+ladder review.
+
+- [ ] **Route 1's empirical half**, changed in purpose by ADR-057. It measures what the
+      modification cost against the printed scheme at the declared budget.
+- [ ] **Route 6, rung one against (36).** Two adjacent differences separate the
+      derivative-of-covariance terms from the iteration. If they do not separate, five
+      rungs was the wrong declaration and the record has to say so.
+- [ ] **The completeness certificate** over the declared five. A finite declared set is
+      what lets R7 reach a decided ordering rather than a sampled one.
+- [ ] **The R6 gap printed at `COMPUTED`, before certification.** GATE-D4 compares the
+      certified bound against that number by the pre-agreed factor, so the gate cannot be
+      evaluated until the uncertified signal exists. This is the item that blocks PR-8.
+- [ ] **Warrants for anything certified.** A check suite declared in
+      `research/registered_checks.toml`, with the registration commit ahead of the
+      measuring commit for every `PROVED` row.
+- [ ] Route 7, section IV's constants, rides here or nowhere. It fixes what Paper 2 may
+      say about the published runs and decides nothing the rung needs.
+
+**Merge gate:** the ordering is reported with its bars, and an adjacent pair whose bars
+overlap reports `NOT_RESOLVED` rather than a direction.
+
 ## PR-8 — Certified discretisation bound · GATE-D4 · tag v0.4.5
 
-`serves: 2, 3` · `blocked by: PR-7` · `alias: P2-6 (C′)` · `size: L` · `tag: v0.4.5` ·
+`serves: 2, 3` · `blocked by: PR-7b` · `alias: P2-6 (C′)` · `size: L` · `tag: v0.4.5` ·
 `ADR: on landing`
 
 **Landed ahead of the PR: `research/gate_d4_registration.md`, opened 2026-08-07.** The gate
@@ -928,7 +1029,7 @@ on this set".
 
 - [ ] **Constructor cross** (PR-4). R2 and R3 decided rather than sampled. **Do this one
       first.**
-- [ ] **Evaluation-rule ladder** (PR-7). Four declared rungs, so once each rung is
+- [ ] **Evaluation-rule ladder** (PR-7b). Five declared rungs, so once each rung is
       `CERTIFIED`, "rung i < rung i+1 for all adjacent i" is a finite conjunction of
       certified interval comparisons. **Decided, not sampled.** R7 reaches `PROVED`
       conditional on `CERTIFIED` rung values, which is stronger than the original framing

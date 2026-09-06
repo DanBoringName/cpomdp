@@ -7,6 +7,7 @@ Running the module is checking it: every claim it prints is asserted inside it. 
 call the same functions so a failure names the claim rather than the whole run.
 """
 
+import math
 from itertools import pairwise
 
 import pytest
@@ -101,6 +102,42 @@ class TestTheScheme:
         # deletion cannot move the posterior covariance.
         assert scheme.fisher_information(0.9, 2.0, 1.0) > 0.0
         assert scheme.fisher_information(1.0, 2.0, 1.0) > 0.0
+
+    def test_the_objective_is_the_three_penalties_of_step_one(self):
+        # Prior distance, measurement mismatch, and the Gaussian normaliser. The third
+        # is the term `R(x)` keeps in play, and it is what tells a climb from a descent.
+        estimate, prior_mean, prior_variance, noise, residual = 1.3, 1.0, 0.25, 2.0, 0.4
+        expected = 0.5 * (
+            (estimate - prior_mean) ** 2 / prior_variance
+            + residual**2 / noise
+            + math.log(noise)
+        )
+        measured = scheme.objective(
+            estimate, prior_mean, prior_variance, noise, residual
+        )
+        assert abs(measured - expected) < 1e-15
+
+    def test_the_general_iterate_is_the_quadratic_one(self):
+        # `iterate` delegates, so there is one implementation of (35) and not two. A
+        # second copy is the thing that drifts.
+        quadratic = scheme.iterate(
+            **invariance.CASE,
+            scale=3.0,
+            tolerance=invariance.PROBE_TOLERANCE,
+            max_iterations=invariance.PROBE_BUDGET,
+        )
+        general = scheme.iterate_with(
+            invariance.CASE["observation"],
+            invariance.CASE["prior_mean"],
+            invariance.CASE["prior_variance"],
+            scheme.quadratic_noise(
+                invariance.CASE["base_noise"], invariance.CASE["curvature"]
+            ),
+            scale=3.0,
+            tolerance=invariance.PROBE_TOLERANCE,
+            max_iterations=invariance.PROBE_BUDGET,
+        )
+        assert general == quadratic
 
     def test_it_reports_no_warrant(self):
         for module in (repair, scheme):

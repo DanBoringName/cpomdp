@@ -158,6 +158,48 @@ Under ADR-057 the shipped curvature is `(1/σ)bᵀb`, a real square, so
 the indefiniteness from below can occur. Both stay true of the printed scheme and are
 route 3's to measure in `research/`, where that scheme still runs.
 
+### ROUTE 2026-09-04: route 3 is run, and the silent side is quieter than stated
+
+`research.spinello_stilwell.pole_failure`, run with
+
+```text
+uv run --no-sync python -m research.spinello_stilwell.pole_failure
+```
+
+Both sides are now measured on the printed scheme. Every number below came out of a
+probe at a budget of 200 and a tolerance of `1e-14`.
+
+**The pole itself has no value.** `gauss_newton_curvature(1.0, …)` raises
+`ZeroDivisionError`, so the printed curvature is not evaluable at `σ = 1` rather than
+merely large there. The modification returns `2.56` on the same arguments.
+
+**From above, the curvature grows as `0.25/offset`** and the step falls with it. The
+block is `R'²/(4R² ln R)` and `ln(1 + offset)` is `offset` to first order, so at the
+prediction, where `R' = 1`, the block is `1/(4 offset)`. The first step is the gradient
+there, `-1.42`, divided by it: `-5.68 × offset`. Both constants are asserted from one
+decade in, and every row from `1e-4` to `1e-8` sits within two percent of them. At
+`1e-8` off the pole the curvature is `2.5e7` and the step `-5.68e-8`.
+
+**The stall is conditional on the tolerance, which the original entry did not say.** At
+a tolerance of `1e-14` the run does not freeze. It takes 24 iterations against the
+modification's 12 and lands on the same estimate to `2e-16`. What the collapse buys is
+a *threshold*: at `1e-8` off the pole the first step is `5.68e-8`, so any relative
+tolerance above `2.84e-7` stops the run on iteration one and reports `0.500000057`
+where the answer is `0.549191167`. Wrong by `0.049`, reported as converged. A hundred
+times closer to the pole and the threshold falls a hundredfold, so no declared
+tolerance is safe for every case. The original claim that a fixed budget returns the
+prediction holds, and it needs the tolerance stated beside it.
+
+**From below, the sum crosses zero at `x = 0.694474243706`** on the registered ridge,
+inside the pole at `x = √½`. Approaching it, the step goes `8.81e4`, `8.81e5`,
+`8.81e6` for distances `1e-8`, `1e-9`, `1e-10`, and the two sides point opposite ways.
+Past the crossing the printed step climbs: from `x = 0.700791` the objective goes
+`0.499721 → 0.574875`, where the modification takes it to `0.476722`.
+
+The iteration count is the other cost. The printed scheme needed 24 iterations where
+the modification needed 12 for the same answer, which is per-decision compute RFC-001
+will account for.
+
 ## Q4. Below `σ = 1`, Gauss–Newton is outside its domain
 
 `R⁽ᶥ⁾` is meant to be `∇ᵀr∇r` for the residual vector `r` of (20), and any such matrix
@@ -264,6 +306,76 @@ That argues for a non-convergent step being routed to `VOID` rather than reporte
 number. A gap computed from a posterior whose mean and covariance are both wrong by an
 unmeasured amount is not a measurement of anything.
 
+### ROUTE 2026-09-04: route 5 is run, and the covariance is not the smaller error
+
+`research.spinello_stilwell.budget`, run with
+
+```text
+uv run --no-sync python -m research.spinello_stilwell.budget
+```
+
+**Both halves move, on all twelve declared cells.** The grid sweeps `κ ∈ {0.1, 1, 5,
+20}` against prior variance `{0.01, 0.25, 1}`, the two axes GATE-D4's registered family
+sweeps. At a budget of one the mean departs by `0.0069` to `0.357` and the variance by
+`7.6e-7` to `0.425`.
+
+**On the widest prior at the strongest curvature the variance is the worse of the
+two**, `0.425` against the mean's `0.357`. So the covariance is not a bystander whose
+error is bounded by the mean's, and a caller who trusted the covariance of a truncated
+run would be worse off than one who trusted its mean. That is what makes `VOID` the
+right routing rather than reporting the number with a caveat.
+
+Both departures fall as the budget grows, so what is measured is truncation and not the
+scheme.
+
+**What a budget has to cover, in the bulk and at the box edge.** Over the five declared
+families at the six declared spreads, with the reading two *prior* spreads out, the
+modified scheme at tolerance `1e-14` needs 2 to 10 iterations, worst at `1 + x²` and
+spread `0.30`, and the fixed family needs 2 everywhere. That reading is inside the bulk.
+`averaged_inference_gap` runs its observation box nine *predictive* spreads out on
+either side of the prior mean and calls the rung at every node of it. Out there, at
+`1e-12`, the same families need up to 124 iterations, worst at `1.5 + 0.5 sin(x)` and
+spread `0.30`, and the curvature axis from `0.1` to `100` needs up to 65. Nothing here
+declares a budget. Those are the numbers a declaration reads.
+
+**The slopes are declared, not differenced.** `FAMILIES` declares `R` and (35) needs
+`R'`. A central difference at `1e-6` carries about `1e-11` of error into the iterate,
+which floors convergence well above `1e-14`: five of the thirty cells then ran to the
+probe budget without settling, measuring the difference rather than the scheme. The
+slopes are written out in `budget.SLOPES` and checked against a difference to `1e-6`.
+A tolerance declaration has to sit above whatever error the sensor model's own
+derivative carries, and that is not a property of the scheme.
+
+**What the deletion costs at a finite budget.** Same case, same budget, both
+curvatures: the mean differs by `3.2e-3` at a budget of one, `6.7e-6` by five, and `0`
+run out. ADR-057's "surgical" is that last number. The two curvatures share a fixed
+point and differ only on the way to it.
+
+### RESOLVED 2026-09-04: the budget is 64 and the tolerance is `1e-12`
+
+ADR-058 declares both, against the counts route 5 measured. `VOID` for an exhausted
+budget stands as ADR-056 left it, and Q7's argument for it is now a number: at a budget
+of one the covariance is out by up to `0.425`, and on one declared cell by more than the
+mean is.
+
+The declaration carries a condition. The rung differentiates `R` by automatic
+differentiation, because a central difference floors convergence above `1e-12` and the
+run would then be measuring the difference. That reaches the rung's contract in PR-7
+rather than staying here.
+
+Two cells exhaust the budget, both at the observation box's edge. `1.5 + 0.5 sin(x)` at
+spread `0.30` takes 124 iterations and `κ = 100` takes 65. The first is a declared family
+at a declared spread rather than a bracket: `R` is bounded and periodic there, so the
+iterate crosses several periods of it before it settles. Both nodes carry `2.6e-18` of
+the centre's predictive weight. What a voided node does to a reported gap is left open,
+and ADR-058 names the three ways it could go.
+
+Past the box edge the scheme stops converging at all on the bounded family: at thirteen
+predictive spreads `1.5 + 0.5 sin(x)` at spread `0.30` settles into a stable two-cycle,
+alternating by `2.83` for as long as it is run. That is outside the registered box, and
+it is why the budget comes with a routing instead of being chosen large enough to be
+safe.
+
 ## Q8. Rung two has no published numerical validation
 
 Every figure in §IV uses (36), the single-step filter. The iterated scheme (35) is
@@ -338,6 +450,15 @@ run that exhausts it returns a count equal to the budget and Q7 says such a run'
 covariance is wrong as well as its mean. The rung's budget stays undeclared (ADR-056).
 The test that polices it asserted the wrong thing, that a default existed, and now
 asserts that none does.
+
+### AMENDMENT 2026-09-05: the budget that entry left undeclared is declared
+
+"The rung's budget stays undeclared (ADR-056)" above was true when it was written. It is
+not now. ADR-058 declares 64 iterations at a tolerance of `1e-12` relative to the prior
+spread, read off the counts route 5 measured, and Q7's section records it. The probes
+keep their own `PROBE_BUDGET = 200` at `1e-14`, which is not the same number and is not
+a candidate for it: a probe that ran to the declared cap would report the cap rather
+than the count the cap has to be judged against.
 
 ### RESOLVED 2026-08-24: route 2 is run, and only one declared family resists a unit choice
 
