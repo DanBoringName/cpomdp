@@ -173,10 +173,12 @@ probe at a budget of 200 and a tolerance of `1e-14`.
 `ZeroDivisionError`, so the printed curvature is not evaluable at `σ = 1` rather than
 merely large there. The modification returns `2.56` on the same arguments.
 
-**From above, the curvature grows as `1/offset`** and the step falls with it: at
-offsets `1e-2` to `1e-8` off the pole the curvature runs `27.1`, `2.50e3`, `2.50e5`,
-`2.50e7` and the first step runs `-2.68e-2` to `-5.68e-8`. Close in, the step is about
-`5.68` times the offset.
+**From above, the curvature grows as `0.25/offset`** and the step falls with it. The
+block is `R'²/(4R² ln R)` and `ln(1 + offset)` is `offset` to first order, so at the
+prediction, where `R' = 1`, the block is `1/(4 offset)`. The first step is the gradient
+there, `-1.42`, divided by it: `-5.68 × offset`. Both constants are asserted from one
+decade in, and every row from `1e-4` to `1e-8` sits within two percent of them. At
+`1e-8` off the pole the curvature is `2.5e7` and the step `-5.68e-8`.
 
 **The stall is conditional on the tolerance, which the original entry did not say.** At
 a tolerance of `1e-14` the run does not freeze. It takes 24 iterations against the

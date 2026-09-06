@@ -254,6 +254,22 @@ def main() -> None:
     for (_, above, below), (_, closer_above, closer_below) in pairwise(rows):
         assert closer_above > above, (above, closer_above)
         assert closer_below < below, (below, closer_below)
+    # The block is `R'^2 / (4 R^2 ln R)` and `ln(1 + offset)` is `offset` to first
+    # order, so the curvature runs as `R'^2 / (4 offset)`. That is the claim the table
+    # illustrates, and it holds from one decade in. The widest row still carries the
+    # real square.
+    noise_slope = 2.0 * _POLE_CURVATURE * _POLE_STATE
+    block_constant = noise_slope**2 / 4.0
+    print(f"  the block runs as {block_constant}/offset from one decade in")
+    for offset, above, below in rows[1:]:
+        assert abs(above * offset - block_constant) < 0.01 * block_constant, (
+            offset,
+            above,
+        )
+        assert abs(below * offset + block_constant) < 0.01 * block_constant, (
+            offset,
+            below,
+        )
 
     print("\nThe step the first iteration takes, either side.")
     print(f"{'offset':>10} {'step above':>16} {'step below':>16}")
@@ -263,13 +279,23 @@ def main() -> None:
         below = step_at(case_at(-offset), _POLE_STATE, log_block=True)
         firsts.append((offset, above.step, below.step))
         print(f"  {offset:>8.0e} {above.step:>16.6g} {below.step:>16.6g}")
-    # Close in, the step collapses in proportion to the distance from the pole, on
-    # both sides. The sign is what separates them and the size does not show it. The
-    # widest offset below is the exception, and it is the crossing measured further
-    # down rather than a failure of the pattern.
+    # Close in, the step is the gradient at the prediction divided by the block, so
+    # it collapses in proportion to the distance from the pole on both sides. The sign
+    # is what separates them and the size does not show it. The widest offset below is
+    # the exception, and it is the crossing measured further down rather than a
+    # failure of the pattern.
+    pole_gradient = scheme.gradient(1.0, noise_slope, 1.0, _OBSERVATION - _POLE_STATE)
+    step_constant = pole_gradient / block_constant
+    print(f"  the step runs as {step_constant:.3g} x offset from one decade in")
     for offset, above_step, below_step in firsts[1:]:
-        assert abs(above_step) < 10.0 * offset, (offset, above_step)
-        assert abs(below_step) < 10.0 * offset, (offset, below_step)
+        assert abs(above_step / offset - step_constant) < 0.02 * abs(step_constant), (
+            offset,
+            above_step,
+        )
+        assert abs(below_step / offset + step_constant) < 0.02 * abs(step_constant), (
+            offset,
+            below_step,
+        )
     for (_, wider, _), (_, closer, _) in pairwise(firsts):
         assert abs(closer) < abs(wider), (wider, closer)
 
