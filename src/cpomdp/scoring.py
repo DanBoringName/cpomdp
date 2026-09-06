@@ -682,8 +682,8 @@ def inference_gap_step(
     Args:
         agent_update: The cell's filter step at its current belief, ``y`` in and its
             posterior out.
-        exact_update: The exact step under the cell's model at that filter's current
-            belief, ``y`` in and the exact posterior out.
+        exact_update: The exact step under the cell's model at the exact filter's own
+            current belief, ``y`` in and the exact posterior out.
         true_mean: The mean of ``p*(y | u)`` for this step, shape ``(m,)``.
         true_cov: Its covariance, shape ``(m, m)``, positive definite.
 
