@@ -1,4 +1,13 @@
-"""Steady-state LQR action selection: the action-side dual of the Kalman filter."""
+"""Quadratic regulation: the action-side dual of the Kalman filter.
+
+``LQRController`` solves the control Riccati equation to its fixed point once and
+applies the steady-state gain forever after. ``finite_horizon_lqr`` runs the same
+backward recursion a declared number of steps and keeps every gain it produces, which
+is the schedule an ``H``-step plan applies and the gain a receding-horizon planner at
+horizon ``H`` applies at every step. The two agree in the limit and at no finite ``H``.
+"""
+
+from dataclasses import dataclass
 
 import jax.numpy as jnp
 from jaxtyping import Array, Float64
@@ -6,7 +15,7 @@ from numpy.typing import ArrayLike
 
 from cpomdp.types import LinearGaussianModel
 
-__all__ = ["LQRController"]
+__all__ = ["FiniteHorizonLQR", "LQRController", "finite_horizon_lqr"]
 
 
 def _validate_cost(
@@ -50,6 +59,159 @@ def _validate_cost(
                 f"{name} must be positive-semi-definite, but its smallest "
                 f"eigenvalue is {eigvals.min():.3g}."
             )
+
+
+def _validated_costs(
+    model: LinearGaussianModel, goal_precision: ArrayLike, effort_penalty: ArrayLike
+) -> tuple[Float64[Array, "n n"], Float64[Array, "p p"]]:
+    """The two cost matrices as arrays, checked against the model they regulate.
+
+    Raises:
+        ValueError: If the model has no ``control_matrix``, or a cost matrix does
+            not match the state/action dimensions, is not symmetric, or fails its
+            definiteness requirement (``goal_precision`` PSD, ``effort_penalty``
+            PD).
+    """
+    if model.control_matrix is None:
+        raise ValueError(
+            "LQR needs an action channel: the model has no control matrix, "
+            "so there is nothing to act with."
+        )
+    goal_precision = jnp.asarray(goal_precision, dtype=float)
+    effort_penalty = jnp.asarray(effort_penalty, dtype=float)
+    n, p = model.n_states, model.n_controls
+    if goal_precision.shape != (n, n):
+        raise ValueError(
+            f"goal_precision must be {n}x{n} to match the {n}-D state, "
+            f"got shape {goal_precision.shape}"
+        )
+    if effort_penalty.shape != (p, p):
+        raise ValueError(
+            f"effort_penalty must be {p}x{p} to match the {p}-D action, "
+            f"got shape {effort_penalty.shape}"
+        )
+    _validate_cost(goal_precision, "goal_precision", require_definite=False)
+    _validate_cost(effort_penalty, "effort_penalty", require_definite=True)
+    return goal_precision, effort_penalty
+
+
+def _riccati_step(
+    remaining: Float64[Array, "n n"],
+    dynamics_matrix: Float64[Array, "n n"],
+    control_matrix: Float64[Array, "n p"],
+    effort_penalty: Float64[Array, "p p"],
+) -> tuple[Float64[Array, "n n"], Float64[Array, "p n"]]:
+    """One backward Bellman step: the cost-to-go before acting, and the gain that acts.
+
+    ``remaining`` is ``W``, what the state an action arrives at will cost from there
+    on, stage cost included. Minimising ``(Ax + Bu)ᵀ W (Ax + Bu) + uᵀ R u`` over
+    ``u`` gives::
+
+        L = (R + Bᵀ W B)⁻¹ (Bᵀ W A)
+        P = Aᵀ W A − (Aᵀ W B) L
+
+    ``(R + Bᵀ W B)`` is solved against rather than inverted, for the same reason the
+    filter solves against its innovation covariance.
+    """
+    cross = dynamics_matrix.T @ remaining @ control_matrix  # Aᵀ W B  (n×p)
+    # curvature of the action cost, the dual of the Kalman innovation covariance (p×p)
+    inner = effort_penalty + control_matrix.T @ remaining @ control_matrix
+    gain = jnp.linalg.solve(inner, cross.T)  # L  (p×n)
+    cost_to_go = dynamics_matrix.T @ remaining @ dynamics_matrix - cross @ gain  # P
+    return cost_to_go, gain
+
+
+@dataclass(frozen=True)
+class FiniteHorizonLQR:
+    """The gain schedule and cost-to-go of an ``H``-step regulator.
+
+    The stage cost is charged on the state each action arrives at, and nothing is
+    charged after the last one: the terminal cost is zero. That is the sum a
+    receding-horizon planner scores over its lookahead, so ``first_gain`` is the gain
+    such a planner applies at every step, and it is what a comparison against one
+    has to use. ``LQRController.gain`` is its limit as ``H`` grows and differs from it
+    at every finite ``H``, by an amount that shrinks with ``H`` and reads as an error
+    when the horizons are not matched.
+
+    Args:
+        gains: ``gains[k]`` is the gain applied at step ``k`` of the plan, with
+            ``H − k`` steps remaining, shape ``(H, p, n)``. The action is
+            ``−gains[k] · state``.
+        cost_to_go: ``cost_to_go[j]`` is ``P_j``, the matrix of the optimal cost
+            ``stateᵀ · P_j · state`` with ``j`` steps remaining, before acting, shape
+            ``(H + 1, n, n)``. ``cost_to_go[0]`` is zero.
+    """
+
+    gains: Float64[Array, "H p n"]
+    cost_to_go: Float64[Array, "H+1 n n"]
+
+    @property
+    def horizon(self) -> int:
+        """``H``, the number of steps planned."""
+        return int(self.gains.shape[0])
+
+    @property
+    def first_gain(self) -> Float64[Array, "p n"]:
+        """The gain with all ``H`` steps remaining, the receding-horizon gain."""
+        return self.gains[0]
+
+
+def finite_horizon_lqr(
+    model: LinearGaussianModel,
+    *,
+    goal_precision: ArrayLike,
+    effort_penalty: ArrayLike,
+    horizon: int,
+) -> FiniteHorizonLQR:
+    """Run the control Riccati recursion backward over ``horizon`` steps.
+
+    The same Bellman step ``LQRController`` iterates to a fixed point, run a declared
+    number of times from a zero terminal cost and with every gain kept. With ``j``
+    steps remaining and ``W = goal_precision + P_{j−1}`` the cost of what remains::
+
+        L_j = (effort_penalty + Bᵀ W B)⁻¹ (Bᵀ W A)
+        P_j = Aᵀ W A − (Aᵀ W B) L_j
+
+    starting from ``P_0 = 0``. At ``horizon = 1`` the gain is the one-step regulator
+    ``(effort_penalty + Bᵀ Q B)⁻¹ Bᵀ Q A``. The Control page of the API reference
+    opens the same account in plain terms.
+
+    Args:
+        model: The linear-Gaussian model to act in. Must carry a ``control_matrix``.
+        goal_precision: The stage cost on the state, an ``(n, n)`` matrix. (LQR's
+            ``Q``.)
+        effort_penalty: The stage cost on the action, a ``(p, p)`` matrix. (LQR's
+            ``R``.)
+        horizon: ``H``, how many steps the plan covers. At least one.
+
+    Returns:
+        The schedule, with ``gains[k]`` the gain at step ``k`` of the plan and
+        ``cost_to_go[j]`` the cost matrix with ``j`` steps remaining.
+
+    Raises:
+        ValueError: If ``horizon`` is below one, or on any of the cost and model
+            conditions ``LQRController`` refuses.
+    """
+    if horizon < 1:
+        raise ValueError(f"horizon must be at least 1, got {horizon}")
+    goal_precision, effort_penalty = _validated_costs(
+        model, goal_precision, effort_penalty
+    )
+    dynamics_matrix = model.dynamics_matrix  # A
+    assert model.control_matrix is not None  # refused by _validated_costs
+    control_matrix = model.control_matrix  # B
+
+    costs = [jnp.zeros_like(goal_precision)]
+    gains = []
+    for _ in range(horizon):
+        cost_to_go, gain = _riccati_step(
+            goal_precision + costs[-1], dynamics_matrix, control_matrix, effort_penalty
+        )
+        costs.append(cost_to_go)
+        gains.append(gain)
+    # Built with the fewest steps remaining first; the plan applies them the other
+    # way round.
+    return FiniteHorizonLQR(gains=jnp.stack(gains[::-1]), cost_to_go=jnp.stack(costs))
 
 
 class LQRController:
@@ -108,29 +270,10 @@ class LQRController:
         tol: float = 1e-12,
         max_iter: int = 1000,
     ) -> None:
-        if model.control_matrix is None:
-            raise ValueError(
-                "LQR needs an action channel: the model has no control matrix, "
-                "so there is nothing to act with."
-            )
         self.model = model
-        self._goal_precision = jnp.asarray(goal_precision, dtype=float)
-        self._effort_penalty = jnp.asarray(effort_penalty, dtype=float)
-
-        n, p = model.n_states, model.n_controls
-        if self._goal_precision.shape != (n, n):
-            raise ValueError(
-                f"goal_precision must be {n}x{n} to match the {n}-D state, "
-                f"got shape {self._goal_precision.shape}"
-            )
-        if self._effort_penalty.shape != (p, p):
-            raise ValueError(
-                f"effort_penalty must be {p}x{p} to match the {p}-D action, "
-                f"got shape {self._effort_penalty.shape}"
-            )
-        _validate_cost(self._goal_precision, "goal_precision", require_definite=False)
-        _validate_cost(self._effort_penalty, "effort_penalty", require_definite=True)
-
+        self._goal_precision, self._effort_penalty = _validated_costs(
+            model, goal_precision, effort_penalty
+        )
         self._gain = self._converge_to_steady_state(tol, max_iter)
 
     @property
@@ -201,32 +344,17 @@ class LQRController:
             RuntimeError: If the recursion has not converged within ``max_iter``.
         """
         dynamics_matrix = self.model.dynamics_matrix  # A  (n×n)
-        assert (
-            self.model.control_matrix is not None
-        )  # guard lives in __init__; narrows type
+        assert self.model.control_matrix is not None  # refused by _validated_costs
         control_matrix = self.model.control_matrix  # B  (n×p)
-        cost_to_go = self._goal_precision  # P, starting at the running state cost (n×n)
+        # P, starting at the running state cost (n×n)
+        cost_to_go = self._goal_precision
 
         for _ in range(max_iter):
-            # Bellman's equation, one sweep.
-            dyn_cost_ctrl = (
-                dynamics_matrix.T @ cost_to_go @ control_matrix
-            )  # Aᵀ P B  (n×p)
-            # curvature of the action cost — the dual of the Kalman innovation
-            # covariance S, the denominator the gain is solved against (p×p)
-            inner = (
-                self._effort_penalty + control_matrix.T @ cost_to_go @ control_matrix
+            # pay now, plus what the dynamics carry forward net of what acting buys back
+            carried, _ = _riccati_step(
+                cost_to_go, dynamics_matrix, control_matrix, self._effort_penalty
             )
-            next_cost_to_go = (
-                self._goal_precision  # pay now
-                + dynamics_matrix.T
-                @ cost_to_go
-                @ dynamics_matrix  # cost the dynamics carry forward
-                - dyn_cost_ctrl
-                @ jnp.linalg.solve(
-                    inner, dyn_cost_ctrl.T
-                )  # what optimal action buys back
-            )
+            next_cost_to_go = self._goal_precision + carried
 
             if jnp.allclose(cost_to_go, next_cost_to_go, atol=tol, rtol=0.0):
                 cost_to_go = next_cost_to_go
@@ -239,7 +367,7 @@ class LQRController:
                 "gain exists."
             )
 
-        inner = self._effort_penalty + control_matrix.T @ cost_to_go @ control_matrix
-        return jnp.linalg.solve(
-            inner, control_matrix.T @ cost_to_go @ dynamics_matrix
-        )  # L∞  (p×n)
+        _, gain = _riccati_step(
+            cost_to_go, dynamics_matrix, control_matrix, self._effort_penalty
+        )
+        return gain  # L∞  (p×n)

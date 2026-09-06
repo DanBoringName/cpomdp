@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 import scipy.linalg
 
-from cpomdp.control import LQRController
+from cpomdp.control import LQRController, finite_horizon_lqr
 from cpomdp.types import Belief, LinearGaussianModel
 
 # Inside this module the terse letters a/b/qc/rc are local scalars for the
@@ -190,4 +190,121 @@ class TestLQRValidation:
                 goal_precision=GOAL_PRECISION,
                 effort_penalty=EFFORT_PENALTY,
                 max_iter=1,
+            )
+
+
+# --- the finite-horizon schedule ------------------------------------------------------
+
+
+def _brute_force_plan(dynamics, control, goal_precision, effort_penalty, horizon, x0):
+    """The H-step open-loop optimum as a stacked least-squares problem.
+
+    Stacks x_1..x_H = Φ·x0 + Γ·U with a cost on every arrived-at state and every
+    action, and solves the normal equations for U. No Riccati recursion anywhere,
+    so agreement with the schedule is evidence about the schedule.
+    """
+    a = np.asarray(dynamics, dtype=float)
+    b = np.asarray(control, dtype=float)
+    n, p = b.shape
+    powers = [np.linalg.matrix_power(a, k) for k in range(horizon + 1)]
+    phi = np.vstack([powers[k] for k in range(1, horizon + 1)])
+    gamma = np.zeros((horizon * n, horizon * p))
+    for i in range(horizon):
+        for j in range(i + 1):
+            gamma[i * n : (i + 1) * n, j * p : (j + 1) * p] = powers[i - j] @ b
+    stage = np.kron(np.eye(horizon), np.asarray(goal_precision, dtype=float))
+    effort = np.kron(np.eye(horizon), np.asarray(effort_penalty, dtype=float))
+    hessian = gamma.T @ stage @ gamma + effort
+    linear = gamma.T @ stage @ phi @ x0
+    actions = -np.linalg.solve(hessian, linear)
+    cost = x0 @ phi.T @ stage @ phi @ x0 - linear @ np.linalg.solve(hessian, linear)
+    return actions[:p], cost
+
+
+def _schedule(horizon):
+    return finite_horizon_lqr(
+        _point_mass_model(),
+        goal_precision=GOAL_PRECISION,
+        effort_penalty=EFFORT_PENALTY,
+        horizon=horizon,
+    )
+
+
+class TestFiniteHorizonSchedule:
+    def test_one_gain_per_step_and_one_cost_per_remaining_horizon(self):
+        schedule = _schedule(6)
+        assert schedule.horizon == 6
+        assert schedule.gains.shape == (6, 1, 2)
+        assert schedule.cost_to_go.shape == (7, 2, 2)
+        # Nothing is charged after the last action: the terminal cost is zero.
+        np.testing.assert_array_equal(schedule.cost_to_go[0], np.zeros((2, 2)))
+        np.testing.assert_array_equal(schedule.first_gain, schedule.gains[0])
+
+    def test_the_one_step_gain_is_the_static_regulator(self):
+        a, b = np.asarray(DYNAMICS), np.asarray(CONTROL)
+        qc, rc = np.asarray(GOAL_PRECISION), np.asarray(EFFORT_PENALTY)
+        expected = np.linalg.solve(rc + b.T @ qc @ b, b.T @ qc @ a)
+        np.testing.assert_allclose(_schedule(1).first_gain, expected, rtol=1e-14)
+
+    @pytest.mark.parametrize("horizon", [1, 2, 5, 12])
+    def test_the_first_gain_is_the_brute_force_optimum_first_action(self, horizon):
+        x0 = np.array([0.8, -0.3])
+        expected_action, expected_cost = _brute_force_plan(
+            DYNAMICS, CONTROL, GOAL_PRECISION, EFFORT_PENALTY, horizon, x0
+        )
+        schedule = _schedule(horizon)
+        np.testing.assert_allclose(
+            -schedule.first_gain @ x0, expected_action, rtol=1e-11, atol=1e-13
+        )
+        np.testing.assert_allclose(
+            x0 @ schedule.cost_to_go[horizon] @ x0, expected_cost, rtol=1e-11
+        )
+
+    def test_later_gains_are_the_shorter_schedules_first_gains(self):
+        # The gain applied with j steps remaining depends on j alone, so the tail of
+        # a long schedule is a shorter schedule. gains[k] has H − k steps remaining.
+        long = _schedule(8)
+        for horizon in (1, 3, 8):
+            np.testing.assert_array_equal(
+                long.gains[8 - horizon], _schedule(horizon).first_gain
+            )
+
+    def test_the_first_gain_converges_to_the_steady_state_gain_and_is_not_it(self):
+        steady = LQRController(
+            _point_mass_model(),
+            goal_precision=GOAL_PRECISION,
+            effort_penalty=EFFORT_PENALTY,
+        ).gain
+        mismatch = [
+            float(np.abs(_schedule(h).first_gain - steady).max()) for h in (1, 5, 20)
+        ]
+        # Shrinks with H and is not zero at any of them: an unmatched comparison
+        # reads this as an error that fades with the horizon.
+        assert mismatch[0] > mismatch[1] > mismatch[2] > 1e-6
+        np.testing.assert_allclose(_schedule(400).first_gain, steady, atol=1e-10)
+
+    def test_a_horizon_below_one_is_refused(self):
+        with pytest.raises(ValueError, match="horizon"):
+            _schedule(0)
+
+    def test_the_costs_are_validated_as_the_controller_validates_them(self):
+        with pytest.raises(ValueError, match="symmetric"):
+            finite_horizon_lqr(
+                _point_mass_model(),
+                goal_precision=[[1.0, 0.5], [-0.5, 1.0]],
+                effort_penalty=EFFORT_PENALTY,
+                horizon=3,
+            )
+        with pytest.raises(ValueError, match="control matrix"):
+            finite_horizon_lqr(
+                LinearGaussianModel(
+                    dynamics_matrix=DYNAMICS,
+                    observation_matrix=[[1.0, 0.0]],
+                    dynamics_noise=[[1e-4, 0.0], [0.0, 1e-4]],
+                    observation_noise=[[1e-2]],
+                    prior=Belief(mean=[0.0, 0.0], cov=[[1.0, 0.0], [0.0, 1.0]]),
+                ),
+                goal_precision=GOAL_PRECISION,
+                effort_penalty=EFFORT_PENALTY,
+                horizon=3,
             )
